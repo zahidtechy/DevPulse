@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="80" viewBox="0 0 420 80" fill="none">
+  <defs>
+    <linearGradient id="dvNet" x1="0" y1="0" x2="68" y2="68" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0EA5E9"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(6,6)">
+    <path d="M10 14 L34 26 L58 14 M10 54 L34 42 L58 54 M34 26 V42 M10 14 V54 M58 14 V54"
+      stroke="url(#dvNet)" stroke-width="2" stroke-linecap="round" opacity="0.35" fill="none"/>
+    <path d="M22 34 H50 M42 26 L50 34 L42 42"
+      stroke="url(#dvNet)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <circle cx="10" cy="14" r="4" fill="#0EA5E9"/>
+    <circle cx="58" cy="14" r="4" fill="url(#dvNet)"/>
+    <circle cx="10" cy="54" r="4" fill="url(#dvNet)"/>
+    <circle cx="58" cy="54" r="4" fill="#10B981"/>
+    <circle cx="34" cy="26" r="3" fill="#0F172A"/>
+    <circle cx="34" cy="42" r="3" fill="#0F172A"/>
+  </g>
+  <g font-family="'JetBrains Mono', ui-monospace, monospace" font-size="36" letter-spacing="-1">
+    <text x="92" y="46" fill="#0F172A" font-weight="800">data</text>
+    <text x="174" y="46" fill="#10B981" font-weight="400">/vanced</text>
+  </g>
+  <text x="92" y="64" font-family="Inter, system-ui, sans-serif" font-size="9"
+    font-weight="600" letter-spacing="3" fill="#475569">
+    BUILD · CONNECT · ADVANCE
+  </text>
+</svg>

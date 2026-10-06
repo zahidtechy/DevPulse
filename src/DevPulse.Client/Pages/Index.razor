@@ -1,0 +1,27 @@
+@page "/"
+@attribute [Authorize]
+@inject IViewportService Viewport
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>@AppBranding.PageTitle("Home")</PageTitle>
+
+<LoadingIndicator Text="Loading..." />
+
+@code {
+    private bool _redirectStarted;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _redirectStarted)
+        {
+            return;
+        }
+
+        _redirectStarted = true;
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var role = state.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        var isMobile = await Viewport.IsMobileAsync();
+        Navigation.NavigateTo(AppLanding.DefaultPath(role, isMobile), replace: true);
+    }
+}

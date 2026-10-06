@@ -1,0 +1,156 @@
+@page "/login"
+@layout EmptyLayout
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IViewportService Viewport
+
+<PageTitle>@AppBranding.PageTitle("Sign In")</PageTitle>
+
+<div class="login-page">
+    <div class="login-card card">
+        <div class="card-body">
+            <div class="login-brand">
+                <img class="login-logo" src="images/datavanced-logo.svg" alt="@AppBranding.CompanyName" />
+                <h1>@AppBranding.CompanyName</h1>
+                <p class="text-muted">Sign in to access your workspace</p>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert alert-danger" role="alert">@_error</div>
+            }
+
+            <EditForm Model="_model" OnValidSubmit="HandleLoginAsync">
+                <div class="mb-3">
+                    <label class="form-label" for="email">Email</label>
+                    <InputText id="email" class="form-control" @bind-Value="_model.Email" autocomplete="username" />
+                </div>
+                <div class="mb-4">
+                    <label class="form-label" for="password">Password</label>
+                    <InputText id="password" type="password" class="form-control" @bind-Value="_model.Password" autocomplete="current-password" />
+                </div>
+                <button class="btn btn-primary w-100" disabled="@_isBusy" type="submit">
+                    <span class="btn-busy-content">
+                        @if (_isBusy)
+                        {
+                            <span class="spinner spinner-btn" aria-hidden="true"></span>
+                            <span>Signing in...</span>
+                        }
+                        else
+                        {
+                            <span>Sign In</span>
+                        }
+                    </span>
+                </button>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+<style>
+    .login-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background: var(--dp-gradient-dark);
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 420px;
+        border: none;
+        border-radius: var(--dp-radius-xl);
+        box-shadow: var(--dp-shadow-lg);
+    }
+
+    .login-brand {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .login-brand h1 {
+        font-size: 1.75rem;
+        margin: 0.75rem 0 0.25rem;
+    }
+
+    .login-logo {
+        display: block;
+        width: 100%;
+        max-width: 16rem;
+        height: auto;
+        margin: 0 auto;
+        object-fit: contain;
+    }
+</style>
+
+@code {
+    private readonly LoginFormModel _model = new();
+    private bool _isBusy;
+    private string? _error;
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo(await GetRedirectUrlAsync(state.User), replace: true);
+        }
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        _isBusy = true;
+        _error = null;
+
+        try
+        {
+            var user = await AuthService.LoginAsync(new LoginRequest(_model.Email.Trim(), _model.Password));
+            if (user is null)
+            {
+                _error = "Login failed.";
+                return;
+            }
+
+            Navigation.NavigateTo(await GetRedirectUrlForRoleAsync(user.Role), replace: true);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task<string> GetRedirectUrlAsync(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (!string.IsNullOrWhiteSpace(ReturnUrl) && !AppLanding.IsRoot(ReturnUrl))
+        {
+            return ReturnUrl;
+        }
+
+        var role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        return await GetRedirectUrlForRoleAsync(role);
+    }
+
+    private async Task<string> GetRedirectUrlForRoleAsync(string? role)
+    {
+        var isMobile = await Viewport.IsMobileAsync();
+        return AppLanding.DefaultPath(role, isMobile);
+    }
+
+    private sealed class LoginFormModel
+    {
+        public string Email { get; set; } = string.Empty;
+
+        public string Password { get; set; } = string.Empty;
+    }
+}

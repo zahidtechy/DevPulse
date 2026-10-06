@@ -1,0 +1,107 @@
+@if (Requests.Count == 0)
+{
+    <div class="attendance-empty-state">
+        <div class="attendance-empty-icon" aria-hidden="true"></div>
+        <h5>No correction requests</h5>
+        <p class="text-muted mb-0">@(AllowReview ? "There are no pending requests to review." : "You have not submitted any correction requests yet.")</p>
+    </div>
+}
+else
+{
+    <div class="table-responsive card form-card attendance-table-card">
+        <table class="table table-hover mb-0 attendance-table">
+            <thead>
+                <tr>
+                    <th>Developer</th>
+                    <th>Date</th>
+                    <th>Punch in</th>
+                    <th>Punch out</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+                    <th class="attendance-table-actions"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var request in Requests)
+                {
+                    <tr>
+                        <td class="attendance-dev-name">@request.DeveloperName</td>
+                        <td class="attendance-date-cell">@request.WorkDate.ToString("MMM d, yyyy")</td>
+                        <td><span class="attendance-punch-time">@FormatUtc(request.RequestedPunchInUtc)</span></td>
+                        <td><span class="attendance-punch-time">@FormatUtc(request.RequestedPunchOutUtc)</span></td>
+                        <td class="attendance-reason-cell">@request.Reason</td>
+                        <td><span class="attendance-badge @GetCorrectionStatusClass(request.Status)">@FormatCorrectionStatus(request.Status)</span></td>
+                        <td class="attendance-table-actions">
+                            @if (AllowCancel && request.Status == AttendanceCorrectionStatusDto.Pending)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnCancel.InvokeAsync(request.Id)">Cancel</button>
+                            }
+                            @if (AllowReview && request.Status == AttendanceCorrectionStatusDto.Pending)
+                            {
+                                <button type="button" class="btn btn-sm btn-success me-1" @onclick="() => OnApprove.InvokeAsync(request.Id)">Approve</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnReject.InvokeAsync(request.Id)">Reject</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<AttendanceCorrectionRequestDto> Requests { get; set; } = [];
+
+    [Parameter]
+    public bool AllowCancel { get; set; }
+
+    [Parameter]
+    public bool AllowReview { get; set; }
+
+    [Parameter]
+    public string OfficeTimeZoneId { get; set; } = "Asia/Dhaka";
+
+    [Parameter]
+    public EventCallback<Guid> OnCancel { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnApprove { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnReject { get; set; }
+
+    private string FormatUtc(DateTime? utc)
+    {
+        if (!utc.HasValue)
+        {
+            return "—";
+        }
+
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(OfficeTimeZoneId);
+            return TimeZoneInfo.ConvertTimeFromUtc(utc.Value, tz).ToString("h:mm tt");
+        }
+        catch
+        {
+            return utc.Value.ToLocalTime().ToString("h:mm tt");
+        }
+    }
+
+    private static string FormatCorrectionStatus(AttendanceCorrectionStatusDto status) => status switch
+    {
+        AttendanceCorrectionStatusDto.Pending => "Pending",
+        AttendanceCorrectionStatusDto.Approved => "Approved",
+        AttendanceCorrectionStatusDto.Rejected => "Rejected",
+        _ => status.ToString()
+    };
+
+    private static string GetCorrectionStatusClass(AttendanceCorrectionStatusDto status) => status switch
+    {
+        AttendanceCorrectionStatusDto.Pending => "pending",
+        AttendanceCorrectionStatusDto.Approved => "on-time",
+        AttendanceCorrectionStatusDto.Rejected => "incomplete",
+        _ => string.Empty
+    };
+}

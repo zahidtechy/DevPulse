@@ -1,0 +1,168 @@
+﻿@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="app-shell @GetShellClasses()">
+    @if (_mobileNavOpen)
+    {
+        <div class="sidebar-backdrop" @onclick="CloseMobileNav" aria-hidden="true"></div>
+    }
+
+    <aside class="sidebar @GetSidebarClasses()">
+        <NavMenu IsCollapsed="@(!_sidebarExpanded)" OnNavigate="OnNavNavigate" />
+    </aside>
+
+    <div class="main-wrapper">
+        <header class="app-header">
+            <button class="sidebar-toggle"
+                    @onclick="ToggleSidebar"
+                    aria-label="Toggle navigation"
+                    aria-expanded="@_sidebarExpanded"
+                    title="Toggle navigation">
+                <span class="toggle-bar"></span>
+                <span class="toggle-bar"></span>
+                <span class="toggle-bar"></span>
+            </button>
+            <div class="header-content">
+                <span class="header-tagline">@AppBranding.ProductTagline</span>
+            </div>
+        </header>
+
+        <main class="app-content">
+            <div class="container-fluid px-0 px-md-2 px-xl-3">
+                @Body
+            </div>
+        </main>
+    </div>
+</div>
+
+@code {
+    private bool _sidebarExpanded = true;
+    private bool _mobileNavOpen;
+    private IJSObjectReference? _layoutModule;
+    private IJSObjectReference? _viewportListener;
+    private DotNetObjectReference<MainLayout>? _dotNetRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _layoutModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/layout.js");
+        _dotNetRef = DotNetObjectReference.Create(this);
+        _viewportListener = await _layoutModule.InvokeAsync<IJSObjectReference>("registerViewportListener", _dotNetRef);
+
+        if (!_sidebarExpanded)
+        {
+            await SetBodyScrollLockAsync(false);
+        }
+    }
+
+    [JSInvokable]
+    public void OnViewportChanged(bool isMobile)
+    {
+        if (!isMobile && _mobileNavOpen)
+        {
+            _mobileNavOpen = false;
+            _ = SetBodyScrollLockAsync(false);
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnEscapeKey()
+    {
+        if (_mobileNavOpen)
+        {
+            CloseMobileNav();
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string? GetShellClasses()
+    {
+        var classes = new List<string>(2);
+
+        if (!_sidebarExpanded)
+        {
+            classes.Add("sidebar-collapsed");
+        }
+
+        if (_mobileNavOpen)
+        {
+            classes.Add("mobile-nav-open");
+        }
+
+        return classes.Count > 0 ? string.Join(' ', classes) : null;
+    }
+
+    private string? GetSidebarClasses()
+    {
+        var classes = new List<string>(2);
+
+        if (!_sidebarExpanded)
+        {
+            classes.Add("collapsed");
+        }
+
+        if (_mobileNavOpen)
+        {
+            classes.Add("mobile-open");
+        }
+
+        return classes.Count > 0 ? string.Join(' ', classes) : null;
+    }
+
+    private void ToggleSidebar()
+    {
+        _sidebarExpanded = !_sidebarExpanded;
+        _mobileNavOpen = !_mobileNavOpen;
+        _ = SetBodyScrollLockAsync(_mobileNavOpen);
+    }
+
+    private void CloseMobileNav()
+    {
+        if (!_mobileNavOpen)
+        {
+            return;
+        }
+
+        _mobileNavOpen = false;
+        _sidebarExpanded = true;
+        _ = SetBodyScrollLockAsync(false);
+    }
+
+    private void OnNavNavigate()
+    {
+        CloseMobileNav();
+    }
+
+    private async Task SetBodyScrollLockAsync(bool locked)
+    {
+        if (_layoutModule is null)
+        {
+            return;
+        }
+
+        await _layoutModule.InvokeVoidAsync("setBodyScrollLock", locked);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_viewportListener is not null)
+        {
+            await _viewportListener.InvokeVoidAsync("dispose");
+            await _viewportListener.DisposeAsync();
+        }
+
+        _dotNetRef?.Dispose();
+
+        if (_layoutModule is not null)
+        {
+            await _layoutModule.DisposeAsync();
+        }
+    }
+}

@@ -1,0 +1,47 @@
+@implements IDisposable
+
+<span class="@CssClass" aria-live="polite">@_display</span>
+
+@code {
+    [Parameter]
+    public string TimeZoneId { get; set; } = "Asia/Dhaka";
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    private string _display = "--:--";
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        UpdateDisplay();
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            UpdateDisplay();
+            StateHasChanged();
+        }), null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateDisplay();
+    }
+
+    private void UpdateDisplay()
+    {
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(TimeZoneId);
+            _display = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).ToString("h:mm tt");
+        }
+        catch
+        {
+            _display = DateTime.Now.ToString("h:mm tt");
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

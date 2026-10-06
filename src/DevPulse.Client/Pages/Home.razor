@@ -1,0 +1,564 @@
+@page "/dashboard"
+@attribute [Authorize(Roles = AppRoles.Admin)]
+@implements IAsyncDisposable
+@inject IDeveloperApiClient DeveloperApi
+@inject IReportApiClient ReportApi
+@inject IJSRuntime JS
+
+<PageTitle>@AppBranding.PageTitle("Dashboard")</PageTitle>
+
+<div class="analytics-hero analytics-hero-home analytics-hero-compact">
+    <div class="analytics-hero-copy">
+        <p class="analytics-eyebrow">@AppBranding.CompanyName · MIS Overview</p>
+        <h1>Developer Performance</h1>
+    </div>
+    <div class="analytics-hero-actions">
+        <a class="btn btn-sm btn-primary" href="analytics">Analytics</a>
+        <a class="btn btn-sm btn-outline-light" href="reports">Reports</a>
+    </div>
+</div>
+
+@if (_isLoadingReport)
+{
+    <LoadingIndicator Text="Loading developer work summary..." />
+}
+else if (_kpis is not null)
+{
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="analytics-period-label mb-0">
+            <span>@KpiAnalytics.FormatPeriod(_kpis.FromDate, _kpis.ToDate)</span>
+            <span class="text-muted">· month to date · @_kpis.ActiveDevelopers developer(s) · @_kpis.WorkspaceCount workspace(s)</span>
+            @if (_previousKpis is not null)
+            {
+                <span class="text-muted"> · vs @_comparisonPeriodLabel</span>
+            }
+        </div>
+        <a class="btn btn-sm btn-outline-primary" href="reports">Full report</a>
+    </div>
+
+    @if (_slaChecks.Count > 0)
+    {
+        <SlaStatusBanner Checks="_slaChecks" PeriodLabel="Month to date" />
+    }
+
+    <div class="kpi-grid mb-4">
+        <KpiScorecard Label="Assigned"
+                      Value="@_kpis.TotalTasks.ToString()"
+                      Hint="tasks in period"
+                      Tone="primary"
+                      Trend="@FormatCountTrend(_kpis.TotalTasks, _previousKpis?.TotalTasks, higherIsBetter: true)" />
+        <KpiScorecard Label="Completed"
+                      Value="@_kpis.CompletedCount.ToString()"
+                      Hint="across all workspaces"
+                      Tone="success"
+                      Meta="Done"
+                      Trend="@FormatCountTrend(_kpis.CompletedCount, _previousKpis?.CompletedCount, higherIsBetter: true)" />
+        <KpiScorecard Label="Ratio"
+                      Value="@KpiAnalytics.FormatPercent(_kpis.CompletionRate)"
+                      Hint="@($"{_kpis.CompletedCount}/{_kpis.TotalTasks} completed ÷ assigned")"
+                      Progress="_kpis.CompletionRate"
+                      Tone="primary"
+                      Trend="@FormatPercentTrend(_kpis.CompletionRate, _previousKpis?.CompletionRate, higherIsBetter: true)" />
+        <KpiScorecard Label="Delivery Health"
+                      Value="@KpiAnalytics.FormatPercent(_kpis.OnTimeRate)"
+                      Hint="on-time vs overdue"
+                      Progress="_kpis.OnTimeRate"
+                      Tone="accent"
+                      Trend="@FormatPercentTrend(_kpis.OnTimeRate, _previousKpis?.OnTimeRate, higherIsBetter: true)" />
+        <KpiScorecard Label="In Progress"
+                      Value="@_kpis.InProgressCount.ToString()"
+                      Hint="still open this month"
+                      Tone="warning"
+                      Trend="@FormatCountTrend(_kpis.InProgressCount, _previousKpis?.InProgressCount, higherIsBetter: false)" />
+        <KpiScorecard Label="Overdue"
+                      Value="@_kpis.OverdueCount.ToString()"
+                      Hint="past due or completed late"
+                      Tone="@(_kpis.OverdueCount > 0 ? "danger" : "neutral")"
+                      Trend="@FormatCountTrend(_kpis.OverdueCount, _previousKpis?.OverdueCount, higherIsBetter: false)" />
+    </div>
+
+    @if (_bandCounts.Count > 0)
+    {
+        <div class="band-mix mb-4">
+            @foreach (var band in _bandCounts)
+            {
+                <span class="perf-pill @KpiAnalytics.PerformanceTone(band.Name)">
+                    @band.Name · @band.Count
+                </span>
+            }
+            @if (_atRiskDevelopers.Count > 0)
+            {
+                <span class="sla-pill sla-pill-missed">At risk · @_atRiskDevelopers.Count</span>
+            }
+            else
+            {
+                <span class="sla-pill sla-pill-met">All developers on track</span>
+            }
+        </div>
+    }
+
+    @if (_atRiskDevelopers.Count > 0)
+    {
+        <div class="data-card card at-risk-panel">
+            <div class="card-body p-0">
+                <h5 class="card-title card-title-bar">Needs Attention · @_atRiskDevelopers.Count developer@(_atRiskDevelopers.Count == 1 ? "" : "s")</h5>
+                <div class="at-risk-grid">
+                    @foreach (var entry in _atRiskDevelopers.Take(8))
+                    {
+                        <div class="at-risk-card">
+                            <div class="at-risk-card-name">@entry.Developer.DeveloperName</div>
+                            <div class="at-risk-missed">
+                                @string.Join(" · ", entry.MissedChecks.Select(c => $"{c.Metric} {c.Actual}"))
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row g-4 mb-4">
+        <div class="col-xl-7">
+            <div class="chart-panel card h-100">
+                <div class="card-body">
+                    <div class="chart-panel-header">
+                        <div>
+                            <h2 class="chart-title">Weekly Throughput</h2>
+                            <p class="chart-subtitle">Tasks completed per week this month</p>
+                        </div>
+                    </div>
+                    @if (_weeklyThroughput.Count == 0 || _weeklyThroughput.All(w => w.Count == 0))
+                    {
+                        <p class="text-muted mb-0 py-5 text-center">No completed tasks in this period yet.</p>
+                    }
+                    else
+                    {
+                        <div class="chart-canvas-wrap chart-canvas-md">
+                            <canvas id="chart-home-weekly-throughput"></canvas>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-5">
+            <div class="chart-panel card h-100">
+                <div class="card-body">
+                    <div class="chart-panel-header">
+                        <div>
+                            <h2 class="chart-title">Work Status Mix</h2>
+                            <p class="chart-subtitle">Completed, active, and overdue pressure</p>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-wrap chart-canvas-md">
+                        <canvas id="chart-home-status-mix"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_kpis.Developers.Count > 0)
+    {
+        <div class="row g-4 mb-4">
+            <div class="col-xl-7">
+                <div class="chart-panel card h-100">
+                    <div class="card-body">
+                        <div class="chart-panel-header">
+                            <div>
+                                <h2 class="chart-title">Developer Throughput</h2>
+                                <p class="chart-subtitle">Completed vs in-progress work by developer</p>
+                            </div>
+                        </div>
+                        <div class="chart-canvas-wrap chart-canvas-lg">
+                            <canvas id="chart-home-developer-throughput"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-5">
+                <div class="chart-panel card h-100">
+                    <div class="card-body">
+                        <div class="chart-panel-header">
+                            <div>
+                                <h2 class="chart-title">Workspace Load</h2>
+                                <p class="chart-subtitle">Task share by ClickUp workspace</p>
+                            </div>
+                        </div>
+                        @if (_kpis.ByWorkspace.Count == 0)
+                        {
+                            <p class="text-muted mb-0">No workspace data.</p>
+                        }
+                        else
+                        {
+                            var maxWs = _kpis.ByWorkspace.Max(w => w.Count);
+                            <div class="chart-canvas-wrap chart-canvas-md workspace-load-pie">
+                                <canvas id="chart-home-workspace-load"></canvas>
+                            </div>
+                            <div class="rank-list">
+                                @foreach (var workspace in _kpis.ByWorkspace.Take(6))
+                                {
+                                    var width = maxWs > 0 ? workspace.Count * 100.0 / maxWs : 0;
+                                    <div class="rank-row">
+                                        <div class="rank-row-top">
+                                            <span class="rank-name">@workspace.Name</span>
+                                            <span class="rank-value">@workspace.Count</span>
+                                        </div>
+                                        <div class="rank-bar-track">
+                                            <div class="rank-bar-fill" style="width: @width.ToString("0.##")%"></div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="data-card card mb-4">
+            <div class="card-body p-0">
+                <div class="card-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="card-title mb-0">Developer Analysis</h5>
+                    <a class="btn btn-sm btn-outline-primary" href="analytics">Open Analytics</a>
+                </div>
+                <div class="table-responsive dashboard-table-scroll">
+                    <table class="table table-hover align-middle mb-0 analytics-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Developer</th>
+                                <th>Band</th>
+                                <th>SLA</th>
+                                <th title="Assigned tasks this month">Assigned</th>
+                                <th title="Tasks completed this month">Completed</th>
+                                <th title="Completed ÷ Assigned">Ratio</th>
+                                <th>In Progress</th>
+                                <th>Delivery</th>
+                                <th>Cycle</th>
+                                <th>Overdue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{
+                                var rank = 0;
+                            }
+                            @foreach (var developer in _kpis.Developers)
+                            {
+                                rank++;
+                                var band = KpiAnalytics.PerformanceBand(developer.OnTimeRate, developer.CompletionRate);
+                                var devSla = KpiAnalytics.EvaluateDeveloperSla(developer);
+                                var slaMet = KpiAnalytics.MeetsAllSla(devSla);
+                                var ratio = KpiAnalytics.AchievementRatio(developer.CompletedCount, developer.TotalTasks);
+                                var ratioTone = KpiAnalytics.AchievementRatioTone(ratio);
+                                <tr>
+                                    <td><span class="rank-badge">@rank</span></td>
+                                    <td>
+                                        <strong>@developer.DeveloperName</strong>
+                                        @if (!string.IsNullOrWhiteSpace(developer.Email))
+                                        {
+                                            <div class="small text-muted">@developer.Email</div>
+                                        }
+                                    </td>
+                                    <td><span class="perf-pill @KpiAnalytics.PerformanceTone(band)">@band</span></td>
+                                    <td>
+                                        <span class="sla-pill @(slaMet ? "sla-pill-met" : "sla-pill-missed")" title="@KpiAnalytics.FormatSlaTooltip(devSla)">
+                                            @(slaMet ? "On track" : "At risk")
+                                        </span>
+                                    </td>
+                                    <td>@developer.TotalTasks</td>
+                                    <td>@developer.CompletedCount</td>
+                                    <td>
+                                        <div class="mini-metric" title="@KpiAnalytics.FormatTargetVsAchievement(developer.CompletedCount, developer.TotalTasks) completed of assigned">
+                                            <span>@KpiAnalytics.FormatPercent(ratio)</span>
+                                            <div class="small text-muted">@KpiAnalytics.FormatTargetVsAchievement(developer.CompletedCount, developer.TotalTasks)</div>
+                                            <div class="mini-bar">
+                                                <div class="mini-bar-fill @ratioTone" style="width: @Math.Clamp(ratio, 0, 100).ToString("0.##")%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>@developer.InProgressCount</td>
+                                    <td>
+                                        <div class="mini-metric">
+                                            <span>@KpiAnalytics.FormatPercent(developer.OnTimeRate)</span>
+                                            @if (developer.OnTimeRate.HasValue)
+                                            {
+                                                <div class="mini-bar">
+                                                    <div class="mini-bar-fill tone-accent" style="width: @Math.Clamp(developer.OnTimeRate.Value, 0, 100).ToString("0.##")%"></div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td>@KpiAnalytics.FormatDays(developer.AverageCycleDays)</td>
+                                    <td>
+                                        @if (developer.OverdueCount > 0)
+                                        {
+                                            <span class="badge text-bg-danger">@developer.OverdueCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">0</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        @if (_kpis.ByProject.Count > 0)
+        {
+            <div class="chart-panel card mb-4">
+                <div class="card-body">
+                    <div class="chart-panel-header">
+                        <div>
+                            <h2 class="chart-title">Top Projects</h2>
+                            <p class="chart-subtitle">Highest task volume this month</p>
+                        </div>
+                    </div>
+                    @{
+                        var maxProject = _kpis.ByProject.Max(p => p.Count);
+                    }
+                    <div class="rank-list">
+                        @foreach (var project in _kpis.ByProject)
+                        {
+                            var width = maxProject > 0 ? project.Count * 100.0 / maxProject : 0;
+                            <div class="rank-row">
+                                <div class="rank-row-top">
+                                    <span class="rank-name">@project.Name</span>
+                                    <span class="rank-value">@project.Count</span>
+                                </div>
+                                <div class="rank-bar-track">
+                                    <div class="rank-bar-fill" style="width: @width.ToString("0.##")%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+}
+else
+{
+    <div class="empty-state mb-4">
+        <div class="empty-state-icon" aria-hidden="true">◇</div>
+        <h5>Connect ClickUp to unlock analytics</h5>
+        <p class="text-muted mb-3">Add accounts and sync developers to populate the MIS KPI dashboard.</p>
+        <div class="d-flex gap-2 justify-content-center flex-wrap">
+            <a class="btn btn-primary" href="clickup-accounts">Add Accounts</a>
+            <a class="btn btn-outline-primary" href="developers">Sync Developers</a>
+        </div>
+    </div>
+}
+
+<div class="feature-grid">
+    <div class="feature-card card h-100">
+        <div class="card-body">
+            <div class="feature-icon feature-icon-indigo" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M4 11H2v3h2v-3zm5-4H7v7h2V7zm5-5h-2v12h2V2z"/></svg>
+            </div>
+            <h5>MIS Analytics</h5>
+            <p class="text-muted">KPI scorecards, throughput charts, delivery health, and developer leaderboards.</p>
+            <a href="analytics" class="stretched-link" aria-label="Go to Analytics"></a>
+        </div>
+    </div>
+    <div class="feature-card card h-100">
+        <div class="card-body">
+            <div class="feature-icon feature-icon-cyan" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2zM9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5v2z"/></svg>
+            </div>
+            <h5>Stakeholder Reports</h5>
+            <p class="text-muted">Filter by period and export Excel packs for management reviews.</p>
+            <a href="reports" class="stretched-link" aria-label="Go to Reports"></a>
+        </div>
+    </div>
+    <div class="feature-card card h-100">
+        <div class="card-body">
+            <div class="feature-icon feature-icon-emerald" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1H7Zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
+            </div>
+            <h5>Developer Registry</h5>
+            <p class="text-muted">Map people across multiple ClickUp workspaces for unified scoring.</p>
+            <a href="developers" class="stretched-link" aria-label="Go to Developers"></a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private TeamKpis? _kpis;
+    private TeamKpis? _previousKpis;
+    private string? _comparisonPeriodLabel;
+    private IReadOnlyList<SlaCheckResult> _slaChecks = [];
+    private IReadOnlyList<AtRiskDeveloperEntry> _atRiskDevelopers = [];
+    private IReadOnlyList<NamedCount> _weeklyThroughput = [];
+    private IReadOnlyList<NamedCount> _bandCounts = [];
+    private bool _isLoadingReport = true;
+    private bool _chartsPending;
+    private IJSObjectReference? _chartsModule;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var developers = await DeveloperApi.GetDevelopersAsync();
+            var developerIds = developers.Select(d => d.Id).ToList();
+
+            if (developerIds.Count == 0)
+            {
+                return;
+            }
+
+            var fromDate = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
+            var toDate = DateOnly.FromDateTime(DateTime.Today);
+            var (prevFrom, prevTo) = KpiAnalytics.GetPreviousPeriod(fromDate, toDate);
+            _comparisonPeriodLabel = KpiAnalytics.FormatPeriod(prevFrom, prevTo);
+
+            var currentRequest = new DeveloperReportRequest(developerIds, fromDate, toDate, IncludeClosed: true);
+            var previousRequest = new DeveloperReportRequest(developerIds, prevFrom, prevTo, IncludeClosed: true);
+
+            var currentTask = ReportApi.GenerateDeveloperReportAsync(currentRequest);
+            var previousTask = ReportApi.GenerateDeveloperReportAsync(previousRequest);
+            await Task.WhenAll(currentTask, previousTask);
+
+            var report = await currentTask;
+            var previousReport = await previousTask;
+
+            if (report is not null)
+            {
+                _kpis = KpiAnalytics.FromReport(report);
+                _previousKpis = previousReport is not null ? KpiAnalytics.FromReport(previousReport) : null;
+                _slaChecks = KpiAnalytics.EvaluateTeamSla(_kpis);
+                _atRiskDevelopers = KpiAnalytics.BuildAtRiskDevelopers(_kpis);
+                _bandCounts = KpiAnalytics.GroupByPerformanceBand(_kpis.Developers);
+                _weeklyThroughput = KpiAnalytics.GroupCompletedByWeek(report.Tasks, fromDate, toDate);
+                _chartsPending = true;
+            }
+        }
+        catch
+        {
+            _kpis = null;
+            _previousKpis = null;
+            _slaChecks = [];
+            _atRiskDevelopers = [];
+            _weeklyThroughput = [];
+            _bandCounts = [];
+        }
+        finally
+        {
+            _isLoadingReport = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_chartsPending || _kpis is null)
+        {
+            return;
+        }
+
+        _chartsPending = false;
+        await RenderChartsAsync(_kpis);
+    }
+
+    private async Task RenderChartsAsync(TeamKpis kpis)
+    {
+        try
+        {
+            var module = await GetChartsModuleAsync();
+
+            await module.InvokeVoidAsync(
+                "renderStatusMix",
+                "chart-home-status-mix",
+                kpis.CompletedCount,
+                kpis.InProgressCount,
+                kpis.OverdueCount);
+
+            if (_weeklyThroughput.Count > 0 && _weeklyThroughput.Any(w => w.Count > 0))
+            {
+                var weekLabels = _weeklyThroughput.Select(w => w.Name).ToArray();
+                var weekValues = _weeklyThroughput.Select(w => w.Count).ToArray();
+                await module.InvokeVoidAsync("renderWeeklyThroughput", "chart-home-weekly-throughput", weekLabels, weekValues);
+            }
+
+            if (kpis.Developers.Count > 0)
+            {
+                var top = kpis.Developers.Take(10).ToList();
+                var labels = top.Select(d => Truncate(d.DeveloperName, 18)).ToArray();
+                var completed = top.Select(d => d.CompletedCount).ToArray();
+                var inProgress = top.Select(d => d.InProgressCount).ToArray();
+                await module.InvokeVoidAsync("renderDeveloperThroughput", "chart-home-developer-throughput", labels, completed, inProgress);
+            }
+
+            if (kpis.ByWorkspace.Count > 0)
+            {
+                var labels = kpis.ByWorkspace.Select(w => Truncate(w.Name, 22)).ToArray();
+                var values = kpis.ByWorkspace.Select(w => w.Count).ToArray();
+                await module.InvokeVoidAsync("renderWorkspaceShare", "chart-home-workspace-load", labels, values, "pie");
+            }
+        }
+        catch (JSException)
+        {
+            // Charts are progressive enhancement; keep tables usable if JS fails.
+        }
+    }
+
+    private async Task<IJSObjectReference> GetChartsModuleAsync()
+    {
+        _chartsModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/analyticsCharts.js");
+        return _chartsModule;
+    }
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..(max - 1)] + "…";
+
+    private KpiTrendDisplay? FormatCountTrend(int current, int? previous, bool higherIsBetter)
+    {
+        if (_previousKpis is null || !previous.HasValue)
+        {
+            return null;
+        }
+
+        return KpiAnalytics.FormatTrend(
+            KpiAnalytics.TrendCount(current, previous.Value, higherIsBetter));
+    }
+
+    private KpiTrendDisplay? FormatPercentTrend(double? current, double? previous, bool higherIsBetter)
+    {
+        if (_previousKpis is null)
+        {
+            return null;
+        }
+
+        return KpiAnalytics.FormatTrend(
+            KpiAnalytics.TrendPercent(current, previous, higherIsBetter));
+    }
+
+    private KpiTrendDisplay? FormatDaysTrend(double? current, double? previous)
+    {
+        if (_previousKpis is null)
+        {
+            return null;
+        }
+
+        return KpiAnalytics.FormatTrend(
+            KpiAnalytics.TrendDays(current, previous),
+            countLabel: "days");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_chartsModule is not null)
+        {
+            try
+            {
+                await _chartsModule.InvokeVoidAsync("destroyAll");
+                await _chartsModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+}

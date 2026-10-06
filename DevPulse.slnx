@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Client/">
+    <Project Path="src/DevPulse.Client/DevPulse.Client.csproj" />
+  </Folder>
+  <Folder Name="/src/Core/">
+    <Project Path="src/DevPulse.Application/DevPulse.Application.csproj" />
+    <Project Path="src/DevPulse.Domain/DevPulse.Domain.csproj" />
+    <Project Path="src/DevPulse.Infrastructure/DevPulse.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Host/">
+    <Project Path="src/DevPulse.Server/DevPulse.Server.csproj" />
+  </Folder>
+  <Folder Name="/src/Shared/">
+    <Project Path="src/DevPulse.Shared/DevPulse.Shared.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,134 @@
+<button type="button"
+        class="@CssClass"
+        disabled="@(Disabled || IsBusy)"
+        title="@Title"
+        @onclick="ShowConfirmation"
+        @onclick:stopPropagation="true">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <span class="bi-trash" aria-hidden="true"></span>
+        @ButtonText
+    }
+</button>
+
+<DeleteConfirmation IsVisible="_isVisible"
+                    IsVisibleChanged="OnVisibilityChanged"
+                    Title="@GetDialogTitle()"
+                    Message="@GetDialogMessage()"
+                    ConfirmText="@ConfirmText"
+                    CancelText="@CancelText"
+                    BusyText="@BusyText"
+                    IsBusy="IsBusy"
+                    OnConfirm="HandleConfirmAsync"
+                    OnCancel="HandleCancelAsync" />
+
+@code {
+    private bool _isVisible;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public string ItemName { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? DialogTitle { get; set; }
+
+    [Parameter]
+    public string? DialogMessage { get; set; }
+
+    [Parameter]
+    public string ButtonText { get; set; } = "Delete";
+
+    [Parameter]
+    public string ConfirmText { get; set; } = "Delete";
+
+    [Parameter]
+    public string CancelText { get; set; } = "Cancel";
+
+    [Parameter]
+    public string BusyText { get; set; } = "Deleting...";
+
+    [Parameter]
+    public string CssClass { get; set; } = "btn btn-sm btn-outline-danger";
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    [Parameter]
+    public EventCallback OnConfirm { get; set; }
+
+    [Parameter]
+    public Func<Task<bool>>? OnConfirmAsync { get; set; }
+
+    private void ShowConfirmation()
+    {
+        if (Disabled || IsBusy || _isVisible)
+        {
+            return;
+        }
+
+        _isVisible = true;
+    }
+
+    private Task OnVisibilityChanged(bool isVisible)
+    {
+        _isVisible = isVisible;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleConfirmAsync()
+    {
+        var shouldClose = true;
+
+        if (OnConfirmAsync is not null)
+        {
+            shouldClose = await OnConfirmAsync();
+        }
+        else
+        {
+            await OnConfirm.InvokeAsync();
+        }
+
+        if (shouldClose)
+        {
+            _isVisible = false;
+        }
+    }
+
+    private Task HandleCancelAsync() => Task.CompletedTask;
+
+    private string GetDialogTitle()
+    {
+        if (!string.IsNullOrWhiteSpace(DialogTitle))
+        {
+            return DialogTitle;
+        }
+
+        return string.IsNullOrWhiteSpace(ItemName)
+            ? "Delete this item?"
+            : $"Delete \"{ItemName}\"?";
+    }
+
+    private string GetDialogMessage()
+    {
+        if (!string.IsNullOrWhiteSpace(DialogMessage))
+        {
+            return DialogMessage;
+        }
+
+        return string.IsNullOrWhiteSpace(ItemName)
+            ? "This action cannot be undone."
+            : $"Are you sure you want to delete \"{ItemName}\"? This action cannot be undone.";
+    }
+}

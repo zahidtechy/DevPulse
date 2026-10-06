@@ -1,0 +1,450 @@
+@page "/attendance-settings"
+@attribute [Authorize(Policy = "AdminOnly")]
+@inject IAttendanceApiClient AttendanceApi
+@implements IDisposable
+
+<PageTitle>@AppBranding.PageTitle("Attendance Settings")</PageTitle>
+
+<div class="attendance-settings-page">
+    <div class="analytics-hero analytics-hero-compact attendance-settings-hero">
+        <div class="analytics-hero-copy">
+            <p class="analytics-eyebrow">Admin · Configuration</p>
+            <h1>Attendance Settings</h1>
+            <p class="analytics-lead">
+                Define the official work day, grace buffers, punch windows, and office time zone used for attendance.
+            </p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
+    }
+
+    @if (_isLoading)
+    {
+        <div class="attendance-settings-skeleton" aria-hidden="true">
+            <div class="attendance-settings-skeleton-toolbar"></div>
+            <div class="attendance-settings-skeleton-grid attendance-settings-skeleton-grid-v2">
+                <div class="attendance-settings-skeleton-card attendance-settings-skeleton-card-main"></div>
+                <div class="attendance-settings-skeleton-card"></div>
+            </div>
+        </div>
+        <LoadingIndicator Text="Loading settings..." />
+    }
+    else
+    {
+        <div class="attendance-settings-workspace">
+            <div class="filter-card card attendance-settings-toolbar">
+                <div class="card-body">
+                    <div class="attendance-settings-summary" aria-label="Settings summary">
+                        <div class="attendance-settings-summary-block">
+                            <span class="attendance-settings-summary-icon bi-calendar3" aria-hidden="true"></span>
+                            <div>
+                                <span class="attendance-settings-summary-label">Work day</span>
+                                <strong class="attendance-settings-summary-value">@FormatTime(_workStart) – @FormatTime(_workEnd)</strong>
+                                <span class="attendance-settings-summary-meta">@GetWorkDayDuration() hours scheduled</span>
+                            </div>
+                        </div>
+
+                        <div class="attendance-settings-summary-block">
+                            <span class="attendance-settings-summary-icon bi-sliders" aria-hidden="true"></span>
+                            <div>
+                                <span class="attendance-settings-summary-label">Grace buffers</span>
+                                <strong class="attendance-settings-summary-value">@FormatTime(_bufferStart) · @FormatTime(_bufferEnd)</strong>
+                                <span class="attendance-settings-summary-meta">On-time arrival · Full-day departure</span>
+                            </div>
+                        </div>
+
+                        <div class="attendance-settings-summary-block">
+                            <span class="attendance-settings-summary-icon bi-fingerprint" aria-hidden="true"></span>
+                            <div>
+                                <span class="attendance-settings-summary-label">Punch windows</span>
+                                <strong class="attendance-settings-summary-value">@FormatTime(GetPunchInEarliest()) · @FormatTime(GetPunchOutLatest())</strong>
+                                <span class="attendance-settings-summary-meta">Earliest punch in · Latest punch out</span>
+                            </div>
+                        </div>
+
+                        <div class="attendance-settings-summary-block attendance-settings-summary-block-timezone">
+                            <span class="attendance-settings-summary-icon bi-globe2" aria-hidden="true"></span>
+                            <div>
+                                <span class="attendance-settings-summary-label">Office time</span>
+                                <strong class="attendance-settings-summary-value">@GetOfficeTimePreview()</strong>
+                                <span class="attendance-settings-summary-meta">@GetTimeZoneLabel()</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="attendance-settings-actions">
+                        <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveAsync">
+                            <span class="bi-check2-circle me-1" aria-hidden="true"></span>Save settings
+                        </BusyButton>
+                    </div>
+                </div>
+            </div>
+
+            <div class="attendance-settings-panel">
+                <div class="attendance-settings-layout-v2">
+                    <div class="attendance-settings-main">
+                        <div class="form-card card attendance-settings-card">
+                            <div class="card-body">
+                                <div class="attendance-section-header">
+                                    <span class="attendance-section-icon bi-clock-history" aria-hidden="true"></span>
+                                    <div>
+                                        <h5 class="card-title mb-1">Work schedule</h5>
+                                        <p class="attendance-section-desc mb-0">
+                                            Official hours and grace buffers that drive on-time status and hours worked.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="attendance-settings-subsection">
+                                    <h6 class="attendance-settings-subtitle">Official hours</h6>
+                                    <div class="attendance-settings-form-grid">
+                                        <div class="attendance-settings-field">
+                                            <label class="form-label">Work start</label>
+                                            <input type="time" class="form-control" @bind="_workStart" />
+                                        </div>
+                                        <div class="attendance-settings-field">
+                                            <label class="form-label">Work end</label>
+                                            <input type="time" class="form-control" @bind="_workEnd" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="attendance-settings-timeline" aria-hidden="true">
+                                    <div class="attendance-settings-timeline-track">
+                                        <div class="attendance-settings-timeline-zone punch-in"
+                                             style="left:@GetTimelineLeft(GetPunchInEarliest())%; width:@GetTimelineWidth(GetPunchInEarliest(), _workStart)%"></div>
+                                        <div class="attendance-settings-timeline-zone work"
+                                             style="left:@GetTimelineLeft(_workStart)%; width:@GetTimelineWidth(_workStart, _workEnd)%"></div>
+                                        <div class="attendance-settings-timeline-zone punch-out"
+                                             style="left:@GetTimelineLeft(_workEnd)%; width:@GetTimelineWidth(_workEnd, GetPunchOutLatest())%"></div>
+                                        @RenderTimelineMarker(GetPunchInEarliest(), "Punch in", "punch-in")
+                                        @RenderTimelineMarker(_workStart, "Start", "start")
+                                        @RenderTimelineMarker(_bufferStart, "On-time", "buffer")
+                                        @RenderTimelineMarker(_bufferEnd, "Full day", "buffer")
+                                        @RenderTimelineMarker(_workEnd, "End", "end")
+                                        @RenderTimelineMarker(GetPunchOutLatest(), "Punch out", "punch-out")
+                                    </div>
+                                    <div class="attendance-settings-timeline-scale">
+                                        <span>@FormatTime(_timelineStart)</span>
+                                        <span>@FormatTime(_timelineEnd)</span>
+                                    </div>
+                                </div>
+
+                                <div class="attendance-settings-subsection">
+                                    <h6 class="attendance-settings-subtitle">Grace buffers</h6>
+                                    <p class="attendance-settings-subtitle-desc">
+                                        Arrivals before buffer start and departures after buffer end still count as on-time for status and hours.
+                                    </p>
+                                    <div class="attendance-settings-form-grid">
+                                        <div class="attendance-settings-field">
+                                            <label class="form-label">Buffer start</label>
+                                            <input type="time" class="form-control" @bind="_bufferStart" />
+                                            <div class="form-text">Latest arrival still counted as on-time.</div>
+                                        </div>
+                                        <div class="attendance-settings-field">
+                                            <label class="form-label">Buffer end</label>
+                                            <input type="time" class="form-control" @bind="_bufferEnd" />
+                                            <div class="form-text">Earliest departure still counted as a full day.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="attendance-settings-side">
+                        <div class="form-card card attendance-settings-card">
+                            <div class="card-body">
+                                <div class="attendance-section-header">
+                                    <span class="attendance-section-icon bi-fingerprint" aria-hidden="true"></span>
+                                    <div>
+                                        <h5 class="card-title mb-1">Punch rules</h5>
+                                        <p class="attendance-section-desc mb-0">
+                                            Control when the fingerprint button unlocks for punch in and punch out.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="attendance-settings-rule-list">
+                                    <div class="attendance-settings-rule">
+                                        <div class="attendance-settings-rule-header">
+                                            <span class="attendance-settings-rule-icon bi-box-arrow-in-right" aria-hidden="true"></span>
+                                            <div>
+                                                <span class="attendance-settings-rule-title">Punch in window</span>
+                                                <span class="attendance-settings-rule-desc">Opens before work start</span>
+                                            </div>
+                                        </div>
+                                        <div class="attendance-settings-rule-input">
+                                            <input type="number"
+                                                   class="form-control"
+                                                   min="0"
+                                                   max="720"
+                                                   @bind="_punchInAllowMinutesBefore" />
+                                            <span class="attendance-settings-rule-unit">min before start</span>
+                                        </div>
+                                        <div class="attendance-settings-preview-pill punch-in">
+                                            <span class="bi-clock" aria-hidden="true"></span>
+                                            Opens at <strong>@FormatTime(GetPunchInEarliest())</strong>
+                                        </div>
+                                    </div>
+
+                                    <div class="attendance-settings-rule">
+                                        <div class="attendance-settings-rule-header">
+                                            <span class="attendance-settings-rule-icon bi-box-arrow-right" aria-hidden="true"></span>
+                                            <div>
+                                                <span class="attendance-settings-rule-title">Punch out window</span>
+                                                <span class="attendance-settings-rule-desc">Opens at work end, closes after this allowance</span>
+                                            </div>
+                                        </div>
+                                        <div class="attendance-settings-rule-input">
+                                            <input type="number"
+                                                   class="form-control"
+                                                   min="0"
+                                                   max="720"
+                                                   @bind="_punchOutAllowMinutesAfter" />
+                                            <span class="attendance-settings-rule-unit">min after end</span>
+                                        </div>
+                                        <div class="attendance-settings-preview-pill punch-out">
+                                            <span class="bi-clock" aria-hidden="true"></span>
+                                            Open <strong>@FormatTime(_workEnd)</strong> – <strong>@FormatTime(GetPunchOutLatest())</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-card card attendance-settings-card">
+                            <div class="card-body">
+                                <div class="attendance-section-header">
+                                    <span class="attendance-section-icon bi-globe2" aria-hidden="true"></span>
+                                    <div>
+                                        <h5 class="card-title mb-1">Office time zone</h5>
+                                        <p class="attendance-section-desc mb-0">
+                                            IANA time zone ID used for punch dates, windows, and on-time calculations.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="attendance-settings-field attendance-settings-field-full">
+                                    <label class="form-label">Time zone ID</label>
+                                    <input class="form-control" @bind="_timeZoneId" placeholder="Asia/Dhaka" />
+                                    <div class="form-text">Examples: Asia/Dhaka, Asia/Kolkata, UTC</div>
+                                </div>
+
+                                <div class="attendance-settings-timezone-preview">
+                                    <div class="attendance-settings-timezone-preview-row">
+                                        <span class="attendance-settings-timezone-preview-label">Live office clock</span>
+                                        <strong class="attendance-settings-timezone-preview-value">@_liveOfficeClock</strong>
+                                    </div>
+                                    <span class="attendance-settings-timezone-preview-note">@GetTimeZoneLabel()</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private bool _isBusy;
+    private bool _isError;
+    private string? _message;
+    private TimeOnly _workStart = new(9, 0);
+    private TimeOnly _workEnd = new(18, 0);
+    private TimeOnly _bufferStart = new(9, 15);
+    private TimeOnly _bufferEnd = new(17, 45);
+    private int _punchInAllowMinutesBefore = 60;
+    private int _punchOutAllowMinutesAfter = 120;
+    private string _timeZoneId = "Asia/Dhaka";
+    private string _liveOfficeClock = "—";
+    private Timer? _clockTimer;
+
+    private TimeOnly _timelineStart => SubtractMinutes(GetPunchInEarliest(), 30);
+    private TimeOnly _timelineEnd => AddMinutes(GetPunchOutLatest(), 30);
+
+    protected override async Task OnInitializedAsync()
+    {
+        StartClock();
+        await LoadAsync();
+    }
+
+    private void StartClock()
+    {
+        UpdateLiveClock();
+        _clockTimer = new Timer(_ => InvokeAsync(() =>
+        {
+            UpdateLiveClock();
+            StateHasChanged();
+        }), null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
+    }
+
+    private void UpdateLiveClock()
+    {
+        _liveOfficeClock = GetOfficeTimePreview();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var settings = await AttendanceApi.GetSettingsAsync();
+            _workStart = settings.WorkStartTime;
+            _workEnd = settings.WorkEndTime;
+            _bufferStart = settings.BufferStartTime;
+            _bufferEnd = settings.BufferEndTime;
+            _punchInAllowMinutesBefore = settings.PunchInAllowMinutesBeforeWorkStart;
+            _punchOutAllowMinutesAfter = settings.PunchOutAllowMinutesAfterWorkEnd;
+            _timeZoneId = settings.OfficeTimeZoneId;
+            UpdateLiveClock();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _isBusy = true;
+        _message = null;
+        try
+        {
+            await AttendanceApi.UpdateSettingsAsync(new UpdateAttendanceSettingsRequest(
+                _workStart,
+                _workEnd,
+                _bufferStart,
+                _bufferEnd,
+                _punchInAllowMinutesBefore,
+                _punchOutAllowMinutesAfter,
+                _timeZoneId));
+            _isError = false;
+            _message = "Attendance settings saved.";
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private RenderFragment RenderTimelineMarker(TimeOnly time, string label, string variant) => @<div class="attendance-settings-timeline-marker @variant" style="left:@(GetTimelineLeft(time))%">
+        <span class="attendance-settings-timeline-marker-line"></span>
+        <span class="attendance-settings-timeline-marker-label">@label</span>
+        <span class="attendance-settings-timeline-marker-time">@FormatTime(time)</span>
+    </div>;
+
+    private double GetTimelineLeft(TimeOnly time)
+    {
+        var start = _timelineStart.ToTimeSpan().TotalMinutes;
+        var end = _timelineEnd.ToTimeSpan().TotalMinutes;
+        var current = time.ToTimeSpan().TotalMinutes;
+        if (end <= start)
+        {
+            return 0;
+        }
+
+        return Math.Clamp((current - start) / (end - start) * 100, 0, 100);
+    }
+
+    private double GetTimelineWidth(TimeOnly from, TimeOnly to)
+    {
+        var width = GetTimelineLeft(to) - GetTimelineLeft(from);
+        return Math.Max(width, 0.5);
+    }
+
+    private string GetWorkDayDuration()
+    {
+        var duration = _workEnd.ToTimeSpan() - _workStart.ToTimeSpan();
+        if (duration <= TimeSpan.Zero)
+        {
+            return "0";
+        }
+
+        return Math.Round(duration.TotalHours, 1).ToString("0.#");
+    }
+
+    private static string FormatTime(TimeOnly time) => time.ToString("h:mm tt");
+
+    private TimeOnly GetPunchInEarliest() => SubtractMinutes(_workStart, _punchInAllowMinutesBefore);
+
+    private TimeOnly GetPunchOutLatest() => AddMinutes(_workEnd, _punchOutAllowMinutesAfter);
+
+    private static TimeOnly AddMinutes(TimeOnly time, int minutes)
+    {
+        var totalMinutes = time.Hour * 60 + time.Minute + minutes;
+        if (totalMinutes >= 24 * 60)
+        {
+            return new TimeOnly(23, 59);
+        }
+
+        return TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(totalMinutes));
+    }
+
+    private static TimeOnly SubtractMinutes(TimeOnly time, int minutes)
+    {
+        var totalMinutes = time.Hour * 60 + time.Minute - minutes;
+        if (totalMinutes <= 0)
+        {
+            return TimeOnly.MinValue;
+        }
+
+        return TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(totalMinutes));
+    }
+
+    private string GetTimeZoneLabel()
+    {
+        if (string.IsNullOrWhiteSpace(_timeZoneId))
+        {
+            return "Not set";
+        }
+
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(_timeZoneId);
+            return tz.IsDaylightSavingTime(DateTime.UtcNow) ? tz.DaylightName : tz.StandardName;
+        }
+        catch
+        {
+            return _timeZoneId;
+        }
+    }
+
+    private string GetOfficeTimePreview()
+    {
+        if (string.IsNullOrWhiteSpace(_timeZoneId))
+        {
+            return "—";
+        }
+
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(_timeZoneId);
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).ToString("ddd, h:mm tt");
+        }
+        catch
+        {
+            return "Invalid time zone";
+        }
+    }
+
+    public void Dispose()
+    {
+        _clockTimer?.Dispose();
+    }
+}

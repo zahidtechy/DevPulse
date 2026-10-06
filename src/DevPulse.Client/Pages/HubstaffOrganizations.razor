@@ -1,0 +1,281 @@
+@page "/hubstaff-organizations"
+@attribute [Authorize(Roles = AppRoles.Admin)]
+@inject IHubstaffOrganizationApiClient HubstaffApi
+
+<PageTitle>@AppBranding.PageTitle("Hubstaff Organizations")</PageTitle>
+
+<div class="clickup-accounts-page">
+    <div class="analytics-hero analytics-hero-compact clickup-accounts-hero">
+        <div class="analytics-hero-copy">
+            <p class="analytics-eyebrow">Admin · Integrations</p>
+            <h1>Hubstaff Organizations</h1>
+            <p class="analytics-lead">
+                Save your PAT and organization info securely. Access tokens are exchanged in memory only and never stored.
+            </p>
+        </div>
+        <div class="analytics-hero-actions">
+            <button class="btn btn-light btn-sm" @onclick="ShowAddForm">
+                <span class="bi-clock-history clickup-accounts-btn-icon" aria-hidden="true"></span>
+                Add Organization
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
+    }
+
+    @if (_showAddForm)
+    {
+        <div class="filter-card card mb-4 clickup-accounts-form-card">
+            <div class="card-body">
+                <div class="filter-section-header mb-1">
+                    <span class="filter-section-label">Connect Hubstaff Organization</span>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Display name</label>
+                        <input class="form-control" @bind="_form.Name" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Personal Access Token (PAT)</label>
+                        <input type="password" class="form-control" @bind="_form.PersonalAccessToken" autocomplete="off" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Hubstaff organization</label>
+                        <select class="form-select" @bind="_form.SelectedOrganizationId">
+                            <option value="">Select organization...</option>
+                            @foreach (var org in _discoveredOrganizations)
+                            {
+                                <option value="@org.OrganizationId">@org.Name (@org.OrganizationId)</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="filter-actions mt-3">
+                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideAddForm">Cancel</button>
+                    <button class="btn btn-outline-primary" disabled="@_isBusy" @onclick="DiscoverOrganizationsAsync">Detect organizations</button>
+                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="CreateOrganizationAsync">
+                        Save &amp; Validate
+                    </BusyButton>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <LoadingIndicator Text="Loading organizations..." />
+    }
+    else if (_organizations.Count == 0)
+    {
+        <div class="clickup-accounts-empty-state">
+            <h3>No Hubstaff organizations configured</h3>
+            <p>Add your PAT and organization to start syncing tracked hours.</p>
+            <button class="btn btn-primary" @onclick="ShowAddForm">Add Organization</button>
+        </div>
+    }
+    else
+    {
+        <div class="data-card card clickup-accounts-table-card">
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Org ID</th>
+                            <th>Hubstaff name</th>
+                            <th>PAT</th>
+                            <th>Last synced</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var org in _organizations)
+                        {
+                            <tr>
+                                <td>@org.Name</td>
+                                <td>@org.OrganizationId</td>
+                                <td>@(org.HubstaffOrganizationName ?? "—")</td>
+                                <td>@(org.HasPatConfigured ? "Configured" : "Missing")</td>
+                                <td>@(org.LastSyncedToDate?.ToString("yyyy-MM-dd") ?? "Never")</td>
+                                <td>@(org.IsActive ? "Active" : "Inactive")</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-primary" disabled="@_isBusy" @onclick="() => TestConnectionAsync(org.Id)">Test</button>
+                                    <button class="btn btn-sm btn-outline-secondary" disabled="@_isBusy" @onclick="() => ToggleStatusAsync(org)">
+                                        @(org.IsActive ? "Deactivate" : "Activate")
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" disabled="@_isBusy" @onclick="() => DeleteOrganizationAsync(org.Id)">Delete</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<HubstaffOrganizationDto> _organizations = [];
+    private readonly List<HubstaffOrganizationDiscoveryDto> _discoveredOrganizations = [];
+    private CreateHubstaffOrganizationFormModel _form = new();
+    private bool _showAddForm;
+    private bool _isLoading = true;
+    private bool _isBusy;
+    private bool _isError;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await LoadOrganizationsAsync();
+
+    private async Task LoadOrganizationsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var items = await HubstaffApi.GetOrganizationsAsync();
+            _organizations.Clear();
+            _organizations.AddRange(items);
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ShowAddForm()
+    {
+        _showAddForm = true;
+        _form = new CreateHubstaffOrganizationFormModel();
+        _discoveredOrganizations.Clear();
+        _message = null;
+    }
+
+    private void HideAddForm() => _showAddForm = false;
+
+    private async Task DiscoverOrganizationsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.PersonalAccessToken))
+        {
+            _isError = true;
+            _message = "Enter a PAT before detecting organizations.";
+            return;
+        }
+
+        _isBusy = true;
+        _message = null;
+        try
+        {
+            var items = await HubstaffApi.DiscoverOrganizationsAsync(new DiscoverHubstaffOrganizationsRequest(_form.PersonalAccessToken));
+            _discoveredOrganizations.Clear();
+            _discoveredOrganizations.AddRange(items);
+            if (items.Count == 1)
+            {
+                _form.SelectedOrganizationId = items[0].OrganizationId.ToString();
+            }
+
+            _isError = false;
+            _message = $"Found {items.Count} organization(s).";
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task CreateOrganizationAsync()
+    {
+        _isBusy = true;
+        _message = null;
+        try
+        {
+            await HubstaffApi.CreateOrganizationAsync(_form.ToRequest());
+            _showAddForm = false;
+            _isError = false;
+            _message = "Hubstaff organization saved. PAT encrypted in database.";
+            await LoadOrganizationsAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task TestConnectionAsync(Guid id)
+    {
+        _isBusy = true;
+        try
+        {
+            var result = await HubstaffApi.TestConnectionAsync(id);
+            _isError = result?.IsConnected != true;
+            _message = result?.Message ?? "Connection test completed.";
+            await LoadOrganizationsAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task ToggleStatusAsync(HubstaffOrganizationDto org)
+    {
+        _isBusy = true;
+        try
+        {
+            await HubstaffApi.UpdateStatusAsync(org.Id, !org.IsActive);
+            await LoadOrganizationsAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task DeleteOrganizationAsync(Guid id)
+    {
+        _isBusy = true;
+        try
+        {
+            await HubstaffApi.DeleteOrganizationAsync(id);
+            await LoadOrganizationsAsync();
+            _message = "Organization removed.";
+            _isError = false;
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+}

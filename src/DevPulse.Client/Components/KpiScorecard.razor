@@ -1,0 +1,68 @@
+@namespace DevPulse.Client.Components
+
+@if (!string.IsNullOrWhiteSpace(Href))
+{
+    <a class="kpi-card kpi-card-@Tone @(CssClass ?? string.Empty)" href="@Href">
+        <div class="kpi-card-top">
+            <span class="kpi-label">@Label</span>
+            @if (!string.IsNullOrWhiteSpace(Meta))
+            {
+                <span class="kpi-meta">@Meta</span>
+            }
+        </div>
+        <div class="kpi-value">@Value</div>
+        @if (!string.IsNullOrWhiteSpace(Hint))
+        {
+            <div class="kpi-hint">@Hint</div>
+        }
+        @if (Trend is not null)
+        {
+            <KpiTrendBadge Display="Trend" VsLabel="vs prior" />
+        }
+        @if (Progress.HasValue)
+        {
+            <div class="kpi-progress" aria-hidden="true">
+                <div class="kpi-progress-bar" style="width: @(Math.Clamp(Progress.Value, 0, 100).ToString("0.##"))%"></div>
+            </div>
+        }
+    </a>
+}
+else
+{
+    <div class="kpi-card kpi-card-@Tone @(CssClass ?? string.Empty)">
+        <div class="kpi-card-top">
+            <span class="kpi-label">@Label</span>
+            @if (!string.IsNullOrWhiteSpace(Meta))
+            {
+                <span class="kpi-meta">@Meta</span>
+            }
+        </div>
+        <div class="kpi-value">@Value</div>
+        @if (!string.IsNullOrWhiteSpace(Hint))
+        {
+            <div class="kpi-hint">@Hint</div>
+        }
+        @if (Trend is not null)
+        {
+            <KpiTrendBadge Display="Trend" VsLabel="vs prior" />
+        }
+        @if (Progress.HasValue)
+        {
+            <div class="kpi-progress" aria-hidden="true">
+                <div class="kpi-progress-bar" style="width: @(Math.Clamp(Progress.Value, 0, 100).ToString("0.##"))%"></div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public string Value { get; set; } = "—";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public string? Meta { get; set; }
+    [Parameter] public double? Progress { get; set; }
+    [Parameter] public string Tone { get; set; } = "primary";
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public KpiTrendDisplay? Trend { get; set; }
+}

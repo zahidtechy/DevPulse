@@ -1,0 +1,64 @@
+@namespace DevPulse.Client.Components
+
+<div class="sla-banner @(_expanded ? "sla-banner-expanded" : null)">
+    <div class="sla-banner-main">
+        <div class="sla-banner-score @ScoreTone">
+            <span class="sla-banner-fraction">@MetCount/@Checks.Count</span>
+            <span class="sla-banner-label">SLA targets met</span>
+        </div>
+        <div class="sla-banner-copy">
+            <strong>@Headline</strong>
+            <p class="mb-0 small text-muted">@Subtext</p>
+        </div>
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary sla-banner-toggle"
+                @onclick="ToggleExpanded"
+                aria-expanded="@_expanded">
+            @(_expanded ? "Hide details" : "View details")
+        </button>
+    </div>
+    @if (_expanded)
+    {
+        <div class="sla-banner-details">
+            @foreach (var check in Checks)
+            {
+                <div class="sla-check-row @(check.Met ? "sla-check-met" : "sla-check-missed")">
+                    <span class="sla-check-icon" aria-hidden="true">@(check.Met ? "✓" : "!")</span>
+                    <div class="sla-check-body">
+                        <span class="sla-check-metric">@check.Metric</span>
+                        <span class="sla-check-values">@check.Actual <span class="text-muted">target @check.Target</span></span>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<SlaCheckResult> Checks { get; set; } = [];
+    [Parameter] public string? PeriodLabel { get; set; }
+
+    private bool _expanded;
+
+    private int MetCount => Checks.Count(c => c.Met);
+
+    private string ScoreTone => MetCount switch
+    {
+        var n when n == Checks.Count && Checks.Count > 0 => "sla-score-excellent",
+        var n when n >= Checks.Count * 0.75 => "sla-score-good",
+        _ => "sla-score-watch"
+    };
+
+    private string Headline => MetCount switch
+    {
+        var n when n == Checks.Count && Checks.Count > 0 => "All SLA targets met",
+        var n when n == 0 => "SLA targets need attention",
+        _ => $"{Checks.Count - MetCount} SLA target{(Checks.Count - MetCount == 1 ? "" : "s")} missed"
+    };
+
+    private string Subtext => string.IsNullOrWhiteSpace(PeriodLabel)
+        ? "Team performance against MIS delivery targets"
+        : $"Team performance for {PeriodLabel}";
+
+    private void ToggleExpanded() => _expanded = !_expanded;
+}

@@ -1,0 +1,314 @@
+@implements IDisposable
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<div class="nav-menu @(IsCollapsed ? "collapsed" : null)">
+    <div class="nav-brand">
+        <a class="brand-link" href="" title="@AppBranding.CompanyName">
+            <span class="brand-logo-wrap">
+                <img class="brand-logo" src="images/datavanced-logo.svg" alt="@AppBranding.CompanyName" />
+            </span>
+        </a>
+    </div>
+
+    <div class="nav-scrollable">
+        <nav class="nav flex-column nav-primary">
+            <AuthorizeView Roles="@AppRoles.Admin">
+                <Authorized>
+                    @if (!IsCollapsed)
+                    {
+                        <div class="nav-section-label">Overview</div>
+                    }
+                    <div class="nav-item nav-item-top">
+                        <NavLink class="nav-link" href="dashboard" Match="NavLinkMatch.All" title="Dashboard" @onclick="HandleNavigate">
+                            <span class="nav-icon-well"><span class="nav-icon bi-house" aria-hidden="true"></span></span>
+                            <span class="nav-label">Dashboard</span>
+                        </NavLink>
+                    </div>
+
+                    @if (!IsCollapsed)
+                    {
+                        <div class="nav-section-label nav-section-label-spaced">Workspace</div>
+                    }
+
+                    <NavSubmenu Title="Management"
+                                GroupId="management"
+                                IconClass="bi-briefcase"
+                                IsExpanded="@(IsGroupExpanded("management"))"
+                                HasActiveChild="@IsGroupActive("management")"
+                                IsExpandedChanged="@(value => SetGroupExpanded("management", value))"
+                                SidebarCollapsed="IsCollapsed">
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-link-sub" href="clickup-accounts" title="ClickUp Accounts" @onclick="HandleNavigate">
+                                <span class="nav-icon bi-plug" aria-hidden="true"></span>
+                                <span class="nav-label">ClickUp Accounts</span>
+                            </NavLink>
+                        </div>
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-link-sub" href="hubstaff-organizations" title="Hubstaff Organizations" @onclick="HandleNavigate">
+                                <span class="nav-icon bi-clock-history" aria-hidden="true"></span>
+                                <span class="nav-label">Hubstaff</span>
+                            </NavLink>
+                        </div>
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-link-sub" href="developers" title="Developers" @onclick="HandleNavigate">
+                                <span class="nav-icon bi-people" aria-hidden="true"></span>
+                                <span class="nav-label">Developers</span>
+                            </NavLink>
+                        </div>
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-link-sub" href="users" title="Users" @onclick="HandleNavigate">
+                                <span class="nav-icon bi-shield" aria-hidden="true"></span>
+                                <span class="nav-label">Users</span>
+                            </NavLink>
+                        </div>
+                    </NavSubmenu>
+                </Authorized>
+            </AuthorizeView>
+
+            <AuthorizeView Roles="@($"{AppRoles.Admin},{AppRoles.User}")">
+                <Authorized>
+                    <NavSubmenu Title="Time Off"
+                                GroupId="time-off"
+                                IconClass="bi-calendar-check"
+                                IsExpanded="@(IsGroupExpanded("time-off"))"
+                                HasActiveChild="@IsGroupActive("time-off")"
+                                IsExpandedChanged="@(value => SetGroupExpanded("time-off", value))"
+                                SidebarCollapsed="IsCollapsed">
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-link-sub" href="attendance" title="Attendance" @onclick="HandleNavigate">
+                                <span class="nav-icon bi-fingerprint" aria-hidden="true"></span>
+                                <span class="nav-label">Attendance</span>
+                            </NavLink>
+                        </div>
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-link-sub" href="leave" title="Leave Applications" @onclick="HandleNavigate">
+                                <span class="nav-icon bi-calendar-check" aria-hidden="true"></span>
+                                <span class="nav-label">Leave Applications</span>
+                            </NavLink>
+                        </div>
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-link-sub" href="holidays" title="Holiday Calendar" @onclick="HandleNavigate">
+                                <span class="nav-icon bi-calendar" aria-hidden="true"></span>
+                                <span class="nav-label">Holiday Calendar</span>
+                            </NavLink>
+                        </div>
+                        <AuthorizeView Roles="@AppRoles.Admin">
+                            <Authorized Context="adminNav">
+                                <div class="nav-item">
+                                    <NavLink class="nav-link nav-link-sub" href="leave-types" title="Leave Types" @onclick="HandleNavigate">
+                                        <span class="nav-icon bi-list-check" aria-hidden="true"></span>
+                                        <span class="nav-label">Leave Types</span>
+                                    </NavLink>
+                                </div>
+                                <div class="nav-item">
+                                    <NavLink class="nav-link nav-link-sub" href="leave-settings" title="Leave Settings" @onclick="HandleNavigate">
+                                        <span class="nav-icon bi-gear" aria-hidden="true"></span>
+                                        <span class="nav-label">Leave Settings</span>
+                                    </NavLink>
+                                </div>
+                                <div class="nav-item">
+                                    <NavLink class="nav-link nav-link-sub" href="attendance-settings" title="Attendance Settings" @onclick="HandleNavigate">
+                                        <span class="nav-icon bi-clock" aria-hidden="true"></span>
+                                        <span class="nav-label">Attendance Settings</span>
+                                    </NavLink>
+                                </div>
+                            </Authorized>
+                        </AuthorizeView>
+                    </NavSubmenu>
+                </Authorized>
+            </AuthorizeView>
+
+            @if (!IsCollapsed)
+            {
+                <div class="nav-section-label nav-section-label-spaced">Insights</div>
+            }
+
+            <NavSubmenu Title="Analytics"
+                        GroupId="analytics"
+                        IconClass="bi-analytics"
+                        IsExpanded="@(IsGroupExpanded("analytics"))"
+                        HasActiveChild="@IsGroupActive("analytics")"
+                        IsExpandedChanged="@(value => SetGroupExpanded("analytics", value))"
+                        SidebarCollapsed="IsCollapsed">
+                <div class="nav-item">
+                    <NavLink class="nav-link nav-link-sub" href="analytics" title="MIS Analytics" @onclick="HandleNavigate">
+                        <span class="nav-icon bi-analytics" aria-hidden="true"></span>
+                        <span class="nav-label">Analytics</span>
+                    </NavLink>
+                </div>
+                <AuthorizeView Policy="CanViewReports">
+                    <Authorized>
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-link-sub" href="leave-analytics" title="Leave Analytics" @onclick="HandleNavigate">
+                                <span class="nav-icon bi-bar-chart" aria-hidden="true"></span>
+                                <span class="nav-label">Leave Analytics</span>
+                            </NavLink>
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+                <div class="nav-item">
+                    <NavLink class="nav-link nav-link-sub" href="time-analytics" title="Time Tracking Analytics" @onclick="HandleNavigate">
+                        <span class="nav-icon bi-clock" aria-hidden="true"></span>
+                        <span class="nav-label">Time Tracking</span>
+                    </NavLink>
+                </div>
+                <div class="nav-item">
+                    <NavLink class="nav-link nav-link-sub" href="reports" title="Reports" @onclick="HandleNavigate">
+                        <span class="nav-icon bi-chart" aria-hidden="true"></span>
+                        <span class="nav-label">Reports</span>
+                    </NavLink>
+                </div>
+            </NavSubmenu>
+        </nav>
+
+        <div class="nav-footer">
+            <AuthorizeView>
+                <Authorized>
+                    @if (!IsCollapsed)
+                    {
+                        <div class="nav-user-card">
+                            <div class="nav-user-avatar" aria-hidden="true">@GetUserInitial(context.User.Identity?.Name)</div>
+                            <div class="nav-user-info">
+                                <div class="nav-user-name">@context.User.Identity?.Name</div>
+                                <div class="nav-user-role">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value</div>
+                            </div>
+                        </div>
+                        <NavLink class="nav-footer-btn" href="change-password" title="Change Password" @onclick="HandleNavigate">
+                            <span class="nav-icon bi-key" aria-hidden="true"></span>
+                            <span>Change Password</span>
+                        </NavLink>
+                        <BusyButton CssClass="nav-footer-btn nav-footer-btn-danger"
+                                    IsBusy="_isLoggingOut"
+                                    BusyText="Signing out..."
+                                    OnClick="LogoutAsync">
+                            <span class="nav-icon bi-logout" aria-hidden="true"></span>
+                            <span>Sign Out</span>
+                        </BusyButton>
+                    }
+                    else
+                    {
+                        <NavLink class="nav-logout-icon" href="change-password" title="Change Password" aria-label="Change Password" @onclick="HandleNavigate">
+                            <span class="nav-icon bi-key" aria-hidden="true"></span>
+                        </NavLink>
+                        <button type="button"
+                                class="nav-logout-icon"
+                                title="Sign Out"
+                                aria-label="Sign Out"
+                                disabled="@_isLoggingOut"
+                                @onclick="LogoutAsync">
+                            <span class="nav-icon bi-logout" aria-hidden="true"></span>
+                        </button>
+                    }
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public bool IsCollapsed { get; set; }
+
+    [Parameter]
+    public EventCallback OnNavigate { get; set; }
+
+    private bool _isLoggingOut;
+    private string _activePath = string.Empty;
+    private readonly HashSet<string> _expandedGroups = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        UpdateActivePath(Navigation.Uri);
+        SyncExpandedGroups();
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        UpdateActivePath(e.Location);
+        SyncExpandedGroups();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateActivePath(string uri)
+    {
+        _activePath = new Uri(uri, UriKind.Absolute).AbsolutePath.Trim('/').ToLowerInvariant();
+    }
+
+    private void SyncExpandedGroups()
+    {
+        var activeGroup = GetGroupForPath(_activePath);
+        if (activeGroup is not null)
+        {
+            _expandedGroups.Add(activeGroup);
+        }
+    }
+
+    private static string? GetGroupForPath(string path) => path switch
+    {
+        "clickup-accounts" or "hubstaff-organizations" or "developers" or "users" => "management",
+        "leave" or "holidays" or "leave-types" or "leave-settings" or "attendance" or "attendance-settings" => "time-off",
+        "analytics" or "time-analytics" or "reports" or "leave-analytics" => "analytics",
+        _ => null
+    };
+
+    private static string GetUserInitial(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "?";
+        }
+
+        var trimmed = name.Trim();
+        var atIndex = trimmed.IndexOf('@');
+        if (atIndex > 0)
+        {
+            trimmed = trimmed[..atIndex];
+        }
+
+        return char.ToUpper(trimmed[0]).ToString();
+    }
+
+    private bool IsGroupExpanded(string groupId) => _expandedGroups.Contains(groupId);
+
+    private bool IsGroupActive(string groupId) => GetGroupForPath(_activePath) == groupId;
+
+    private void SetGroupExpanded(string groupId, bool expanded)
+    {
+        if (expanded)
+        {
+            _expandedGroups.Clear();
+            _expandedGroups.Add(groupId);
+        }
+        else
+        {
+            _expandedGroups.Remove(groupId);
+        }
+    }
+
+    private async Task HandleNavigate()
+    {
+        await OnNavigate.InvokeAsync();
+    }
+
+    private async Task LogoutAsync()
+    {
+        _isLoggingOut = true;
+
+        try
+        {
+            await AuthService.LogoutAsync();
+            Navigation.NavigateTo("login", replace: true);
+        }
+        finally
+        {
+            _isLoggingOut = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

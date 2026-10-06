@@ -1,0 +1,1074 @@
+@page "/reports"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject IClickUpAccountApiClient AccountApi
+@inject IDeveloperApiClient DeveloperApi
+@inject IReportApiClient ReportApi
+@inject IAnalyticsApiClient AnalyticsApi
+@inject IJSRuntime JS
+
+<PageTitle>@AppBranding.PageTitle("Developer Reports")</PageTitle>
+
+<div class="reports-page">
+    <div class="analytics-hero analytics-hero-compact reports-page-hero">
+        <div class="analytics-hero-copy">
+            <p class="analytics-eyebrow">MIS · Detailed Reports</p>
+            <h1>Developer Reports</h1>
+            <p class="analytics-lead">
+                Generate productivity and task-level reports from the synced database, including developer-to-QA handoff history.
+            </p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
+    }
+
+    <div class="reports-workspace">
+        <div class="filter-card card reports-toolbar">
+            <div class="card-body">
+                <div class="reports-toolbar-row">
+                    <div class="reports-toolbar-filters">
+                        <div class="reports-filter-group">
+                            <span class="reports-filter-label">Period</span>
+                            <div class="period-chips">
+                                <button type="button" class="period-chip @(_periodPreset == PeriodPreset.ThisMonth ? "active" : null)" @onclick="() => ApplyPreset(PeriodPreset.ThisMonth)">This month</button>
+                                <button type="button" class="period-chip @(_periodPreset == PeriodPreset.LastMonth ? "active" : null)" @onclick="() => ApplyPreset(PeriodPreset.LastMonth)">Last month</button>
+                                <button type="button" class="period-chip @(_periodPreset == PeriodPreset.Last30 ? "active" : null)" @onclick="() => ApplyPreset(PeriodPreset.Last30)">Last 30 days</button>
+                                <button type="button" class="period-chip @(_periodPreset == PeriodPreset.Custom ? "active" : null)" @onclick="() => _periodPreset = PeriodPreset.Custom">Custom</button>
+                            </div>
+                        </div>
+
+                        <div class="reports-filter-group reports-filter-group-dates">
+                            <span class="reports-filter-label">Date range</span>
+                            <div class="reports-date-range">
+                                <input id="reportFromDate" type="date" class="form-control" @bind="_fromDate" @bind:format="yyyy-MM-dd" @bind:after="OnCustomDateChanged" aria-label="From date" />
+                                <span class="reports-date-separator">to</span>
+                                <input id="reportToDate" type="date" class="form-control" @bind="_toDate" @bind:format="yyyy-MM-dd" @bind:after="OnCustomDateChanged" aria-label="To date" />
+                            </div>
+                        </div>
+
+                        <div class="reports-filter-group reports-filter-group-check">
+                            <div class="form-check filter-option-check">
+                                <input class="form-check-input" type="checkbox" id="includeClosed" @bind="_includeClosed" />
+                                <label class="form-check-label" for="includeClosed">Include closed tasks</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="reports-toolbar-actions">
+                        <BusyButton CssClass="btn btn-primary"
+                                    IsBusy="_isBusy"
+                                    BusyText="Generating..."
+                                    Disabled="@(!AccountFilteredDevelopers().Any())"
+                                    OnClick="GenerateReportAsync">
+                            Generate report
+                        </BusyButton>
+                        <a class="btn btn-outline-secondary btn-sm" href="analytics">Analytics</a>
+                        @if (_report is not null)
+                        {
+                            <BusyButton CssClass="btn btn-success btn-sm"
+                                        IsBusy="_isExporting"
+                                        BusyText="Exporting..."
+                                        OnClick="ExportToExcelAsync">
+                                Export Excel
+                            </BusyButton>
+                        }
+                    </div>
+                </div>
+
+                <div class="reports-scope-layout">
+                    <div class="reports-scope-panel">
+                        <div class="reports-scope-header">
+                            <span class="reports-filter-label">ClickUp accounts</span>
+                            @if (!_isLoadingAccounts && _accounts.Any(a => a.IsActive))
+                            {
+                                <span class="filter-count-badge">@_selectedAccountIds.Count selected</span>
+                            }
+                        </div>
+                        @if (_isLoadingAccounts)
+                        {
+                            <LoadingIndicator Text="Loading accounts..." Compact="true" />
+                        }
+                        else if (_accounts.Count == 0)
+                        {
+                            <p class="text-muted mb-0 small">
+                                No accounts configured.
+                                <AuthorizeView Roles="@AppRoles.Admin">
+                                    <Authorized>
+                                        <a href="clickup-accounts">Add an account</a>
+                                    </Authorized>
+                                    <NotAuthorized>
+                                        Contact an administrator to configure ClickUp accounts.
+                                    </NotAuthorized>
+                                </AuthorizeView>
+                            </p>
+                        }
+                        else
+                        {
+                            <div class="developer-select border rounded p-2 reports-scope-select">
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input" type="checkbox" id="selectAllAccounts"
+                                           checked="@_selectAllAccounts"
+                                           @onchange="ToggleSelectAllAccounts" />
+                                    <label class="form-check-label fw-semibold" for="selectAllAccounts">All accounts</label>
+                                </div>
+                                @foreach (var account in _accounts.Where(a => a.IsActive))
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox"
+                                               id="acct-@account.Id"
+                                               checked="@_selectedAccountIds.Contains(account.Id)"
+                                               @onchange="() => ToggleAccount(account.Id)" />
+                                        <label class="form-check-label" for="acct-@account.Id">@account.Name</label>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="reports-scope-panel">
+                        <div class="reports-scope-header">
+                            <span class="reports-filter-label">People</span>
+                            @if (!_isLoadingDevelopers && AccountFilteredDevelopers().Any())
+                            {
+                                <span class="filter-count-badge">@_selectedDeveloperIds.Count selected</span>
+                            }
+                        </div>
+                        <div class="period-chips mb-2">
+                            <button type="button" class="period-chip @(_workRoleFilter == WorkRoleFilter.All ? "active" : null)" @onclick="() => SetWorkRoleFilter(WorkRoleFilter.All)">All</button>
+                            <button type="button" class="period-chip @(_workRoleFilter == WorkRoleFilter.Developer ? "active" : null)" @onclick="() => SetWorkRoleFilter(WorkRoleFilter.Developer)">Developers</button>
+                            <button type="button" class="period-chip @(_workRoleFilter == WorkRoleFilter.QA ? "active" : null)" @onclick="() => SetWorkRoleFilter(WorkRoleFilter.QA)">QA</button>
+                        </div>
+                        @if (_isLoadingDevelopers)
+                        {
+                            <LoadingIndicator Text="Loading developers..." Compact="true" />
+                        }
+                        else if (_developers.Count == 0)
+                        {
+                            <p class="text-muted mb-0 small">
+                                No active developers registered.
+                                <AuthorizeView Roles="@AppRoles.Admin">
+                                    <Authorized>
+                                        <a href="developers">Sync from ClickUp</a>
+                                    </Authorized>
+                                    <NotAuthorized>
+                                        Contact an administrator to sync developers.
+                                    </NotAuthorized>
+                                </AuthorizeView>
+                            </p>
+                        }
+                        else if (!AccountFilteredDevelopers().Any())
+                        {
+                            <p class="text-muted mb-0 small">No developers mapped to the selected account(s).</p>
+                        }
+                        else
+                        {
+                            <div class="developer-select border rounded reports-scope-select">
+                                <div class="developer-select-search p-2 border-bottom">
+                                    <input type="search"
+                                           class="form-control form-control-sm"
+                                           placeholder="Filter by name or email..."
+                                           autocomplete="off"
+                                           @bind="_developerSearch"
+                                           @bind:event="oninput"
+                                           @bind:after="UpdateSelectAllState" />
+                                </div>
+                                <div class="developer-select-list p-2">
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox" id="selectAll"
+                                               checked="@_selectAll"
+                                               @onchange="ToggleSelectAll" />
+                                        <label class="form-check-label fw-semibold" for="selectAll">Select all</label>
+                                    </div>
+                                    @if (!FilteredDevelopers().Any())
+                                    {
+                                        <p class="text-muted small mb-0">No developers match your filter.</p>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var developer in FilteredDevelopers())
+                                        {
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox"
+                                                       id="dev-@developer.Id"
+                                                       checked="@_selectedDeveloperIds.Contains(developer.Id)"
+                                                       @onchange="() => ToggleDeveloper(developer.Id)" />
+                                                <label class="form-check-label" for="dev-@developer.Id">
+                                                    @developer.Name
+                                                    <span class="badge text-bg-light text-dark ms-1">@(developer.WorkRole == WorkRole.QA ? "QA" : "Dev")</span>
+                                                    @if (!string.IsNullOrWhiteSpace(developer.Email))
+                                                    {
+                                                        <span class="text-muted">(@developer.Email)</span>
+                                                    }
+                                                    @if (developer.Mappings.Count == 0)
+                                                    {
+                                                        <span class="badge text-bg-warning ms-1">No mappings</span>
+                                                    }
+                                                </label>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @if (_syncStatus is not null)
+                {
+                    <div class="reports-sync-strip" role="status">
+                        <div class="reports-sync-copy">
+                            @if (_syncStatus.LastRun is null)
+                            {
+                                <span>No KPI sync has run yet. Reports require a successful sync from ClickUp.</span>
+                            }
+                            else
+                            {
+                                <span>
+                                    Last sync <strong>@_syncStatus.LastRun.Status</strong>
+                                    @if (_syncStatus.LastRun.CompletedAtUtc.HasValue)
+                                    {
+                                        <span> · @_syncStatus.LastRun.CompletedAtUtc.Value.ToLocalTime().ToString("g")</span>
+                                    }
+                                    <span> · @_syncStatus.LastRun.TasksUpserted tasks</span>
+                                    @if (_syncStatus.NextScheduledRunUtc.HasValue)
+                                    {
+                                        <span class="text-muted"> · Next @_syncStatus.NextScheduledRunUtc.Value.ToLocalTime().ToString("g")</span>
+                                    }
+                                </span>
+                            }
+                        </div>
+                        <AuthorizeView Roles="@AppRoles.Admin">
+                            <Authorized>
+                                <BusyButton CssClass="btn btn-outline-primary btn-sm"
+                                            IsBusy="_isSyncing"
+                                            BusyText="Syncing..."
+                                            OnClick="RunSyncAsync">
+                                    Sync now
+                                </BusyButton>
+                            </Authorized>
+                        </AuthorizeView>
+                    </div>
+                }
+
+                @if (_report is not null && !_isBusy)
+                {
+                    var kpis = KpiAnalytics.FromReport(_report);
+
+                    <div class="reports-toolbar-stats" aria-label="Report summary">
+                        <div class="reports-stat">
+                            <span class="reports-stat-label">Period</span>
+                            <span class="reports-stat-value">@KpiAnalytics.FormatPeriod(_report.FromDate, _report.ToDate)</span>
+                        </div>
+                        <div class="reports-stat">
+                            <span class="reports-stat-label">Completed</span>
+                            <span class="reports-stat-value">@kpis.CompletedCount</span>
+                        </div>
+                        <div class="reports-stat">
+                            <span class="reports-stat-label">Completion</span>
+                            <span class="reports-stat-value">@KpiAnalytics.FormatPercent(kpis.CompletionRate)</span>
+                        </div>
+                        <div class="reports-stat">
+                            <span class="reports-stat-label">On-time</span>
+                            <span class="reports-stat-value">@KpiAnalytics.FormatPercent(kpis.OnTimeRate)</span>
+                        </div>
+                        <div class="reports-stat">
+                            <span class="reports-stat-label">Overdue</span>
+                            <span class="reports-stat-value @(kpis.OverdueCount > 0 ? "reports-stat-danger" : null)">@kpis.OverdueCount</span>
+                        </div>
+                        <div class="reports-stat">
+                            <span class="reports-stat-label">Tasks</span>
+                            <span class="reports-stat-value">@_report.Tasks.Count</span>
+                        </div>
+                        <div class="reports-stat reports-stat-wide">
+                            <span class="reports-stat-label">Developers</span>
+                            <span class="reports-stat-value reports-stat-muted">@_selectedDeveloperIds.Count selected · @kpis.ActiveDevelopers active</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (_isBusy && _report is null)
+        {
+            <div class="reports-skeleton" aria-hidden="true">
+                <div class="reports-skeleton-kpis"></div>
+                <div class="reports-skeleton-table"></div>
+            </div>
+            <LoadingIndicator Text="Generating report..." />
+        }
+        else if (_report is null)
+        {
+            <div class="empty-state analytics-idle">
+                <div class="empty-state-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M4 4a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 4zm0 2a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 6zm0 2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 4 8z"/></svg>
+                </div>
+                <h5>Configure filters and generate</h5>
+                <p class="text-muted mb-0">
+                    Select accounts and people above, then click <strong>Generate report</strong> to load productivity summaries and task details.
+                </p>
+            </div>
+        }
+        else
+        {
+            var kpis = KpiAnalytics.FromReport(_report);
+
+            <div class="reports-panel analytics-results-enter">
+                <div class="kpi-grid">
+                    <KpiScorecard Label="Completed"
+                                  Value="@kpis.CompletedCount.ToString()"
+                                  Hint="@KpiAnalytics.FormatPeriod(kpis.FromDate, kpis.ToDate)"
+                                  Tone="success" />
+                    <KpiScorecard Label="Completion Rate"
+                                  Value="@KpiAnalytics.FormatPercent(kpis.CompletionRate)"
+                                  Hint="@($"{kpis.CompletedCount} of {kpis.TotalTasks}")"
+                                  Progress="kpis.CompletionRate"
+                                  Tone="primary" />
+                    <KpiScorecard Label="Delivery Health"
+                                  Value="@KpiAnalytics.FormatPercent(kpis.OnTimeRate)"
+                                  Hint="On-time vs overdue"
+                                  Progress="kpis.OnTimeRate"
+                                  Tone="accent" />
+                    <KpiScorecard Label="Avg. Cycle"
+                                  Value="@KpiAnalytics.FormatDays(kpis.AverageCycleDays)"
+                                  Hint="Completion days"
+                                  Tone="neutral" />
+                    <KpiScorecard Label="In Progress"
+                                  Value="@kpis.InProgressCount.ToString()"
+                                  Hint="Created in selected dates"
+                                  Tone="warning" />
+                    <KpiScorecard Label="Overdue"
+                                  Value="@kpis.OverdueCount.ToString()"
+                                  Hint="@($"{kpis.ActiveDevelopers} developer(s)")"
+                                  Tone="@(kpis.OverdueCount > 0 ? "danger" : "neutral")" />
+                </div>
+
+                @if (_report.Developers.Any(d => d.TotalTasks > 0))
+                {
+                    <div class="data-card card reports-table-section">
+                        <div class="card-body p-0">
+                            <div class="card-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <h5 class="card-title mb-0">Productivity Summary</h5>
+                                <span class="filter-count-badge">@_report.Developers.Count(d => d.TotalTasks > 0) developers</span>
+                            </div>
+                            <div class="table-responsive reports-table-scroll reports-table-scroll-summary">
+                                <table class="table table-hover align-middle mb-0 analytics-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Developer</th>
+                                            <th>Total</th>
+                                            <th>Completed</th>
+                                            <th>In Progress</th>
+                                            <th>Completion</th>
+                                            <th>Delivery</th>
+                                            <th>Subtasks</th>
+                                            <th>Workspaces</th>
+                                            <th>Projects</th>
+                                            <th>Overdue</th>
+                                            <th>On Time</th>
+                                            <th>Avg. Completion</th>
+                                            <th>Workspace Breakdown</th>
+                                            <th>Project Breakdown</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var summary in _report.Developers.Where(d => d.TotalTasks > 0))
+                                        {
+                                            var completionRate = KpiAnalytics.Rate(summary.CompletedCount, summary.TotalTasks);
+                                            var deliveryHealth = summary.OnTimeCompletedCount + summary.OverdueCount > 0
+                                                ? KpiAnalytics.Rate(summary.OnTimeCompletedCount, summary.OnTimeCompletedCount + summary.OverdueCount)
+                                                : (double?)null;
+                                            <tr>
+                                                <td>
+                                                    <strong>@summary.DeveloperName</strong>
+                                                    @if (!string.IsNullOrWhiteSpace(summary.Email))
+                                                    {
+                                                        <div class="small text-muted">@summary.Email</div>
+                                                    }
+                                                </td>
+                                                <td><span class="badge text-bg-primary">@summary.TotalTasks</span></td>
+                                                <td><span class="badge text-bg-success">@summary.CompletedCount</span></td>
+                                                <td><span class="badge text-bg-warning">@summary.InProgressCount</span></td>
+                                                <td>@KpiAnalytics.FormatPercent(completionRate)</td>
+                                                <td>@KpiAnalytics.FormatPercent(deliveryHealth)</td>
+                                                <td><span class="badge text-bg-secondary">@summary.ChildTaskCount</span></td>
+                                                <td>@summary.WorkspaceCount</td>
+                                                <td>@summary.ProjectCount</td>
+                                                <td>
+                                                    @if (summary.OverdueCount > 0)
+                                                    {
+                                                        <span class="badge text-bg-danger">@summary.OverdueCount</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">0</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (summary.OnTimeCompletedCount > 0)
+                                                    {
+                                                        <span class="badge text-bg-success">@summary.OnTimeCompletedCount</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">0</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (summary.AverageCompletionDays.HasValue)
+                                                    {
+                                                        <span>@summary.AverageCompletionDays.Value days</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">—</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @foreach (var workspace in summary.ByWorkspace)
+                                                    {
+                                                        <span class="badge text-bg-light text-dark me-1 mb-1">
+                                                            @workspace.AccountName: @workspace.TaskCount
+                                                        </span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @foreach (var project in summary.ByProject)
+                                                    {
+                                                        <span class="badge text-bg-light text-dark me-1 mb-1">
+                                                            @project.ProjectName: @project.TaskCount
+                                                        </span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="data-card card reports-table-section">
+                    <div class="card-body p-0">
+                        <div class="card-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <h5 class="card-title mb-0">Task Details</h5>
+                            <span class="filter-count-badge">@_report.Tasks.Count tasks</span>
+                        </div>
+
+                        @if (_report.Tasks.Count == 0)
+                        {
+                            <p class="text-muted mb-0 p-4">No tasks completed in the selected date range for the chosen developers.</p>
+                        }
+                        else
+                        {
+                            <div class="reports-task-toolbar">
+                                <div class="reports-task-search">
+                                    <label class="form-label mb-1" for="taskSearch">Search tasks</label>
+                                    <input id="taskSearch"
+                                           type="search"
+                                           class="form-control form-control-sm"
+                                           placeholder="Developer, task, project..."
+                                           autocomplete="off"
+                                           @bind="_taskSearch"
+                                           @bind:event="oninput" />
+                                </div>
+                                <p class="reports-task-search-meta mb-0">
+                                    Showing @FilteredTasks().Count() of @_report.Tasks.Count
+                                    @if (!string.IsNullOrWhiteSpace(_taskSearch))
+                                    {
+                                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" @onclick="ClearTaskSearch">Clear</button>
+                                    }
+                                </p>
+                            </div>
+
+                            @if (!FilteredTasks().Any())
+                            {
+                                <p class="text-muted mb-0 p-4">No tasks match your search.</p>
+                            }
+                            else
+                            {
+                                <div class="table-responsive reports-table-scroll">
+                                    <table class="table table-sm table-hover align-middle mb-0 analytics-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Developer</th>
+                                                <th>Workspace</th>
+                                                <th>Project</th>
+                                                <th>Folder</th>
+                                                <th>Kind</th>
+                                                <th>Task</th>
+                                                <th>Priority</th>
+                                                <th>Created</th>
+                                                <th>Due</th>
+                                                <th>Status</th>
+                                                <th>Completed</th>
+                                                <th>Duration</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var task in FilteredTasks())
+                                            {
+                                                <tr>
+                                                    <td>@task.DeveloperName</td>
+                                                    <td>@task.AccountName</td>
+                                                    <td>@(string.IsNullOrWhiteSpace(task.ProjectName) ? "—" : task.ProjectName)</td>
+                                                    <td>@(string.IsNullOrWhiteSpace(task.FolderName) ? "—" : task.FolderName)</td>
+                                                    <td>
+                                                        @if (task.IsSubtask)
+                                                        {
+                                                            <span class="badge text-bg-secondary">Subtask</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge text-bg-info">@task.TaskType</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        @if (!string.IsNullOrWhiteSpace(task.Url))
+                                                        {
+                                                            <a href="@task.Url" target="_blank" rel="noopener">@task.TaskName</a>
+                                                        }
+                                                        else
+                                                        {
+                                                            @task.TaskName
+                                                        }
+                                                        @if (!string.IsNullOrWhiteSpace(task.ListName))
+                                                        {
+                                                            <div class="small text-muted">@task.ListName</div>
+                                                        }
+                                                        @if (task.IsSubtask && !string.IsNullOrWhiteSpace(task.ParentTaskName))
+                                                        {
+                                                            <div class="small text-muted">Parent: @task.ParentTaskName</div>
+                                                        }
+                                                        else if (task.IsSubtask && !string.IsNullOrWhiteSpace(task.ParentTaskId))
+                                                        {
+                                                            <div class="small text-muted">Parent: @task.ParentTaskId</div>
+                                                        }
+                                                    </td>
+                                                    <td>@FormatPriority(task.Priority)</td>
+                                                    <td>@FormatUnixDate(task.DateCreated)</td>
+                                                    <td class="@(IsTaskOverdue(task) ? "text-danger fw-semibold" : null)">@FormatUnixDate(task.DueDate)</td>
+                                                    <td>
+                                                        @if (task.IsCompleted)
+                                                        {
+                                                            <span class="badge text-bg-success">@(task.Status ?? "complete")</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge text-bg-warning">@(task.Status ?? "in progress")</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        @if (task.IsCompleted)
+                                                        {
+                                                            @FormatUnixDate(task.DateDone)
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">—</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        @if (task.CompletionDays.HasValue)
+                                                        {
+                                                            <span>@task.CompletionDays.Value d</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">—</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private enum PeriodPreset
+    {
+        ThisMonth,
+        LastMonth,
+        Last30,
+        Custom
+    }
+
+    private enum WorkRoleFilter
+    {
+        All,
+        Developer,
+        QA
+    }
+
+    private readonly List<ClickUpAccountDto> _accounts = [];
+    private readonly List<DeveloperDto> _developers = [];
+    private readonly HashSet<Guid> _selectedAccountIds = [];
+    private readonly HashSet<Guid> _selectedDeveloperIds = [];
+    private DeveloperReportResponse? _report;
+    private PeriodPreset _periodPreset = PeriodPreset.ThisMonth;
+    private WorkRoleFilter _workRoleFilter = WorkRoleFilter.All;
+    private KpiSyncStatusResponse? _syncStatus;
+    private DateTime _fromDate = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime _toDate = DateTime.Today;
+    private bool _includeClosed = true;
+    private bool _selectAllAccounts;
+    private bool _selectAll;
+    private bool _isLoadingAccounts = true;
+    private bool _isLoadingDevelopers = true;
+    private bool _isBusy;
+    private bool _isSyncing;
+    private bool _isExporting;
+    private bool _isError;
+    private string? _message;
+    private string _developerSearch = string.Empty;
+    private string _taskSearch = string.Empty;
+    private IJSObjectReference? _fileDownloadModule;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ApplyPresetDates(PeriodPreset.ThisMonth);
+        await LoadAccountsAsync();
+        await Task.WhenAll(LoadDevelopersAsync(), LoadSyncStatusAsync());
+        SelectAllFilteredDevelopers();
+    }
+
+    private void ApplyPreset(PeriodPreset preset)
+    {
+        ApplyPresetDates(preset);
+    }
+
+    private void ApplyPresetDates(PeriodPreset preset)
+    {
+        _periodPreset = preset;
+        var today = DateTime.Today;
+
+        switch (preset)
+        {
+            case PeriodPreset.ThisMonth:
+                _fromDate = new DateTime(today.Year, today.Month, 1);
+                _toDate = today;
+                break;
+            case PeriodPreset.LastMonth:
+                var firstThisMonth = new DateTime(today.Year, today.Month, 1);
+                _toDate = firstThisMonth.AddDays(-1);
+                _fromDate = new DateTime(_toDate.Year, _toDate.Month, 1);
+                break;
+            case PeriodPreset.Last30:
+                _toDate = today;
+                _fromDate = today.AddDays(-29);
+                break;
+        }
+    }
+
+    private Task OnCustomDateChanged()
+    {
+        _periodPreset = PeriodPreset.Custom;
+        return Task.CompletedTask;
+    }
+
+    private IEnumerable<DeveloperDto> AccountFilteredDevelopers()
+    {
+        IEnumerable<DeveloperDto> results = _developers;
+
+        results = _workRoleFilter switch
+        {
+            WorkRoleFilter.Developer => results.Where(d => d.WorkRole == WorkRole.Developer),
+            WorkRoleFilter.QA => results.Where(d => d.WorkRole == WorkRole.QA),
+            _ => results
+        };
+
+        if (_selectedAccountIds.Count == 0)
+        {
+            return results;
+        }
+
+        return results.Where(d =>
+            d.Mappings.Any(m => _selectedAccountIds.Contains(m.ClickUpAccountId)));
+    }
+
+    private IEnumerable<DeveloperDto> FilteredDevelopers()
+    {
+        IEnumerable<DeveloperDto> results = AccountFilteredDevelopers();
+
+        if (!string.IsNullOrWhiteSpace(_developerSearch))
+        {
+            results = results.Where(d =>
+                d.Name.Contains(_developerSearch, StringComparison.OrdinalIgnoreCase)
+                || (d.Email?.Contains(_developerSearch, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return results;
+    }
+
+    private IEnumerable<DeveloperReportTaskDto> FilteredTasks()
+    {
+        if (_report is null)
+        {
+            return [];
+        }
+
+        if (string.IsNullOrWhiteSpace(_taskSearch))
+        {
+            return _report.Tasks;
+        }
+
+        return _report.Tasks.Where(TaskMatchesSearch);
+    }
+
+    private bool TaskMatchesSearch(DeveloperReportTaskDto task)
+    {
+        return ContainsSearch(task.DeveloperName)
+            || ContainsSearch(task.AccountName)
+            || ContainsSearch(task.ProjectName)
+            || ContainsSearch(task.FolderName)
+            || ContainsSearch(task.TaskName)
+            || ContainsSearch(task.ListName)
+            || ContainsSearch(task.Status)
+            || ContainsSearch(task.Priority)
+            || ContainsSearch(FormatPriority(task.Priority))
+            || ContainsSearch(task.TaskType)
+            || ContainsSearch(task.ParentTaskName)
+            || ContainsSearch(task.ParentTaskId)
+            || (task.IsSubtask && ContainsSearch("subtask"));
+    }
+
+    private bool ContainsSearch(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && value.Contains(_taskSearch, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ClearTaskSearch()
+    {
+        _taskSearch = string.Empty;
+    }
+
+    private void SetWorkRoleFilter(WorkRoleFilter filter)
+    {
+        _workRoleFilter = filter;
+        SelectAllFilteredDevelopers();
+        UpdateSelectAllState();
+    }
+
+    private async Task LoadSyncStatusAsync()
+    {
+        try
+        {
+            _syncStatus = await AnalyticsApi.GetSyncStatusAsync();
+        }
+        catch
+        {
+            _syncStatus = null;
+        }
+    }
+
+    private async Task RunSyncAsync()
+    {
+        _isSyncing = true;
+        _message = null;
+
+        try
+        {
+            var result = await AnalyticsApi.RunSyncAsync();
+            _isError = false;
+            _message = result?.Message ?? "Report data synced.";
+            await LoadSyncStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isSyncing = false;
+        }
+    }
+
+    private async Task LoadAccountsAsync()
+    {
+        _isLoadingAccounts = true;
+
+        try
+        {
+            var accounts = await AccountApi.GetAccountsAsync();
+            _accounts.Clear();
+            _accounts.AddRange(accounts);
+
+            _selectedAccountIds.Clear();
+            foreach (var account in _accounts.Where(a => a.IsActive))
+            {
+                _selectedAccountIds.Add(account.Id);
+            }
+            _selectAllAccounts = _selectedAccountIds.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = $"Failed to load accounts: {ex.Message}";
+        }
+        finally
+        {
+            _isLoadingAccounts = false;
+        }
+    }
+
+    private async Task LoadDevelopersAsync()
+    {
+        _isLoadingDevelopers = true;
+
+        try
+        {
+            var developers = await DeveloperApi.GetDevelopersAsync();
+            _developers.Clear();
+            _developers.AddRange(developers);
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = $"Failed to load developers: {ex.Message}";
+        }
+        finally
+        {
+            _isLoadingDevelopers = false;
+        }
+    }
+
+    private void SelectAllFilteredDevelopers()
+    {
+        _selectedDeveloperIds.Clear();
+        foreach (var developer in AccountFilteredDevelopers())
+        {
+            _selectedDeveloperIds.Add(developer.Id);
+        }
+
+        UpdateSelectAllState();
+    }
+
+    private void UpdateSelectAllState()
+    {
+        var filtered = FilteredDevelopers().ToList();
+        _selectAll = filtered.Count > 0 && filtered.All(d => _selectedDeveloperIds.Contains(d.Id));
+    }
+
+    private void ToggleSelectAllAccounts(ChangeEventArgs args)
+    {
+        var isChecked = args.Value is true;
+        _selectAllAccounts = isChecked;
+        _selectedAccountIds.Clear();
+
+        if (isChecked)
+        {
+            foreach (var account in _accounts.Where(a => a.IsActive))
+            {
+                _selectedAccountIds.Add(account.Id);
+            }
+        }
+
+        SelectAllFilteredDevelopers();
+    }
+
+    private void ToggleAccount(Guid accountId)
+    {
+        if (!_selectedAccountIds.Add(accountId))
+        {
+            _selectedAccountIds.Remove(accountId);
+        }
+
+        var activeCount = _accounts.Count(a => a.IsActive);
+        _selectAllAccounts = activeCount > 0 && _selectedAccountIds.Count == activeCount;
+        SelectAllFilteredDevelopers();
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs args)
+    {
+        var isChecked = args.Value is true;
+        _selectAll = isChecked;
+        var visibleIds = FilteredDevelopers().Select(d => d.Id).ToHashSet();
+
+        if (isChecked)
+        {
+            foreach (var id in visibleIds)
+            {
+                _selectedDeveloperIds.Add(id);
+            }
+        }
+        else
+        {
+            _selectedDeveloperIds.RemoveWhere(visibleIds.Contains);
+        }
+    }
+
+    private void ToggleDeveloper(Guid developerId)
+    {
+        if (!_selectedDeveloperIds.Add(developerId))
+        {
+            _selectedDeveloperIds.Remove(developerId);
+        }
+
+        UpdateSelectAllState();
+    }
+
+    private async Task GenerateReportAsync()
+    {
+        if (_selectedDeveloperIds.Count == 0)
+        {
+            _isError = true;
+            _message = "Select at least one developer.";
+            return;
+        }
+
+        var fromDate = DateOnly.FromDateTime(_fromDate);
+        var toDate = DateOnly.FromDateTime(_toDate);
+
+        if (fromDate > toDate)
+        {
+            _isError = true;
+            _message = "From date must be on or before to date.";
+            return;
+        }
+
+        _isBusy = true;
+        _message = null;
+        _report = null;
+        _taskSearch = string.Empty;
+
+        try
+        {
+            IReadOnlyList<Guid>? accountIds = _selectedAccountIds.Count > 0
+                ? _selectedAccountIds.ToList()
+                : null;
+
+            var request = new DeveloperReportRequest(
+                _selectedDeveloperIds.ToList(),
+                fromDate,
+                toDate,
+                _includeClosed,
+                accountIds);
+
+            _report = await ReportApi.GenerateDeveloperReportAsync(request);
+            _isError = false;
+            _message = $"Report generated for {FormatPeriod(fromDate, toDate)}.";
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task ExportToExcelAsync()
+    {
+        if (_report is null)
+        {
+            return;
+        }
+
+        _isExporting = true;
+        _message = null;
+
+        try
+        {
+            var fileBytes = await ReportApi.ExportDeveloperReportToExcelAsync(_report);
+            var fileName = $"{AppBranding.CompanyName}-Developer-Work-{_report.FromDate:yyyy-MM-dd}_to_{_report.ToDate:yyyy-MM-dd}.xlsx";
+            const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var base64 = Convert.ToBase64String(fileBytes);
+            var module = await GetFileDownloadModuleAsync();
+            await module.InvokeVoidAsync("downloadFromBytes", fileName, contentType, base64);
+            _isError = false;
+            _message = "Report exported to Excel.";
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private static string FormatPeriod(DateOnly fromDate, DateOnly toDate)
+    {
+        if (fromDate == toDate)
+        {
+            return fromDate.ToString("MMM d, yyyy");
+        }
+
+        if (fromDate.Year == toDate.Year && fromDate.Month == toDate.Month && fromDate.Day == 1
+            && toDate.Day == DateTime.DaysInMonth(toDate.Year, toDate.Month))
+        {
+            return fromDate.ToString("MMMM yyyy");
+        }
+
+        return $"{fromDate:MMM d, yyyy} – {toDate:MMM d, yyyy}";
+    }
+
+    private static string FormatUnixDate(long? unixMs)
+    {
+        if (!unixMs.HasValue)
+        {
+            return "—";
+        }
+
+        return DateTimeOffset.FromUnixTimeMilliseconds(unixMs.Value).ToLocalTime().ToString("MMM d, yyyy");
+    }
+
+    private static string FormatPriority(string? priority)
+    {
+        if (string.IsNullOrWhiteSpace(priority))
+        {
+            return "—";
+        }
+
+        var trimmed = priority.Trim();
+        return trimmed.Length == 1
+            ? trimmed.ToUpperInvariant()
+            : char.ToUpper(trimmed[0]) + trimmed[1..].ToLowerInvariant();
+    }
+
+    private static bool IsTaskOverdue(DeveloperReportTaskDto task)
+    {
+        if (!task.DueDate.HasValue)
+        {
+            return false;
+        }
+
+        if (task.IsCompleted)
+        {
+            return task.DateDone.HasValue && task.DateDone.Value > task.DueDate.Value;
+        }
+
+        return task.DueDate.Value < DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    }
+
+    private async Task<IJSObjectReference> GetFileDownloadModuleAsync()
+    {
+        _fileDownloadModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/fileDownload.js");
+        return _fileDownloadModule;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_fileDownloadModule is not null)
+        {
+            await _fileDownloadModule.DisposeAsync();
+        }
+    }
+}

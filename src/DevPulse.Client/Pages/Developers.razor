@@ -1,0 +1,970 @@
+@page "/developers"
+@attribute [Authorize(Roles = AppRoles.Admin)]
+@inject IDeveloperApiClient DeveloperApi
+@inject IClickUpAccountApiClient ClickUpAccountApi
+@inject IHubstaffOrganizationApiClient HubstaffOrgApi
+
+<PageTitle>@AppBranding.PageTitle("Developers")</PageTitle>
+
+<div class="developers-page">
+    <div class="analytics-hero analytics-hero-compact developers-hero">
+        <div class="analytics-hero-copy">
+            <p class="analytics-eyebrow">Admin · Registry</p>
+            <h1>Developer Registry</h1>
+            <p class="analytics-lead">
+                Manage team members, roles, reporting lines, ClickUp mappings, and Hubstaff mappings.
+            </p>
+        </div>
+        <div class="analytics-hero-actions">
+            @if (_clickUpAccounts.Count > 0)
+            {
+                <SearchableAccountSelect Accounts="_clickUpAccounts"
+                                         SelectedValue="_selectedAccountId"
+                                         SelectedValueChanged="OnAccountSelectionChanged"
+                                         CssClass="sync-account-select developers-account-select"
+                                         Disabled="@_isBusy" />
+            }
+            <BusyButton CssClass="btn btn-outline-light btn-sm" IsBusy="_isBusy" BusyText="Syncing..." OnClick="SyncFromClickUpAsync" Disabled="@(_clickUpAccounts.Count == 0)">
+                <span class="bi-arrow-repeat developers-btn-icon" aria-hidden="true"></span>
+                Sync from ClickUp
+            </BusyButton>
+            <BusyButton CssClass="btn btn-outline-light btn-sm" IsBusy="_isBusy" BusyText="Syncing..." OnClick="SyncFromHubstaffAsync" Disabled="@(_hubstaffOrganizations.Count == 0)">
+                <span class="bi-clock-history developers-btn-icon" aria-hidden="true"></span>
+                Sync from Hubstaff
+            </BusyButton>
+            <button class="btn btn-light btn-sm" @onclick="ShowAddForm">
+                <span class="bi-person-plus developers-btn-icon" aria-hidden="true"></span>
+                Add Developer
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
+    }
+
+    @if (_isBusy && !_isLoading)
+    {
+        <LoadingIndicator Text="Processing..." />
+    }
+
+    @if (_showAddForm)
+    {
+        <div class="filter-card card mb-4 developers-form-card">
+            <div class="card-body">
+                <div class="filter-section-header mb-3">
+                    <span class="filter-section-label">New Developer</span>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" @bind="_newDeveloper.Name" placeholder="Jane Doe" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" @bind="_newDeveloper.Email" placeholder="jane@example.com" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Work role</label>
+                        <select class="form-select" @bind="_newDeveloper.WorkRole">
+                            <option value="@WorkRole.Developer">Developer</option>
+                            <option value="@WorkRole.QA">QA</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Reporting manager</label>
+                        <select class="form-select" @bind="_newDeveloper.ReportingManagerDeveloperId">
+                            <option value="">None</option>
+                            @foreach (var manager in GetActiveDevelopersForManagerSelect())
+                            {
+                                <option value="@manager.Id">@manager.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="filter-actions mt-3">
+                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideAddForm">Cancel</button>
+                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="CreateDeveloperAsync">Create Developer</BusyButton>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_hubstaffMappingDeveloperId.HasValue)
+    {
+        <div class="filter-card card mb-4 developers-form-card">
+            <div class="card-body">
+                <div class="filter-section-header mb-1">
+                    <span class="filter-section-label">Map to Hubstaff Organization</span>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Organization</label>
+                        <select class="form-select" @bind="_hubstaffMappingForm.OrganizationId">
+                            <option value="">Select organization...</option>
+                            @foreach (var org in _hubstaffOrganizations)
+                            {
+                                <option value="@org.Id">@org.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" @bind="_hubstaffMappingForm.Email" />
+                    </div>
+                </div>
+                <div class="filter-actions mt-3">
+                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="CancelHubstaffMappingForm">Cancel</button>
+                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Mapping..." OnClick="AddHubstaffMappingByEmailAsync">Map to Hubstaff</BusyButton>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_mappingDeveloperId.HasValue)
+    {
+        <div class="filter-card card mb-4 developers-form-card">
+            <div class="card-body">
+                <div class="filter-section-header mb-1">
+                    <span class="filter-section-label">Map to ClickUp Workspace</span>
+                </div>
+                <p class="text-muted small mb-3">
+                    Resolves the ClickUp user ID from the email address and links it to this developer.
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Workspace</label>
+                        <select class="form-select" @bind="_mappingForm.WorkspaceId">
+                            <option value="">Select workspace...</option>
+                            @foreach (var account in _clickUpAccounts)
+                            {
+                                <option value="@account.WorkspaceId">@account.Name (@account.WorkspaceId)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" @bind="_mappingForm.Email" placeholder="jane@example.com" />
+                    </div>
+                </div>
+                <div class="filter-actions mt-3">
+                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="CancelMappingForm">Cancel</button>
+                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Mapping..." OnClick="AddMappingByEmailAsync">Resolve &amp; Map</BusyButton>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <LoadingIndicator Text="Loading developers..." />
+    }
+    else if (_developers.Count == 0 && !HasActiveFilters)
+    {
+        <div class="developers-empty-state">
+            <div class="developers-empty-icon" aria-hidden="true">
+                <span class="bi-people"></span>
+            </div>
+            <h3>No developers registered</h3>
+            <p>Sync members from your connected ClickUp workspaces to build the registry automatically, or add one manually.</p>
+            <div class="developers-empty-actions">
+                <BusyButton CssClass="btn btn-outline-primary" IsBusy="_isBusy" BusyText="Syncing..." OnClick="SyncFromClickUpAsync" Disabled="@(_clickUpAccounts.Count == 0)">
+                    Sync from ClickUp
+                </BusyButton>
+                <button class="btn btn-primary" @onclick="ShowAddForm">Add Developer</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="developers-stats">
+            <div class="developers-stat-card">
+                <span class="developers-stat-label">Total</span>
+                <span class="developers-stat-value">@_developers.Count</span>
+            </div>
+            <div class="developers-stat-card">
+                <span class="developers-stat-label">Active</span>
+                <span class="developers-stat-value developers-stat-value-success">@GetActiveCount()</span>
+            </div>
+            <div class="developers-stat-card">
+                <span class="developers-stat-label">QA</span>
+                <span class="developers-stat-value developers-stat-value-info">@GetQaCount()</span>
+            </div>
+            <div class="developers-stat-card">
+                <span class="developers-stat-label">Mapped</span>
+                <span class="developers-stat-value">@GetMappedCount()</span>
+            </div>
+        </div>
+
+        <div class="filter-card card mb-4 developers-toolbar">
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="form-label mb-1" for="developerSearch">Search</label>
+                        <div class="developers-search-wrap">
+                            <span class="bi-search developers-search-icon" aria-hidden="true"></span>
+                            <input id="developerSearch"
+                                   type="search"
+                                   class="form-control form-control-sm developers-search-input"
+                                   placeholder="Name or email..."
+                                   @bind="_developerSearch"
+                                   @bind:event="oninput" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-lg-2">
+                        <label class="form-label mb-1" for="developerRoleFilter">Role</label>
+                        <select id="developerRoleFilter" class="form-select form-select-sm" @bind="_roleFilter">
+                            <option value="all">All roles</option>
+                            <option value="developer">Developer</option>
+                            <option value="qa">QA</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 col-lg-2">
+                        <label class="form-label mb-1" for="developerStatusFilter">Status</label>
+                        <select id="developerStatusFilter" class="form-select form-select-sm" @bind="_statusFilter">
+                            <option value="all">All statuses</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5 col-lg-5 d-flex align-items-end justify-content-lg-end">
+                        <div class="developers-filter-meta">
+                            <span class="filter-count-badge">
+                                @FilteredDevelopers.Count() developer@(FilteredDevelopers.Count() == 1 ? "" : "s")
+                            </span>
+                            @if (HasActiveFilters)
+                            {
+                                <button type="button" class="btn btn-link btn-sm developers-clear-filters" @onclick="ClearFilters">Clear filters</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="data-card card developers-table-card">
+            <div class="card-body p-0">
+                @if (!FilteredDevelopers.Any())
+                {
+                    <div class="developers-filter-empty">
+                        <span class="bi-funnel developers-filter-empty-icon" aria-hidden="true"></span>
+                        <h5>No developers match your filters</h5>
+                        <p class="text-muted mb-3">Try a different search term, role, or status.</p>
+                        @if (HasActiveFilters)
+                        {
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">Clear filters</button>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 developers-table">
+                            <thead>
+                                <tr>
+                                    <th>Developer</th>
+                                    <th>Role</th>
+                                    <th>Reporting manager</th>
+                                    <th>Status</th>
+                                    <th>Workspaces</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var developer in FilteredDevelopers)
+                                {
+                                    <tr class="@(developer.IsActive ? null : "developers-row-inactive")">
+                                        <td>
+                                            <div class="developers-person">
+                                                <span class="developers-avatar @GetRoleAvatarClass(developer.WorkRole)" aria-hidden="true">
+                                                    @GetInitials(developer.Name)
+                                                </span>
+                                                <div class="developers-person-meta">
+                                                    <span class="developers-person-name">@developer.Name</span>
+                                                    @if (!string.IsNullOrWhiteSpace(developer.Email))
+                                                    {
+                                                        <span class="developers-person-email">@developer.Email</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="developers-person-email text-muted">No email</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <select class="form-select form-select-sm developers-role-select @GetRoleSelectClass(developer.WorkRole)"
+                                                    disabled="@_isBusy"
+                                                    value="@developer.WorkRole"
+                                                    @onchange="e => SetWorkRoleAsync(developer, e.Value?.ToString())">
+                                                <option value="@WorkRole.Developer">Developer</option>
+                                                <option value="@WorkRole.QA">QA</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <select class="form-select form-select-sm developer-manager-select"
+                                                    disabled="@_isBusy"
+                                                    value="@FormatManagerSelectValue(developer.ReportingManagerDeveloperId)"
+                                                    @onchange="e => SetReportingManagerAsync(developer, e.Value?.ToString())">
+                                                <option value="">None</option>
+                                                @foreach (var manager in GetActiveDevelopersForManagerSelect(developer.Id, developer))
+                                                {
+                                                    <option value="@manager.Id">@manager.Name</option>
+                                                }
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <span class="developers-status @(developer.IsActive ? "developers-status-active" : "developers-status-inactive")">
+                                                <span class="status-dot @(developer.IsActive ? "status-dot-active" : "status-dot-inactive")" aria-hidden="true"></span>
+                                                @(developer.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (developer.Mappings.Count == 0)
+                                            {
+                                                <span class="developers-unmapped">Not mapped</span>
+                                            }
+                                            else
+                                            {
+                                                <div class="developers-mappings">
+                                                    @foreach (var mapping in developer.Mappings)
+                                                    {
+                                                        <span class="developer-mapping-badge" title="ClickUp User ID: @mapping.ClickUpUserId">
+                                                            <span class="bi-link-45deg" aria-hidden="true"></span>
+                                                            @mapping.AccountName
+                                                        </span>
+                                                    }
+                                                    @if (developer.HubstaffMappings is not null)
+                                                    {
+                                                        @foreach (var mapping in developer.HubstaffMappings)
+                                                        {
+                                                            <span class="developer-mapping-badge" title="Hubstaff User ID: @mapping.HubstaffUserId">
+                                                                <span class="bi-clock-history" aria-hidden="true"></span>
+                                                                @mapping.OrganizationName
+                                                            </span>
+                                                        }
+                                                    }
+                                                </div>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="btn-group-actions">
+                                                <button class="btn btn-sm btn-outline-primary" disabled="@_isBusy" @onclick="() => ShowMappingForm(developer)" title="Map to ClickUp workspace">
+                                                    <span class="bi-link-45deg" aria-hidden="true"></span>
+                                                    ClickUp
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-primary" disabled="@_isBusy" @onclick="() => ShowHubstaffMappingForm(developer)" title="Map to Hubstaff organization">
+                                                    <span class="bi-clock-history" aria-hidden="true"></span>
+                                                    Hubstaff
+                                                </button>
+                                                @if (developer.IsActive)
+                                                {
+                                                    <button class="btn btn-sm btn-outline-secondary" disabled="@_isBusy" @onclick="() => SetDeveloperActiveAsync(developer, false)" title="Mark inactive without affecting reports or analytics">
+                                                        Deactivate
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="btn btn-sm btn-outline-success" disabled="@_isBusy" @onclick="() => SetDeveloperActiveAsync(developer, true)">
+                                                        Activate
+                                                    </button>
+                                                }
+                                                <button class="btn btn-sm btn-outline-danger" disabled="@_isBusy" @onclick="() => DeleteDeveloperAsync(developer.Id)" title="Delete developer">
+                                                    <span class="bi-trash" aria-hidden="true"></span>
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<DeveloperDto> _developers = [];
+    private readonly List<DeveloperDto> _managerCandidates = [];
+    private readonly List<ClickUpAccountDto> _clickUpAccounts = [];
+    private readonly List<HubstaffOrganizationDto> _hubstaffOrganizations = [];
+    private CreateDeveloperFormModel _newDeveloper = new();
+    private MappingFormModel _mappingForm = new();
+    private HubstaffMappingFormModel _hubstaffMappingForm = new();
+    private Guid? _mappingDeveloperId;
+    private Guid? _hubstaffMappingDeveloperId;
+    private string _selectedAccountId = string.Empty;
+    private string _developerSearch = string.Empty;
+    private string _statusFilter = "all";
+    private string _roleFilter = "all";
+    private bool _showAddForm;
+    private bool _isLoading = true;
+    private bool _isBusy;
+    private bool _isError;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadDevelopersAsync(), LoadClickUpAccountsAsync(), LoadHubstaffOrganizationsAsync(), LoadManagerCandidatesAsync());
+    }
+
+    private async Task LoadHubstaffOrganizationsAsync()
+    {
+        try
+        {
+            var orgs = await HubstaffOrgApi.GetOrganizationsAsync();
+            _hubstaffOrganizations.Clear();
+            _hubstaffOrganizations.AddRange(orgs.Where(o => o.IsActive));
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = $"Failed to load Hubstaff organizations: {ex.Message}";
+        }
+    }
+
+    private async Task LoadClickUpAccountsAsync()
+    {
+        try
+        {
+            var accounts = await ClickUpAccountApi.GetAccountsAsync();
+            _clickUpAccounts.Clear();
+            _clickUpAccounts.AddRange(accounts.Where(a => a.IsActive));
+            if (_clickUpAccounts.Count == 1)
+            {
+                _selectedAccountId = _clickUpAccounts[0].Id.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = $"Failed to load ClickUp workspaces: {ex.Message}";
+        }
+    }
+
+    private async Task LoadDevelopersAsync()
+    {
+        _isLoading = true;
+        _message = null;
+
+        try
+        {
+            var developers = await DeveloperApi.GetRegistryDevelopersAsync(new DeveloperRegistryQuery());
+            _developers.Clear();
+            _developers.AddRange(developers);
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = $"Failed to load developers: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadManagerCandidatesAsync()
+    {
+        try
+        {
+            var developers = await DeveloperApi.GetRegistryDevelopersAsync(
+                new DeveloperRegistryQuery(Status: "active"));
+            _managerCandidates.Clear();
+            _managerCandidates.AddRange(developers);
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = $"Failed to load reporting manager options: {ex.Message}";
+        }
+    }
+
+    private async Task ReloadDevelopersAndManagerCandidatesAsync()
+    {
+        await Task.WhenAll(LoadDevelopersAsync(), LoadManagerCandidatesAsync());
+    }
+
+    private void ShowAddForm()
+    {
+        _showAddForm = true;
+        _newDeveloper = new CreateDeveloperFormModel();
+        _message = null;
+    }
+
+    private void HideAddForm()
+    {
+        _showAddForm = false;
+    }
+
+    private void ShowMappingForm(DeveloperDto developer)
+    {
+        _showAddForm = false;
+        _mappingDeveloperId = developer.Id;
+        _mappingForm = new MappingFormModel
+        {
+            Email = developer.Email ?? string.Empty,
+            WorkspaceId = _clickUpAccounts.Count == 1 ? _clickUpAccounts[0].WorkspaceId : string.Empty
+        };
+        _message = null;
+    }
+
+    private void CancelMappingForm()
+    {
+        _mappingDeveloperId = null;
+        _mappingForm = new MappingFormModel();
+    }
+
+    private async Task AddMappingByEmailAsync()
+    {
+        if (!_mappingDeveloperId.HasValue)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_mappingForm.WorkspaceId))
+        {
+            _isError = true;
+            _message = "Please select a workspace.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_mappingForm.Email))
+        {
+            _isError = true;
+            _message = "Email is required to resolve the ClickUp user.";
+            return;
+        }
+
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            await DeveloperApi.AddMappingByEmailAsync(
+                _mappingDeveloperId.Value,
+                new AddDeveloperMappingByEmailRequest(_mappingForm.WorkspaceId.Trim(), _mappingForm.Email.Trim()));
+
+            _mappingDeveloperId = null;
+            _mappingForm = new MappingFormModel();
+            _isError = false;
+            _message = "Developer mapped to ClickUp workspace successfully.";
+            await ReloadDevelopersAndManagerCandidatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task CreateDeveloperAsync()
+    {
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            await DeveloperApi.CreateDeveloperAsync(_newDeveloper.ToRequest());
+            _showAddForm = false;
+            _isError = false;
+            _message = "Developer created successfully.";
+            await ReloadDevelopersAndManagerCandidatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private void OnAccountSelectionChanged(string? accountId)
+    {
+        _selectedAccountId = accountId ?? string.Empty;
+    }
+
+    private IEnumerable<DeveloperDto> FilteredDevelopers =>
+        _developers.Where(developer =>
+        {
+            if (Guid.TryParse(_selectedAccountId, out var accountId)
+                && !developer.Mappings.Any(m => m.ClickUpAccountId == accountId))
+            {
+                return false;
+            }
+
+            if (string.Equals(_roleFilter, "developer", StringComparison.OrdinalIgnoreCase)
+                && developer.WorkRole != WorkRole.Developer)
+            {
+                return false;
+            }
+
+            if (string.Equals(_roleFilter, "qa", StringComparison.OrdinalIgnoreCase)
+                && developer.WorkRole != WorkRole.QA)
+            {
+                return false;
+            }
+
+            if (string.Equals(_statusFilter, "active", StringComparison.OrdinalIgnoreCase) && !developer.IsActive)
+            {
+                return false;
+            }
+
+            if (string.Equals(_statusFilter, "inactive", StringComparison.OrdinalIgnoreCase) && developer.IsActive)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(_developerSearch))
+            {
+                return true;
+            }
+
+            var search = _developerSearch.Trim();
+            return developer.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (developer.Email?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+        });
+
+    private bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(_developerSearch)
+        || !string.IsNullOrWhiteSpace(_selectedAccountId)
+        || !string.Equals(_statusFilter, "all", StringComparison.OrdinalIgnoreCase)
+        || !string.Equals(_roleFilter, "all", StringComparison.OrdinalIgnoreCase);
+
+    private void ClearFilters()
+    {
+        _developerSearch = string.Empty;
+        _selectedAccountId = string.Empty;
+        _statusFilter = "all";
+        _roleFilter = "all";
+    }
+
+    private async Task SyncFromClickUpAsync()
+    {
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            SyncFromClickUpRequest? request = Guid.TryParse(_selectedAccountId, out var accountId)
+                ? new SyncFromClickUpRequest(accountId)
+                : null;
+
+            var result = await DeveloperApi.SyncFromClickUpAsync(request);
+            _isError = false;
+            var accountLabel = Guid.TryParse(_selectedAccountId, out var selectedId)
+                ? _clickUpAccounts.FirstOrDefault(a => a.Id == selectedId)?.Name ?? "selected account"
+                : "all accounts";
+            _message = result is null
+                ? $"Sync from {accountLabel} completed."
+                : $"Sync from {accountLabel} complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.";
+            await ReloadDevelopersAndManagerCandidatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task SyncFromHubstaffAsync()
+    {
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            var result = await DeveloperApi.SyncFromHubstaffAsync(new SyncFromHubstaffRequest(null));
+            _isError = false;
+            _message = result is null
+                ? "Sync from Hubstaff completed."
+                : $"Sync from Hubstaff complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.";
+            await ReloadDevelopersAndManagerCandidatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private void ShowHubstaffMappingForm(DeveloperDto developer)
+    {
+        _showAddForm = false;
+        _mappingDeveloperId = null;
+        _hubstaffMappingDeveloperId = developer.Id;
+        _hubstaffMappingForm = new HubstaffMappingFormModel
+        {
+            Email = developer.Email ?? string.Empty,
+            OrganizationId = _hubstaffOrganizations.Count == 1 ? _hubstaffOrganizations[0].Id.ToString() : string.Empty
+        };
+    }
+
+    private void CancelHubstaffMappingForm()
+    {
+        _hubstaffMappingDeveloperId = null;
+        _hubstaffMappingForm = new HubstaffMappingFormModel();
+    }
+
+    private async Task AddHubstaffMappingByEmailAsync()
+    {
+        if (!_hubstaffMappingDeveloperId.HasValue || !Guid.TryParse(_hubstaffMappingForm.OrganizationId, out var orgId))
+        {
+            _isError = true;
+            _message = "Select a Hubstaff organization.";
+            return;
+        }
+
+        _isBusy = true;
+        try
+        {
+            await DeveloperApi.AddHubstaffMappingByEmailAsync(
+                _hubstaffMappingDeveloperId.Value,
+                new AddDeveloperHubstaffMappingByEmailRequest(orgId, _hubstaffMappingForm.Email));
+
+            _hubstaffMappingDeveloperId = null;
+            _isError = false;
+            _message = "Developer mapped to Hubstaff successfully.";
+            await LoadDevelopersAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task SetDeveloperActiveAsync(DeveloperDto developer, bool isActive)
+    {
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            await DeveloperApi.UpdateDeveloperAsync(
+                developer.Id,
+                new UpdateDeveloperRequest(
+                    developer.Name,
+                    developer.Email,
+                    isActive,
+                    developer.WorkRole,
+                    developer.ReportingManagerDeveloperId));
+
+            _isError = false;
+            _message = isActive
+                ? $"{developer.Name} marked active."
+                : $"{developer.Name} marked inactive. Reports and analytics are unchanged.";
+            await ReloadDevelopersAndManagerCandidatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task SetWorkRoleAsync(DeveloperDto developer, string? roleValue)
+    {
+        if (!Enum.TryParse<WorkRole>(roleValue, out var role) || role == developer.WorkRole)
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            await DeveloperApi.UpdateDeveloperAsync(
+                developer.Id,
+                new UpdateDeveloperRequest(
+                    developer.Name,
+                    developer.Email,
+                    developer.IsActive,
+                    role,
+                    developer.ReportingManagerDeveloperId));
+
+            _isError = false;
+            _message = $"{developer.Name} set as {role}.";
+            await LoadDevelopersAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task SetReportingManagerAsync(DeveloperDto developer, string? managerValue)
+    {
+        Guid? managerId = string.IsNullOrWhiteSpace(managerValue) ? null : Guid.TryParse(managerValue, out var id) ? id : null;
+        if (managerId == developer.ReportingManagerDeveloperId)
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            await DeveloperApi.UpdateDeveloperAsync(
+                developer.Id,
+                new UpdateDeveloperRequest(
+                    developer.Name,
+                    developer.Email,
+                    developer.IsActive,
+                    developer.WorkRole,
+                    managerId));
+
+            _isError = false;
+            _message = managerId.HasValue
+                ? $"{developer.Name} assigned to reporting manager."
+                : $"{developer.Name} reporting manager cleared.";
+            await LoadDevelopersAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private IEnumerable<DeveloperDto> GetActiveDevelopersForManagerSelect(
+        Guid? excludeDeveloperId = null,
+        DeveloperDto? forDeveloper = null)
+    {
+        var candidates = _managerCandidates
+            .Where(d => d.Id != excludeDeveloperId)
+            .ToList();
+
+        if (forDeveloper?.ReportingManagerDeveloperId is Guid managerId
+            && candidates.All(d => d.Id != managerId)
+            && !string.IsNullOrWhiteSpace(forDeveloper.ReportingManagerName))
+        {
+            candidates.Add(new DeveloperDto(
+                managerId,
+                forDeveloper.ReportingManagerName,
+                null,
+                false,
+                default,
+                [],
+                WorkRole.Developer));
+        }
+
+        return candidates.OrderBy(d => d.Name);
+    }
+
+    private static string FormatManagerSelectValue(Guid? managerId) =>
+        managerId?.ToString() ?? string.Empty;
+
+    private int GetActiveCount() => _developers.Count(d => d.IsActive);
+
+    private int GetQaCount() => _developers.Count(d => d.WorkRole == WorkRole.QA);
+
+    private int GetMappedCount() => _developers.Count(d =>
+        d.Mappings.Count > 0 || (d.HubstaffMappings?.Count ?? 0) > 0);
+
+    private static string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "?";
+        }
+
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length >= 2
+            ? $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}"
+            : char.ToUpperInvariant(parts[0][0]).ToString();
+    }
+
+    private static string GetRoleAvatarClass(WorkRole role) =>
+        role == WorkRole.QA ? "developers-avatar-qa" : "developers-avatar-dev";
+
+    private static string GetRoleSelectClass(WorkRole role) =>
+        role == WorkRole.QA ? "developers-role-select-qa" : "developers-role-select-dev";
+
+    private async Task DeleteDeveloperAsync(Guid id)
+    {
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            await DeveloperApi.DeleteDeveloperAsync(id);
+            _isError = false;
+            _message = "Developer deleted.";
+            await ReloadDevelopersAndManagerCandidatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private sealed class CreateDeveloperFormModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Email { get; set; }
+        public WorkRole WorkRole { get; set; } = WorkRole.Developer;
+        public string ReportingManagerDeveloperId { get; set; } = string.Empty;
+
+        public CreateDeveloperRequest ToRequest()
+        {
+            Guid? managerId = Guid.TryParse(ReportingManagerDeveloperId, out var id) ? id : null;
+            return new CreateDeveloperRequest(Name, Email, WorkRole, managerId);
+        }
+    }
+
+    private sealed class MappingFormModel
+    {
+        public string WorkspaceId { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+    }
+
+    private sealed class HubstaffMappingFormModel
+    {
+        public string OrganizationId { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+    }
+}

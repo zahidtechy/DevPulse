@@ -1,0 +1,17 @@
+@namespace DevPulse.Client.Components
+
+@if (Display is not null)
+{
+    <div class="kpi-trend @Display.CssClass" title="@Display.Title">
+        @Display.Text
+        @if (!string.IsNullOrWhiteSpace(VsLabel))
+        {
+            <span class="kpi-trend-vs">@VsLabel</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public KpiTrendDisplay? Display { get; set; }
+    [Parameter] public string? VsLabel { get; set; }
+}

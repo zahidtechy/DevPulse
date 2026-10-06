@@ -1,0 +1,134 @@
+<div class="searchable-select @CssClass @(_isOpen ? "searchable-select-open" : null)">
+    <button type="button"
+            class="form-select form-select-sm searchable-select-toggle text-start"
+            disabled="@Disabled"
+            aria-haspopup="listbox"
+            aria-expanded="@_isOpen"
+            @onclick="ToggleOpen">
+        @SelectedLabel
+    </button>
+    @if (_isOpen)
+    {
+        <div class="searchable-select-menu border rounded shadow-sm" @onmousedown:preventDefault="true">
+            <input type="text"
+                   class="form-control form-control-sm searchable-select-search"
+                   placeholder="@SearchPlaceholder"
+                   @bind="_searchTerm"
+                   @bind:event="oninput"
+                   @onkeydown="HandleSearchKeyDown" />
+            <ul class="list-unstyled mb-0 searchable-select-options" role="listbox">
+                @if (AllowAllOption)
+                {
+                    <li role="option">
+                        <button type="button"
+                                class="searchable-select-option @(string.IsNullOrEmpty(SelectedValue) ? "active" : "")"
+                                @onclick="SelectAll">
+                            All accounts
+                        </button>
+                    </li>
+                }
+                @foreach (var account in FilteredAccounts())
+                {
+                    var accountId = account.Id.ToString();
+                    <li role="option">
+                        <button type="button"
+                                class="searchable-select-option @(SelectedValue == accountId ? "active" : "")"
+                                @onclick="() => SelectAccount(accountId)">
+                            @account.Name
+                        </button>
+                    </li>
+                }
+                @if (!FilteredAccounts().Any() && !string.IsNullOrWhiteSpace(_searchTerm))
+                {
+                    <li class="px-3 py-2 text-muted small">No accounts match</li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ClickUpAccountDto> Accounts { get; set; } = [];
+    [Parameter] public string? SelectedValue { get; set; }
+    [Parameter] public EventCallback<string?> SelectedValueChanged { get; set; }
+    [Parameter] public bool AllowAllOption { get; set; } = true;
+    [Parameter] public string SearchPlaceholder { get; set; } = "Search accounts...";
+    [Parameter] public string AllAccountsLabel { get; set; } = "All accounts";
+    [Parameter] public string Placeholder { get; set; } = "Select an account...";
+    [Parameter] public string CssClass { get; set; } = string.Empty;
+    [Parameter] public bool Disabled { get; set; }
+
+    private bool _isOpen;
+    private string _searchTerm = string.Empty;
+
+    private string SelectedLabel
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(SelectedValue))
+            {
+                return AllowAllOption ? AllAccountsLabel : Placeholder;
+            }
+
+            if (Guid.TryParse(SelectedValue, out var accountId))
+            {
+                return Accounts.FirstOrDefault(a => a.Id == accountId)?.Name
+                    ?? (AllowAllOption ? AllAccountsLabel : Placeholder);
+            }
+
+            return AllowAllOption ? AllAccountsLabel : Placeholder;
+        }
+    }
+
+    private IEnumerable<ClickUpAccountDto> FilteredAccounts()
+    {
+        if (string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            return Accounts;
+        }
+
+        return Accounts.Where(a =>
+            a.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+            || a.WorkspaceId.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ToggleOpen()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        _isOpen = !_isOpen;
+        if (!_isOpen)
+        {
+            _searchTerm = string.Empty;
+        }
+    }
+
+    private async Task SelectAll()
+    {
+        await SelectAccountInternal(null);
+    }
+
+    private async Task SelectAccount(string accountId)
+    {
+        await SelectAccountInternal(accountId);
+    }
+
+    private async Task SelectAccountInternal(string? accountId)
+    {
+        _isOpen = false;
+        _searchTerm = string.Empty;
+        await SelectedValueChanged.InvokeAsync(accountId);
+    }
+
+    private void HandleSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _isOpen = false;
+            _searchTerm = string.Empty;
+        }
+    }
+}

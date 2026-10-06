@@ -1,0 +1,476 @@
+@page "/leave-types"
+@attribute [Authorize(Policy = "AdminOnly")]
+@inject ILeaveApiClient LeaveApi
+
+<PageTitle>@AppBranding.PageTitle("Leave Types")</PageTitle>
+
+<div class="leave-types-page">
+    <div class="analytics-hero analytics-hero-compact leave-types-hero">
+        <div class="analytics-hero-copy">
+            <p class="analytics-eyebrow">Admin · Leave Policy</p>
+            <h1>Leave Types</h1>
+            <p class="analytics-lead">
+                Configure leave categories, yearly allowance, and how days are counted when team members apply for time off.
+            </p>
+        </div>
+        @if (!_showForm)
+        {
+            <div class="analytics-hero-actions">
+                <button class="btn btn-light btn-sm" @onclick="ShowAddForm">
+                    <span class="bi-plus-lg leave-types-btn-icon" aria-hidden="true"></span>
+                    Add Leave Type
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
+    }
+
+    @if (_showForm)
+    {
+        <div class="filter-card card mb-4 leave-types-form-card">
+            <div class="card-body">
+                <div class="attendance-section-header mb-3">
+                    <span class="attendance-section-icon bi-@(_editingId.HasValue ? "pencil-square" : "calendar-plus")" aria-hidden="true"></span>
+                    <div>
+                        <h5 class="card-title mb-1">@(_editingId.HasValue ? "Edit Leave Type" : "New Leave Type")</h5>
+                        <p class="attendance-section-desc mb-0">
+                            Define the name, annual allowance, and whether days exclude weekends and holidays.
+                        </p>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" @bind="_name" placeholder="Annual Leave" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Days per year</label>
+                        <input type="number" class="form-control" min="1" @bind="_daysPerYear" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Counting mode</label>
+                        <select class="form-select" @bind="_countingMode">
+                            <option value="@LeaveCountingModeDto.WorkingDays">Working days</option>
+                            <option value="@LeaveCountingModeDto.CalendarDays">Calendar days</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <div class="form-check leave-types-active-toggle">
+                            <input class="form-check-input" type="checkbox" id="leaveTypeActive" @bind="_isActive" />
+                            <label class="form-check-label" for="leaveTypeActive">Available for new applications</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Policy notes <span class="text-muted">(optional)</span></label>
+                        <textarea class="form-control" rows="2" @bind="_policyNotes" placeholder="Describe eligibility, carry-over rules, or approval requirements"></textarea>
+                    </div>
+                </div>
+                <div class="filter-actions mt-3">
+                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
+                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveAsync">
+                        @(_editingId.HasValue ? "Update Leave Type" : "Create Leave Type")
+                    </BusyButton>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <LoadingIndicator Text="Loading leave types..." />
+    }
+    else if (_leaveTypes.Count == 0)
+    {
+        <div class="leave-types-empty-state">
+            <div class="leave-types-empty-icon" aria-hidden="true">
+                <span class="bi-calendar2-week"></span>
+            </div>
+            <h3>No leave types configured</h3>
+            <p>Add your first leave category so team members can request time off with the right allowance and counting rules.</p>
+            <div class="leave-types-empty-actions">
+                <button class="btn btn-primary" @onclick="ShowAddForm">Add Leave Type</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="leave-types-stats">
+            <div class="leave-types-stat-card leave-types-stat-card-total">
+                <span class="leave-types-stat-icon bi-layers" aria-hidden="true"></span>
+                <span class="leave-types-stat-label">Total types</span>
+                <span class="leave-types-stat-value">@_leaveTypes.Count</span>
+            </div>
+            <div class="leave-types-stat-card leave-types-stat-card-active">
+                <span class="leave-types-stat-icon bi-check-circle" aria-hidden="true"></span>
+                <span class="leave-types-stat-label">Active</span>
+                <span class="leave-types-stat-value">@GetActiveCount()</span>
+            </div>
+            <div class="leave-types-stat-card leave-types-stat-card-allowance">
+                <span class="leave-types-stat-icon bi-calendar-range" aria-hidden="true"></span>
+                <span class="leave-types-stat-label">Active allowance</span>
+                <span class="leave-types-stat-value">@GetTotalAllowanceDays() days</span>
+            </div>
+            <div class="leave-types-stat-card leave-types-stat-card-wide leave-types-stat-card-modes">
+                <span class="leave-types-stat-icon bi-sliders" aria-hidden="true"></span>
+                <span class="leave-types-stat-label">Counting modes</span>
+                <span class="leave-types-stat-value leave-types-stat-value-text">@GetWorkingDaysCount() working · @GetCalendarDaysCount() calendar</span>
+            </div>
+        </div>
+
+        <div class="filter-card card mb-4 leave-types-toolbar">
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-5 col-lg-4">
+                        <label class="form-label mb-1" for="leaveTypeSearch">Search</label>
+                        <div class="leave-types-search-wrap">
+                            <span class="bi-search leave-types-search-icon" aria-hidden="true"></span>
+                            <input id="leaveTypeSearch"
+                                   type="search"
+                                   class="form-control form-control-sm leave-types-search-input"
+                                   placeholder="Search by name..."
+                                   @bind="_search"
+                                   @bind:event="oninput" />
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-lg-2">
+                        <label class="form-label mb-1" for="leaveTypeStatusFilter">Status</label>
+                        <select id="leaveTypeStatusFilter" class="form-select form-select-sm" @bind="_statusFilter">
+                            <option value="all">All statuses</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 col-lg-6 d-flex align-items-end justify-content-lg-end">
+                        <div class="leave-types-filter-meta">
+                            <span class="filter-count-badge">
+                                @FilteredLeaveTypes.Count() type@(FilteredLeaveTypes.Count() == 1 ? "" : "s")
+                            </span>
+                            @if (HasActiveFilters)
+                            {
+                                <button type="button" class="btn btn-link btn-sm leave-types-clear-filters" @onclick="ClearFilters">Clear filters</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (!FilteredLeaveTypes.Any())
+        {
+            <div class="data-card card leave-types-filter-empty-card">
+                <div class="card-body leave-types-filter-empty">
+                    <span class="bi-funnel leave-types-filter-empty-icon" aria-hidden="true"></span>
+                    <h5>No leave types match your filters</h5>
+                    <p class="text-muted mb-3">Try a different search term or status filter.</p>
+                    @if (HasActiveFilters)
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ClearFilters">Clear filters</button>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="leave-types-grid">
+                @foreach (var type in FilteredLeaveTypes)
+                {
+                    <article @key="type.Id" class="leave-type-card @GetLeaveTypeCardClass(type)">
+                        <div class="leave-type-card-accent" aria-hidden="true"></div>
+                        <div class="leave-type-card-body">
+                            <div class="leave-type-card-header">
+                                <div class="leave-type-card-icon @GetCountingModeIconClass(type.CountingMode)" aria-hidden="true">
+                                    <span class="bi-@GetCountingModeIcon(type.CountingMode)"></span>
+                                </div>
+                                <div class="leave-type-card-heading">
+                                    <h3 class="leave-type-card-name">@type.Name</h3>
+                                    <span class="leave-type-status @(type.IsActive ? "leave-type-status-active" : "leave-type-status-inactive")">
+                                        <span class="status-dot @(type.IsActive ? "status-dot-active" : "status-dot-inactive")" aria-hidden="true"></span>
+                                        @(type.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </div>
+                                <div class="leave-type-days-badge" aria-label="@type.DaysPerYear days per year">
+                                    <span class="leave-type-days-value">@type.DaysPerYear</span>
+                                    <span class="leave-type-days-label">days/yr</span>
+                                </div>
+                            </div>
+
+                            <div class="leave-type-card-meta">
+                                <span class="leave-type-mode-chip @GetCountingModeChipClass(type.CountingMode)">
+                                    <span class="bi-@GetCountingModeIcon(type.CountingMode)" aria-hidden="true"></span>
+                                    @(type.CountingMode == LeaveCountingModeDto.WorkingDays ? "Working days" : "Calendar days")
+                                </span>
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(type.PolicyNotes))
+                            {
+                                <p class="leave-type-policy">@type.PolicyNotes</p>
+                            }
+                            else
+                            {
+                                <p class="leave-type-policy leave-type-policy-empty">No policy notes added.</p>
+                            }
+
+                            <div class="leave-type-card-footer">
+                                <span class="leave-type-created">Added @type.CreatedAtUtc.ToLocalTime().ToString("MMM d, yyyy")</span>
+                                <div class="btn-group-actions">
+                                    <button class="btn btn-sm btn-outline-primary" disabled="@_isBusy" @onclick="() => Edit(type)" title="Edit leave type">
+                                        <span class="bi-pencil" aria-hidden="true"></span>
+                                        Edit
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger"
+                                            disabled="@_isBusy"
+                                            title="Delete leave type"
+                                            @onclick="() => ShowDeleteConfirm(type)">
+                                        <span class="bi-trash" aria-hidden="true"></span>
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    }
+</div>
+
+@if (_deleteTarget is not null)
+{
+    <DeleteConfirmation IsVisible="_showDeleteConfirm"
+                        IsVisibleChanged="OnDeleteConfirmVisibilityChanged"
+                        Title="@($"Delete \"{_deleteTarget.Name}\"?")"
+                        Message="@GetDeleteConfirmMessage(_deleteTarget)"
+                        IsBusy="_isBusy"
+                        OnConfirm="ConfirmDeleteAsync" />
+}
+
+@code {
+    private List<LeaveTypeDto> _leaveTypes = [];
+    private bool _isLoading = true;
+    private bool _isBusy;
+    private bool _showForm;
+    private bool _isError;
+    private string? _message;
+    private Guid? _editingId;
+    private string _name = string.Empty;
+    private int _daysPerYear = 14;
+    private LeaveCountingModeDto _countingMode = LeaveCountingModeDto.WorkingDays;
+    private string? _policyNotes;
+    private bool _isActive = true;
+    private string _search = string.Empty;
+    private string _statusFilter = "all";
+    private LeaveTypeDto? _deleteTarget;
+    private bool _showDeleteConfirm;
+
+    private IEnumerable<LeaveTypeDto> FilteredLeaveTypes =>
+        _leaveTypes.Where(type =>
+            (string.IsNullOrWhiteSpace(_search) ||
+             type.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)) &&
+            (_statusFilter switch
+            {
+                "active" => type.IsActive,
+                "inactive" => !type.IsActive,
+                _ => true
+            }));
+
+    private bool HasActiveFilters =>
+        !string.IsNullOrWhiteSpace(_search) || _statusFilter != "all";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _leaveTypes = (await LeaveApi.GetLeaveTypesAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(ex.Message, true);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ShowAddForm()
+    {
+        _editingId = null;
+        _name = string.Empty;
+        _daysPerYear = 14;
+        _countingMode = LeaveCountingModeDto.WorkingDays;
+        _policyNotes = null;
+        _isActive = true;
+        _showForm = true;
+        _message = null;
+    }
+
+    private void Edit(LeaveTypeDto type)
+    {
+        _editingId = type.Id;
+        _name = type.Name;
+        _daysPerYear = type.DaysPerYear;
+        _countingMode = type.CountingMode;
+        _policyNotes = type.PolicyNotes;
+        _isActive = type.IsActive;
+        _showForm = true;
+        _message = null;
+    }
+
+    private void HideForm() => _showForm = false;
+
+    private void ClearFilters()
+    {
+        _search = string.Empty;
+        _statusFilter = "all";
+    }
+
+    private int GetActiveCount() => _leaveTypes.Count(type => type.IsActive);
+
+    private int GetWorkingDaysCount() =>
+        _leaveTypes.Count(type => type.CountingMode == LeaveCountingModeDto.WorkingDays);
+
+    private int GetCalendarDaysCount() =>
+        _leaveTypes.Count(type => type.CountingMode == LeaveCountingModeDto.CalendarDays);
+
+    private int GetTotalAllowanceDays() =>
+        _leaveTypes.Where(type => type.IsActive).Sum(type => type.DaysPerYear);
+
+    private static string? GetLeaveTypeCardClass(LeaveTypeDto type)
+    {
+        var classes = new List<string>();
+        if (!type.IsActive)
+        {
+            classes.Add("leave-type-card-inactive");
+        }
+
+        classes.Add(type.CountingMode == LeaveCountingModeDto.WorkingDays
+            ? "leave-type-card-working"
+            : "leave-type-card-calendar");
+
+        return string.Join(' ', classes);
+    }
+
+    private static string GetCountingModeIcon(LeaveCountingModeDto mode) =>
+        mode == LeaveCountingModeDto.WorkingDays ? "briefcase" : "calendar3";
+
+    private static string GetCountingModeIconClass(LeaveCountingModeDto mode) =>
+        mode == LeaveCountingModeDto.WorkingDays ? "leave-type-icon-working" : "leave-type-icon-calendar";
+
+    private static string GetCountingModeChipClass(LeaveCountingModeDto mode) =>
+        mode == LeaveCountingModeDto.WorkingDays ? "leave-type-mode-working" : "leave-type-mode-calendar";
+
+    private async Task SaveAsync()
+    {
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            if (_editingId.HasValue)
+            {
+                await LeaveApi.UpdateLeaveTypeAsync(_editingId.Value, new UpdateLeaveTypeRequest(
+                    _name, _daysPerYear, _countingMode, _policyNotes, _isActive));
+                ShowMessage("Leave type updated.", false);
+            }
+            else
+            {
+                await LeaveApi.CreateLeaveTypeAsync(new CreateLeaveTypeRequest(
+                    _name, _daysPerYear, _countingMode, _policyNotes, _isActive));
+                ShowMessage("Leave type created.", false);
+            }
+
+            _showForm = false;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(ex.Message, true);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private void ShowDeleteConfirm(LeaveTypeDto type)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        _deleteTarget = type;
+        _showDeleteConfirm = true;
+        _message = null;
+    }
+
+    private Task OnDeleteConfirmVisibilityChanged(bool isVisible)
+    {
+        _showDeleteConfirm = isVisible;
+
+        if (!isVisible && !_isBusy)
+        {
+            _deleteTarget = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleteTarget is null)
+        {
+            return;
+        }
+
+        var deleted = await DeleteAsync(_deleteTarget.Id);
+        if (deleted)
+        {
+            _showDeleteConfirm = false;
+            _deleteTarget = null;
+        }
+    }
+
+    private static string GetDeleteConfirmMessage(LeaveTypeDto type) =>
+        $"Are you sure you want to delete \"{type.Name}\"? Existing leave applications using this type may be affected.";
+
+    private async Task<bool> DeleteAsync(Guid id)
+    {
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            await LeaveApi.DeleteLeaveTypeAsync(id);
+            ShowMessage("Leave type deleted.", false);
+            await LoadAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(ex.Message, true);
+            return false;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+}

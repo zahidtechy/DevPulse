@@ -1,0 +1,36 @@
+## Ignore Visual Studio / VS Code
+.vs/
+.vscode/
+*.user
+*.suo
+
+## Build results
+bin/
+obj/
+out/
+
+## Database
+*.db
+*.db-shm
+*.db-wal
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Secrets
+appsettings.*.local.json
+secrets.json
+
+## Logs
+*.log
+
+## NuGet
+*.nupkg
+project.lock.json
+
+## Publish
+publish/
+
+## Data protection keys (dev)
+dpkeys/

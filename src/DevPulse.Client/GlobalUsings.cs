@@ -1,0 +1,15 @@
+global using System.Net.Http.Json;
+global using System.Text.Json;
+global using DevPulse.Client.Services;
+global using DevPulse.Client.Services.Auth;
+global using DevPulse.Shared.Contracts.Analytics;
+global using DevPulse.Shared.Contracts.Attendance;
+global using DevPulse.Shared.Contracts.Auth;
+global using DevPulse.Shared.Contracts.ClickUp;
+global using DevPulse.Shared.Contracts.Developers;
+global using DevPulse.Shared.Contracts.Holidays;
+global using DevPulse.Shared.Contracts.Hubstaff;
+global using DevPulse.Shared.Contracts.Leave;
+global using DevPulse.Shared.Contracts.Reports;
+global using DevPulse.Shared.Serialization;
+global using Microsoft.AspNetCore.Components.Authorization;

@@ -1,0 +1,317 @@
+@page "/leave-settings"
+@attribute [Authorize(Policy = "AdminOnly")]
+@inject ILeaveApiClient LeaveApi
+
+<PageTitle>@AppBranding.PageTitle("Leave Settings")</PageTitle>
+
+<div class="leave-settings-page">
+    <div class="analytics-hero analytics-hero-compact leave-settings-hero">
+        <div class="analytics-hero-copy">
+            <p class="analytics-eyebrow">Admin · Configuration</p>
+            <h1>Leave Settings</h1>
+            <p class="analytics-lead">
+                Configure Telegram notifications and weekend days for working-day leave calculations.
+            </p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
+    }
+
+    @if (_isLoading)
+    {
+        <div class="leave-settings-skeleton" aria-hidden="true">
+            <div class="leave-settings-skeleton-toolbar"></div>
+            <div class="leave-settings-skeleton-grid">
+                <div class="leave-settings-skeleton-card"></div>
+                <div class="leave-settings-skeleton-card"></div>
+            </div>
+        </div>
+        <LoadingIndicator Text="Loading settings..." />
+    }
+    else
+    {
+        <div class="leave-settings-workspace">
+            <div class="filter-card card leave-settings-toolbar">
+                <div class="card-body">
+                    <div class="leave-settings-status" aria-label="Settings summary">
+                        <div class="leave-settings-status-item">
+                            <span class="leave-settings-status-label">Telegram</span>
+                            <span class="leave-settings-status-value @GetTelegramStatusClass()">@GetTelegramStatusLabel()</span>
+                        </div>
+                        <div class="leave-settings-status-item">
+                            <span class="leave-settings-status-label">Weekends</span>
+                            <span class="leave-settings-status-value">@GetWeekendSummary()</span>
+                        </div>
+                        <div class="leave-settings-status-item leave-settings-status-item-wide">
+                            <span class="leave-settings-status-label">Last delivery</span>
+                            <span class="leave-settings-status-value leave-settings-status-muted">@GetLastDeliverySummary()</span>
+                        </div>
+                    </div>
+
+                    <div class="leave-settings-actions">
+                        <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveAsync">Save settings</BusyButton>
+                        <BusyButton CssClass="btn btn-outline-secondary" IsBusy="_isTesting" BusyText="Sending..." OnClick="TestTelegramAsync">Send test</BusyButton>
+                    </div>
+                </div>
+            </div>
+
+            <div class="leave-settings-panel">
+                <div class="leave-settings-layout">
+                    <div class="form-card card leave-settings-card">
+                        <div class="card-body">
+                            <div class="attendance-section-header">
+                                <span class="attendance-section-icon bi-telegram" aria-hidden="true"></span>
+                                <div>
+                                    <h5 class="card-title mb-1">Telegram notifications</h5>
+                                    <p class="attendance-section-desc mb-0">
+                                        Add your bot to the leave group and paste the chat ID. You can also set
+                                        <code>LeaveTelegram:BotToken</code> and <code>LeaveTelegram:ChatId</code> in appsettings.
+                                    </p>
+                                </div>
+                            </div>
+
+                            @if (_usesAppsettingsFallback)
+                            {
+                                <div class="leave-settings-notice">
+                                    <span class="bi-info-circle" aria-hidden="true"></span>
+                                    Using Telegram group from appsettings. Save here to override with a different group.
+                                </div>
+                            }
+
+                            <div class="leave-settings-form-grid">
+                                <div class="leave-settings-field">
+                                    <label class="form-label">Bot token</label>
+                                    <input type="password" class="form-control" @bind="_botToken" placeholder="@(_hasToken ? "Token saved — enter new value to replace" : "123456:ABC...")" autocomplete="off" />
+                                </div>
+                                <div class="leave-settings-field">
+                                    <label class="form-label">Group chat ID</label>
+                                    <input class="form-control" @bind="_chatId" placeholder="-1001234567890" />
+                                </div>
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(_lastError))
+                            {
+                                <div class="leave-settings-feedback leave-settings-feedback-warning">
+                                    Last Telegram error: @_lastError
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="form-card card leave-settings-card">
+                        <div class="card-body">
+                            <div class="attendance-section-header">
+                                <span class="attendance-section-icon bi-calendar-week" aria-hidden="true"></span>
+                                <div>
+                                    <h5 class="card-title mb-1">Weekend days</h5>
+                                    <p class="attendance-section-desc mb-0">Select days excluded when a leave type counts working days only.</p>
+                                </div>
+                            </div>
+
+                            <div class="leave-settings-weekday-grid" role="group" aria-label="Weekend days">
+                                @foreach (var day in _weekdayOptions)
+                                {
+                                    var selected = IsWeekendSelected(day.DayOfWeek);
+                                    <button type="button"
+                                            class="leave-settings-weekday-chip @(selected ? "active" : null)"
+                                            aria-pressed="@selected"
+                                            @onclick="() => ToggleWeekend(day.DayOfWeek, !selected)">
+                                        <span class="leave-settings-weekday-short">@day.ShortLabel</span>
+                                        <span class="leave-settings-weekday-full">@day.Label</span>
+                                    </button>
+                                }
+                            </div>
+
+                            <p class="leave-settings-weekday-hint mb-0">
+                                @GetSelectedWeekendCount() day@(GetSelectedWeekendCount() == 1 ? "" : "s") selected as weekends.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly (DayOfWeek DayOfWeek, string Label, string ShortLabel)[] _weekdayOptions =
+    [
+        (DayOfWeek.Sunday, "Sunday", "Sun"),
+        (DayOfWeek.Monday, "Monday", "Mon"),
+        (DayOfWeek.Tuesday, "Tuesday", "Tue"),
+        (DayOfWeek.Wednesday, "Wednesday", "Wed"),
+        (DayOfWeek.Thursday, "Thursday", "Thu"),
+        (DayOfWeek.Friday, "Friday", "Fri"),
+        (DayOfWeek.Saturday, "Saturday", "Sat")
+    ];
+
+    private bool _isLoading = true;
+    private bool _isBusy;
+    private bool _isTesting;
+    private bool _isError;
+    private bool _hasToken;
+    private string? _message;
+    private string? _botToken;
+    private string? _chatId;
+    private int _weekendBitmask = 65;
+    private string? _lastError;
+    private DateTime? _lastSuccessAtUtc;
+    private bool _usesAppsettingsFallback;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var settings = await LeaveApi.GetSettingsAsync();
+            _hasToken = settings.HasTelegramBotToken;
+            _chatId = settings.TelegramChatId;
+            _weekendBitmask = settings.WeekendDaysBitmask;
+            _lastError = settings.LastTelegramError;
+            _lastSuccessAtUtc = settings.LastTelegramSuccessAtUtc;
+            _usesAppsettingsFallback = settings.UsesAppsettingsFallback;
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(ex.Message, true);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private bool IsWeekendSelected(DayOfWeek day) => (_weekendBitmask & (1 << (int)day)) != 0;
+
+    private void ToggleWeekend(DayOfWeek day, bool selected)
+    {
+        var bit = 1 << (int)day;
+        _weekendBitmask = selected ? _weekendBitmask | bit : _weekendBitmask & ~bit;
+    }
+
+    private int GetSelectedWeekendCount() =>
+        _weekdayOptions.Count(day => IsWeekendSelected(day.DayOfWeek));
+
+    private string GetWeekendSummary()
+    {
+        var selected = _weekdayOptions
+            .Where(day => IsWeekendSelected(day.DayOfWeek))
+            .Select(day => day.ShortLabel)
+            .ToList();
+
+        return selected.Count == 0 ? "None selected" : string.Join(", ", selected);
+    }
+
+    private string GetTelegramStatusLabel()
+    {
+        if (_hasToken && !string.IsNullOrWhiteSpace(_chatId))
+        {
+            return "Configured";
+        }
+
+        if (_usesAppsettingsFallback)
+        {
+            return "From appsettings";
+        }
+
+        return "Not configured";
+    }
+
+    private string GetTelegramStatusClass()
+    {
+        if (_hasToken && !string.IsNullOrWhiteSpace(_chatId))
+        {
+            return "leave-settings-status-ok";
+        }
+
+        if (_usesAppsettingsFallback)
+        {
+            return "leave-settings-status-info";
+        }
+
+        return "leave-settings-status-muted";
+    }
+
+    private string GetLastDeliverySummary()
+    {
+        if (!string.IsNullOrWhiteSpace(_lastError))
+        {
+            return "Failed on last attempt";
+        }
+
+        if (_lastSuccessAtUtc.HasValue)
+        {
+            return _lastSuccessAtUtc.Value.ToLocalTime().ToString("g");
+        }
+
+        return "No messages sent yet";
+    }
+
+    private async Task SaveAsync()
+    {
+        _isBusy = true;
+        _message = null;
+
+        try
+        {
+            var updated = await LeaveApi.UpdateSettingsAsync(new UpdateLeaveSettingsRequest(
+                _botToken,
+                _chatId,
+                _weekendBitmask));
+
+            if (updated is not null)
+            {
+                _hasToken = updated.HasTelegramBotToken;
+                _chatId = updated.TelegramChatId;
+                _lastError = updated.LastTelegramError;
+                _lastSuccessAtUtc = updated.LastTelegramSuccessAtUtc;
+            }
+
+            _botToken = null;
+            ShowMessage("Settings saved.", false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(ex.Message, true);
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task TestTelegramAsync()
+    {
+        _isTesting = true;
+        _message = null;
+
+        try
+        {
+            await LeaveApi.SendTestTelegramAsync();
+            ShowMessage("Test message sent to Telegram group.", false);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(ex.Message, true);
+        }
+        finally
+        {
+            _isTesting = false;
+        }
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+}

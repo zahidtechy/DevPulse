@@ -1,0 +1,209 @@
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+    position: relative;
+}
+
+.sidebar {
+    width: var(--dp-sidebar-width);
+    background:
+        radial-gradient(ellipse 120% 80% at 0% 0%, rgba(37, 99, 235, 0.12), transparent 55%),
+        radial-gradient(ellipse 90% 60% at 100% 100%, rgba(99, 102, 241, 0.08), transparent 50%),
+        linear-gradient(180deg, var(--dp-sidebar-bg) 0%, var(--dp-sidebar-bg-end) 100%);
+    border-right: 1px solid var(--dp-sidebar-border);
+    box-shadow: var(--dp-sidebar-shadow);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 200;
+    overflow: hidden;
+    transition: width 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.sidebar-backdrop {
+    display: none;
+}
+
+.sidebar > ::deep .nav-menu {
+    flex: 1;
+    min-height: 0;
+}
+
+.sidebar.collapsed {
+    width: var(--dp-sidebar-collapsed-width);
+}
+
+.main-wrapper {
+    flex: 1;
+    margin-left: var(--dp-sidebar-width);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-width: 0;
+    transition: margin-left 0.25s ease;
+}
+
+.app-shell.sidebar-collapsed .main-wrapper {
+    margin-left: var(--dp-sidebar-collapsed-width);
+}
+
+.app-header {
+    height: var(--dp-header-height);
+    min-height: var(--dp-header-height);
+    max-height: var(--dp-header-height);
+    background: var(--dp-surface);
+    border-bottom: 1px solid var(--dp-border);
+    box-shadow: var(--dp-shadow-sm);
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    gap: 0.875rem;
+    flex-shrink: 0;
+}
+
+.header-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    min-height: 0;
+}
+
+.header-tagline {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--dp-text-muted);
+    letter-spacing: 0.01em;
+    line-height: 1;
+}
+
+.sidebar-toggle {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0.375rem;
+    border: 1px solid var(--dp-border);
+    border-radius: var(--dp-radius);
+    background: var(--dp-surface);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    margin: 0;
+}
+
+.sidebar-toggle:hover {
+    background: var(--dp-primary-light);
+    border-color: var(--dp-primary-muted);
+}
+
+.sidebar-toggle .toggle-bar {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: var(--dp-text-secondary);
+    border-radius: 1px;
+}
+
+.app-content {
+    flex: 1;
+    width: 100%;
+    padding: 1.75rem 1rem 2.5rem;
+    background: var(--dp-bg);
+}
+
+.app-content > .container-fluid {
+    width: 100%;
+    max-width: none;
+}
+
+@media (min-width: 992px) {
+    .sidebar {
+        transform: none;
+    }
+
+    .app-shell.mobile-nav-open .sidebar {
+        transform: none;
+    }
+
+    .sidebar.mobile-open {
+        transform: none;
+    }
+
+    .app-header {
+        padding: 0 1.5rem;
+    }
+}
+
+@media (max-width: 991.98px) {
+    .main-wrapper {
+        margin-left: 0;
+    }
+
+    .app-shell.sidebar-collapsed .main-wrapper {
+        margin-left: 0;
+    }
+
+    .app-shell.sidebar-collapsed .sidebar.collapsed:not(.mobile-open) {
+        transform: translateX(-100%);
+    }
+
+    .sidebar {
+        width: min(var(--dp-sidebar-width), 85vw);
+        max-width: 18rem;
+        transform: translateX(-100%);
+        z-index: 300;
+        box-shadow: 8px 0 32px rgba(15, 23, 42, 0.28), 2px 0 8px rgba(15, 23, 42, 0.12);
+    }
+
+    .sidebar.collapsed,
+    .sidebar.mobile-open {
+        width: min(var(--dp-sidebar-width), 85vw);
+        max-width: 18rem;
+    }
+
+    .app-shell.mobile-nav-open .sidebar,
+    .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.55);
+        z-index: 250;
+        animation: sidebar-backdrop-in 0.2s ease;
+    }
+
+    @keyframes sidebar-backdrop-in {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    .app-content {
+        padding: 1.25rem 0.75rem 2rem;
+    }
+
+    .app-header {
+        padding: 0 1rem;
+    }
+
+    .sidebar-toggle {
+        width: 2.75rem;
+        height: 2.75rem;
+    }
+}

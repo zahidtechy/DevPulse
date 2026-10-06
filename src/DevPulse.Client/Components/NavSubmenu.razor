@@ -1,0 +1,56 @@
+<div class="nav-submenu nav-submenu-group-@GroupId @(IsExpanded ? "is-expanded" : null) @(HasActiveChild ? "has-active-child" : null) @(SidebarCollapsed ? "sidebar-collapsed" : null)">
+    @if (!SidebarCollapsed)
+    {
+        <button type="button"
+                class="nav-submenu-toggle @(IsExpanded ? "is-expanded" : null)"
+                @onclick="ToggleAsync"
+                aria-expanded="@IsExpanded"
+                aria-controls="@_itemsId"
+                title="@(IsExpanded ? $"Collapse {Title}" : $"Expand {Title}")">
+            @if (!string.IsNullOrWhiteSpace(IconClass))
+            {
+                <span class="nav-icon-well nav-submenu-icon-well"><span class="nav-icon nav-submenu-icon @IconClass" aria-hidden="true"></span></span>
+            }
+            <span class="nav-submenu-title">@Title</span>
+            <span class="nav-submenu-arrow-wrap" aria-hidden="true">
+                <span class="nav-submenu-arrow @(IsExpanded ? "is-up" : "is-down")"></span>
+            </span>
+        </button>
+    }
+
+    <div class="nav-submenu-items" id="@_itemsId">
+        <div class="nav-submenu-items-inner">
+            @ChildContent
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly string _itemsId = $"nav-submenu-{Guid.NewGuid():N}";
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string GroupId { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? IconClass { get; set; }
+
+    [Parameter]
+    public bool IsExpanded { get; set; }
+
+    [Parameter]
+    public bool HasActiveChild { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsExpandedChanged { get; set; }
+
+    [Parameter]
+    public bool SidebarCollapsed { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private Task ToggleAsync() => IsExpandedChanged.InvokeAsync(!IsExpanded);
+}

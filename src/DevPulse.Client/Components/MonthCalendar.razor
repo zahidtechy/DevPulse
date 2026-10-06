@@ -1,0 +1,192 @@
+<div class="@_cardClass">
+    <div class="holiday-month-header">
+        <span class="holiday-month-name">@_monthName</span>
+        @if (_holidayCount > 0)
+        {
+            <span class="holiday-month-badge">@_holidayCount</span>
+        }
+    </div>
+    <div class="holiday-weekdays">
+        @foreach (var label in WeekdayLabels)
+        {
+            <span class="holiday-weekday">@label</span>
+        }
+    </div>
+    <div class="holiday-days">
+        @foreach (var cell in _cells)
+        {
+            if (cell.Day is null)
+            {
+                <span class="holiday-day holiday-day-empty"></span>
+            }
+            else
+            {
+                var day = cell.Day.Value;
+                var holiday = cell.Holiday;
+                var cssClass = BuildDayClass(day, holiday, cell.IsRangeStart, cell.IsRangeEnd);
+
+                if (holiday is not null)
+                {
+                    <button type="button"
+                            class="@cssClass holiday-day-has-tooltip"
+                            aria-label="@BuildAccessibleLabel(holiday)"
+                            @onclick="() => OnHolidaySelected.InvokeAsync(holiday)">
+                        @day.Day
+                        <span class="holiday-tooltip">
+                            <span class="holiday-tooltip-name">@holiday.Name</span>
+                            <span class="holiday-tooltip-range">@FormatHolidayRange(holiday)</span>
+                            @if (!string.IsNullOrWhiteSpace(holiday.Reason))
+                            {
+                                <span class="holiday-tooltip-reason">@holiday.Reason</span>
+                            }
+                        </span>
+                    </button>
+                }
+                else
+                {
+                    <span class="@cssClass" title="@day.ToString("dddd, MMMM d, yyyy")">@day.Day</span>
+                }
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly string[] WeekdayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+    [Parameter, EditorRequired]
+    public int Year { get; set; }
+
+    [Parameter, EditorRequired]
+    public int Month { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<HolidayDto> Holidays { get; set; } = [];
+
+    [Parameter]
+    public DateOnly Today { get; set; }
+
+    [Parameter]
+    public Guid? SelectedHolidayId { get; set; }
+
+    [Parameter]
+    public EventCallback<HolidayDto> OnHolidaySelected { get; set; }
+
+    private IReadOnlyList<CalendarCell> _cells = [];
+    private string _monthName = string.Empty;
+    private string _cardClass = "holiday-month-card";
+    private int _holidayCount;
+
+    protected override void OnParametersSet()
+    {
+        _monthName = new DateOnly(Year, Month, 1).ToString("MMMM");
+        _cells = BuildCells();
+
+        var monthStart = new DateOnly(Year, Month, 1);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+        _holidayCount = Holidays.Count(h => h.FromDate <= monthEnd && h.ToDate >= monthStart);
+
+        var isCurrentMonth = Today.Year == Year && Today.Month == Month;
+        _cardClass = isCurrentMonth
+            ? "holiday-month-card holiday-month-card-current"
+            : _holidayCount > 0
+                ? "holiday-month-card holiday-month-card-has-holidays"
+                : "holiday-month-card";
+    }
+
+    private IReadOnlyList<CalendarCell> BuildCells()
+    {
+        var firstDay = new DateOnly(Year, Month, 1);
+        var daysInMonth = DateTime.DaysInMonth(Year, Month);
+        var leadingBlanks = (int)firstDay.DayOfWeek;
+
+        var cells = new List<CalendarCell>(leadingBlanks + daysInMonth);
+        for (var i = 0; i < leadingBlanks; i++)
+        {
+            cells.Add(new CalendarCell(null, null, false, false));
+        }
+
+        for (var day = 1; day <= daysInMonth; day++)
+        {
+            var date = new DateOnly(Year, Month, day);
+            var holiday = FindHolidayForDate(date);
+            var isRangeStart = holiday is not null && date == holiday.FromDate;
+            var isRangeEnd = holiday is not null && date == holiday.ToDate;
+            cells.Add(new CalendarCell(date, holiday, isRangeStart, isRangeEnd));
+        }
+
+        return cells;
+    }
+
+    private HolidayDto? FindHolidayForDate(DateOnly date) =>
+        Holidays.FirstOrDefault(h => date >= h.FromDate && date <= h.ToDate);
+
+    private string BuildDayClass(DateOnly day, HolidayDto? holiday, bool isRangeStart, bool isRangeEnd)
+    {
+        var classes = new List<string> { "holiday-day" };
+
+        if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            classes.Add("holiday-day-weekend");
+        }
+
+        if (day == Today)
+        {
+            classes.Add("holiday-day-today");
+        }
+
+        if (holiday is not null)
+        {
+            classes.Add("holiday-day-holiday");
+            if (holiday.Id == SelectedHolidayId)
+            {
+                classes.Add("holiday-day-selected");
+            }
+
+            if (isRangeStart)
+            {
+                classes.Add("holiday-day-range-start");
+            }
+
+            if (isRangeEnd)
+            {
+                classes.Add("holiday-day-range-end");
+            }
+
+            if (isRangeStart && isRangeEnd)
+            {
+                classes.Add("holiday-day-range-single");
+            }
+        }
+
+        return string.Join(' ', classes);
+    }
+
+    private static string FormatHolidayRange(HolidayDto holiday)
+    {
+        if (holiday.FromDate == holiday.ToDate)
+        {
+            return holiday.FromDate.ToString("dddd, MMMM d, yyyy");
+        }
+
+        if (holiday.FromDate.Year == holiday.ToDate.Year)
+        {
+            if (holiday.FromDate.Month == holiday.ToDate.Month)
+            {
+                return $"{holiday.FromDate:MMMM d} – {holiday.ToDate.Day}, {holiday.ToDate:yyyy}";
+            }
+
+            return $"{holiday.FromDate:MMM d} – {holiday.ToDate:MMM d, yyyy}";
+        }
+
+        return $"{holiday.FromDate:MMM d, yyyy} – {holiday.ToDate:MMM d, yyyy}";
+    }
+
+    private static string BuildAccessibleLabel(HolidayDto holiday)
+    {
+        var label = $"{holiday.Name}, {FormatHolidayRange(holiday)}";
+        return string.IsNullOrWhiteSpace(holiday.Reason) ? label : $"{label}. {holiday.Reason}";
+    }
+
+    private sealed record CalendarCell(DateOnly? Day, HolidayDto? Holiday, bool IsRangeStart, bool IsRangeEnd);
+}
