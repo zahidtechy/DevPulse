@@ -23,6 +23,11 @@ public class Developer
     public bool IsActive { get; set; } = true;
 
     /// <summary>
+    /// Set when an admin marks this person as their own team while connecting a ClickUp workspace.
+    /// </summary>
+    public bool IsOwnTeam { get; set; }
+
+    /// <summary>
     /// Optional reporting manager used for leave approval. Also a <see cref="Developer"/> record.
     /// </summary>
     public Guid? ReportingManagerDeveloperId { get; set; }

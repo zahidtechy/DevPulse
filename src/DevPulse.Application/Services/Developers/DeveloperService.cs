@@ -332,6 +332,112 @@ public sealed class DeveloperService : IDeveloperService
         return Result<SyncDevelopersResult>.Success(new SyncDevelopersResult(created, updated, mappingsAdded));
     }
 
+    public async Task<Result<ImportOwnTeamResult>> ImportOwnTeamAsync(
+        Guid clickUpAccountId,
+        IReadOnlyList<int> clickUpUserIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (clickUpUserIds.Count == 0)
+        {
+            return Result<ImportOwnTeamResult>.Success(new ImportOwnTeamResult(0, 0, 0));
+        }
+
+        var account = await _accountRepository.GetByIdAsync(clickUpAccountId, cancellationToken);
+        if (account is null)
+        {
+            return Result<ImportOwnTeamResult>.Failure("ClickUp account was not found.");
+        }
+
+        if (DemoSeedData.IsDemoWorkspace(account.WorkspaceId))
+        {
+            return Result<ImportOwnTeamResult>.Failure("Own-team import is not available for the demo workspace.");
+        }
+
+        IReadOnlyList<ClickUpMemberDto> members;
+        try
+        {
+            var token = _tokenProtector.Unprotect(account.EncryptedAccessToken);
+            members = await _apiClient.GetWorkspaceMembersAsync(token, account.WorkspaceId, cancellationToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to load ClickUp members while importing own team for {WorkspaceId}", account.WorkspaceId);
+            return Result<ImportOwnTeamResult>.Failure(ex.Message);
+        }
+
+        var selectedIds = clickUpUserIds.ToHashSet();
+        var selectedMembers = members.Where(member => selectedIds.Contains(member.ClickUpUserId)).ToList();
+        var created = 0;
+        var marked = 0;
+        var mappingsAdded = 0;
+
+        foreach (var member in selectedMembers)
+        {
+            var existingMapping = await _developerRepository.GetClickUpMappingAsync(
+                account.Id,
+                member.ClickUpUserId,
+                cancellationToken);
+
+            Developer developer;
+            if (existingMapping is not null)
+            {
+                developer = existingMapping.Developer;
+            }
+            else
+            {
+                var email = NormalizeEmail(member.Email);
+                var existingByEmail = email is null
+                    ? null
+                    : await _developerRepository.GetByEmailAsync(email, cancellationToken);
+
+                if (existingByEmail is null)
+                {
+                    developer = new Developer
+                    {
+                        Name = ResolveMemberName(member),
+                        Email = email,
+                        IsOwnTeam = true
+                    };
+                    await _developerRepository.AddAsync(developer, cancellationToken);
+                    created++;
+                }
+                else
+                {
+                    developer = existingByEmail;
+                }
+            }
+
+            if (!developer.IsOwnTeam)
+            {
+                developer.IsOwnTeam = true;
+                await _developerRepository.UpdateAsync(developer, cancellationToken);
+            }
+
+            marked++;
+
+            if (existingMapping is null
+                && !await _developerRepository.MappingExistsAsync(developer.Id, account.Id, cancellationToken))
+            {
+                await _developerRepository.AddMappingAsync(new DeveloperClickUpMapping
+                {
+                    DeveloperId = developer.Id,
+                    ClickUpAccountId = account.Id,
+                    ClickUpUserId = member.ClickUpUserId
+                }, cancellationToken);
+                mappingsAdded++;
+            }
+        }
+
+        _logger.LogInformation(
+            "Imported own-team developers for workspace {WorkspaceId}: {Created} created, {Marked} marked, {MappingsAdded} mappings added",
+            account.WorkspaceId,
+            created,
+            marked,
+            mappingsAdded);
+
+        return Result<ImportOwnTeamResult>.Success(new ImportOwnTeamResult(created, marked, mappingsAdded));
+    }
+
     public async Task<Result<DeveloperDto>> AddHubstaffMappingAsync(
         Guid developerId,
         AddDeveloperHubstaffMappingRequest request,
@@ -544,6 +650,17 @@ public sealed class DeveloperService : IDeveloperService
     private static string? NormalizeEmail(string? email) =>
         string.IsNullOrWhiteSpace(email) ? null : email.Trim().ToLowerInvariant();
 
+    private static string ResolveMemberName(ClickUpMemberDto member)
+    {
+        if (!string.IsNullOrWhiteSpace(member.Username))
+        {
+            return member.Username.Trim();
+        }
+
+        var email = NormalizeEmail(member.Email);
+        return email ?? $"ClickUp user {member.ClickUpUserId}";
+    }
+
     private async Task<Result> ValidateReportingManagerAsync(
         Guid? developerId,
         Guid? reportingManagerDeveloperId,
@@ -617,5 +734,6 @@ public sealed class DeveloperService : IDeveloperService
                     m.HubstaffOrganization?.Name ?? "Unknown",
                     m.HubstaffUserId))
                 .OrderBy(m => m.OrganizationName)
-                .ToList());
+                .ToList(),
+            developer.IsOwnTeam);
 }

@@ -42,6 +42,11 @@ public interface IDeveloperRepository
 
     Task<bool> MappingExistsAsync(Guid developerId, Guid accountId, CancellationToken cancellationToken = default);
 
+    Task<DeveloperClickUpMapping?> GetClickUpMappingAsync(
+        Guid accountId,
+        int clickUpUserId,
+        CancellationToken cancellationToken = default);
+
     Task AddMappingAsync(DeveloperClickUpMapping mapping, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Developer>> GetAllWithHubstaffMappingsAsync(CancellationToken cancellationToken = default);

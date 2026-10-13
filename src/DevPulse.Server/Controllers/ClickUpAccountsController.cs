@@ -6,10 +6,12 @@ namespace DevPulse.Server.Controllers;
 public sealed class ClickUpAccountsController : ControllerBase
 {
     private readonly IClickUpAccountService _accountService;
+    private readonly IDeveloperService _developerService;
 
-    public ClickUpAccountsController(IClickUpAccountService accountService)
+    public ClickUpAccountsController(IClickUpAccountService accountService, IDeveloperService developerService)
     {
         _accountService = accountService;
+        _developerService = developerService;
     }
 
     [HttpGet]
@@ -31,9 +33,23 @@ public sealed class ClickUpAccountsController : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
+    [HttpPost("preview")]
+    [Authorize(Policy = "AdminOnly")]
+    [ProducesResponseType(typeof(ClickUpWorkspacePreviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Preview(
+        [FromBody] PreviewClickUpWorkspaceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _accountService.PreviewAsync(request, cancellationToken);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error, errors = result.Errors });
+    }
+
     [HttpPost]
     [Authorize(Policy = "AdminOnly")]
-    [ProducesResponseType(typeof(ClickUpAccountDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(CreateClickUpAccountResultDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateClickUpAccountRequest request, CancellationToken cancellationToken)
     {
@@ -43,7 +59,37 @@ public sealed class ClickUpAccountsController : ControllerBase
             return BadRequest(new { error = result.Error, errors = result.Errors });
         }
 
-        return CreatedAtAction(nameof(GetById), new { id = result.Value!.Id }, result.Value);
+        var account = result.Value!;
+        var created = 0;
+        var marked = 0;
+        var mappingsAdded = 0;
+        string? importWarning = null;
+        var ownTeamIds = request.OwnTeamClickUpUserIds ?? [];
+
+        if (ownTeamIds.Count > 0)
+        {
+            try
+            {
+                var importResult = await _developerService.ImportOwnTeamAsync(account.Id, ownTeamIds, cancellationToken);
+                if (importResult.IsFailure)
+                {
+                    importWarning = $"Workspace was saved, but own-team members were not: {importResult.Error}";
+                }
+                else
+                {
+                    created = importResult.Value!.DevelopersCreated;
+                    marked = importResult.Value.DevelopersMarked;
+                    mappingsAdded = importResult.Value.MappingsAdded;
+                }
+            }
+            catch (Exception ex)
+            {
+                importWarning = $"Workspace was saved, but own-team members were not: {ex.Message}";
+            }
+        }
+
+        var response = new CreateClickUpAccountResultDto(account, created, marked, mappingsAdded, importWarning);
+        return CreatedAtAction(nameof(GetById), new { id = account.Id }, response);
     }
 
     [HttpPut("{id:guid}")]

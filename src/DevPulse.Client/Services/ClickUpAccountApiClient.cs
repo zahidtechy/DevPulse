@@ -4,7 +4,11 @@ public interface IClickUpAccountApiClient
 {
     Task<IReadOnlyList<ClickUpAccountDto>> GetAccountsAsync(CancellationToken cancellationToken = default);
 
-    Task<ClickUpAccountDto?> CreateAccountAsync(CreateClickUpAccountRequest request, CancellationToken cancellationToken = default);
+    Task<ClickUpWorkspacePreviewDto?> PreviewWorkspaceAsync(
+        PreviewClickUpWorkspaceRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<CreateClickUpAccountResultDto?> CreateAccountAsync(CreateClickUpAccountRequest request, CancellationToken cancellationToken = default);
 
     Task<ClickUpAccountDto?> UpdateAccountStatusAsync(Guid accountId, bool isActive, CancellationToken cancellationToken = default);
 
@@ -35,16 +39,30 @@ public sealed class ClickUpAccountApiClient : IClickUpAccountApiClient
         return accounts ?? [];
     }
 
-    public async Task<ClickUpAccountDto?> CreateAccountAsync(CreateClickUpAccountRequest request, CancellationToken cancellationToken = default)
+    public async Task<ClickUpWorkspacePreviewDto?> PreviewWorkspaceAsync(
+        PreviewClickUpWorkspaceRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("api/clickup/accounts/preview", request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException(ParseApiError(error, "Failed to preview workspace"));
+        }
+
+        return await response.Content.ReadFromJsonAsync<ClickUpWorkspacePreviewDto>(cancellationToken);
+    }
+
+    public async Task<CreateClickUpAccountResultDto?> CreateAccountAsync(CreateClickUpAccountRequest request, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsJsonAsync("api/clickup/accounts", request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new InvalidOperationException($"Failed to create account: {error}");
+            throw new InvalidOperationException(ParseApiError(error, "Failed to create account"));
         }
 
-        return await response.Content.ReadFromJsonAsync<ClickUpAccountDto>(cancellationToken);
+        return await response.Content.ReadFromJsonAsync<CreateClickUpAccountResultDto>(cancellationToken);
     }
 
     public async Task<ClickUpAccountDto?> UpdateAccountStatusAsync(

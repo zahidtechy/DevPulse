@@ -281,7 +281,13 @@
                                                     @GetInitials(developer.Name)
                                                 </span>
                                                 <div class="developers-person-meta">
-                                                    <span class="developers-person-name">@developer.Name</span>
+                                                    <span class="developers-person-name">
+                                                        @developer.Name
+                                                        @if (developer.IsOwnTeam)
+                                                        {
+                                                            <span class="developers-own-team-badge">Own team</span>
+                                                        }
+                                                    </span>
                                                     @if (!string.IsNullOrWhiteSpace(developer.Email))
                                                     {
                                                         <span class="developers-person-email">@developer.Email</span>

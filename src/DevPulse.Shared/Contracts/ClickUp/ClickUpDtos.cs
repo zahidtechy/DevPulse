@@ -12,7 +12,28 @@ public record ClickUpAccountDto(
 public record CreateClickUpAccountRequest(
     string Name,
     string WorkspaceId,
+    string AccessToken,
+    IReadOnlyList<int>? OwnTeamClickUpUserIds = null);
+
+public record PreviewClickUpWorkspaceRequest(
+    string Name,
+    string WorkspaceId,
     string AccessToken);
+
+public record ClickUpWorkspacePreviewDto(
+    string AccountName,
+    string WorkspaceId,
+    string WorkspaceName,
+    string? Color,
+    string Message,
+    IReadOnlyList<ClickUpMemberDto> Members);
+
+public record CreateClickUpAccountResultDto(
+    ClickUpAccountDto Account,
+    int DevelopersCreated,
+    int DevelopersMarked,
+    int MappingsAdded,
+    string? ImportWarning = null);
 
 public record UpdateClickUpAccountRequest(
     string Name,

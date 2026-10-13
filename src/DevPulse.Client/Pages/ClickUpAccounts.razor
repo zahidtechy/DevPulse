@@ -1,6 +1,8 @@
 @page "/clickup-accounts"
 @attribute [Authorize(Roles = AppRoles.Admin)]
+@implements IAsyncDisposable
 @inject IClickUpAccountApiClient AccountApi
+@inject IJSRuntime JS
 
 <PageTitle>@AppBranding.PageTitle("ClickUp Accounts")</PageTitle>
 
@@ -26,7 +28,7 @@
         <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
     }
 
-    @if (_isBusy && !_isLoading)
+    @if (_isBusy && !_isLoading && _preview is null)
     {
         <LoadingIndicator Text="Processing..." />
     }
@@ -39,7 +41,7 @@
                     <span class="filter-section-label">Connect ClickUp Workspace</span>
                 </div>
                 <p class="text-muted small mb-3">
-                    Paste your personal API token and workspace ID. The connection is validated before saving.
+                    Paste your personal API token and workspace ID. Preview the workspace and mark your own team before anything is saved.
                 </p>
                 <div class="row g-3">
                     <div class="col-md-4">
@@ -57,8 +59,8 @@
                 </div>
                 <div class="filter-actions mt-3">
                     <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideAddForm">Cancel</button>
-                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Validating..." OnClick="CreateAccountAsync">
-                        Save &amp; Validate
+                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Loading..." OnClick="PreviewWorkspaceAsync">
+                        Preview
                     </BusyButton>
                 </div>
             </div>
@@ -294,23 +296,180 @@
     }
 </div>
 
+@if (_preview is not null)
+{
+    <div class="workspace-preview-backdrop" @onclick="ClosePreviewAsync">
+        <div class="workspace-preview-dialog"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="workspace-preview-title"
+             tabindex="-1"
+             @ref="_previewDialog"
+             @onclick:stopPropagation="true"
+             @onkeydown="HandlePreviewKeyDown">
+            <div class="workspace-preview-header">
+                <div>
+                    <p class="workspace-preview-eyebrow">Review before save</p>
+                    <h2 id="workspace-preview-title">@_preview.WorkspaceName</h2>
+                </div>
+                <button type="button" class="btn-close" disabled="@_isBusy" aria-label="Close" @onclick="ClosePreviewAsync"></button>
+            </div>
+
+            <div class="workspace-preview-body">
+                @if (!string.IsNullOrWhiteSpace(_previewError))
+                {
+                    <div class="alert alert-danger" role="alert">@_previewError</div>
+                }
+
+                <section class="workspace-preview-details" aria-label="Workspace details">
+                    <div class="workspace-preview-detail">
+                        <span>Account name</span>
+                        <strong>@_preview.AccountName</strong>
+                    </div>
+                    <div class="workspace-preview-detail">
+                        <span>ClickUp workspace</span>
+                        <strong class="workspace-preview-name">
+                            @if (GetSafeColor(_preview.Color) is string color)
+                            {
+                                <span class="workspace-preview-swatch" style="background:@color" aria-hidden="true"></span>
+                            }
+                            @_preview.WorkspaceName
+                        </strong>
+                    </div>
+                    <div class="workspace-preview-detail">
+                        <span>Workspace ID</span>
+                        <code>@_preview.WorkspaceId</code>
+                    </div>
+                    <div class="workspace-preview-detail">
+                        <span>Members</span>
+                        <strong>@_preview.Members.Count</strong>
+                    </div>
+                </section>
+                <p class="workspace-preview-message">@_preview.Message</p>
+
+                <section class="workspace-preview-members" aria-label="Workspace members">
+                    <div class="workspace-preview-members-header">
+                        <div>
+                            <h3>Members</h3>
+                            <p>Mark the people on your team. Only marked members are saved to the developer registry.</p>
+                        </div>
+                        <span class="filter-count-badge">@_ownTeamIds.Count marked</span>
+                    </div>
+                    <div class="workspace-preview-member-tools">
+                        <input type="search"
+                               class="form-control form-control-sm"
+                               placeholder="Search members..."
+                               @bind="_memberSearch"
+                               @bind:event="oninput" />
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_isBusy" @onclick="() => MarkFilteredMembers(true)">Mark visible</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_isBusy" @onclick="() => MarkFilteredMembers(false)">Clear visible</button>
+                    </div>
+                    @if (!FilteredPreviewMembers.Any())
+                    {
+                        <p class="text-muted mb-0">No members match this search.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive workspace-preview-table-wrap">
+                            <table class="table table-hover align-middle mb-0 clickup-accounts-members-table">
+                                <thead>
+                                    <tr>
+                                        <th>Member</th>
+                                        <th>Email</th>
+                                        <th class="text-end">Own team</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var member in FilteredPreviewMembers)
+                                    {
+                                        <tr class="@(_ownTeamIds.Contains(member.ClickUpUserId) ? "workspace-preview-row-marked" : null)">
+                                            <td>
+                                                <div class="clickup-accounts-member">
+                                                    <span class="clickup-accounts-member-avatar" aria-hidden="true">@GetInitials(member.Username)</span>
+                                                    <span class="clickup-accounts-member-name">@member.Username</span>
+                                                </div>
+                                            </td>
+                                            <td>@(string.IsNullOrWhiteSpace(member.Email) ? "—" : member.Email)</td>
+                                            <td class="text-end">
+                                                <input class="form-check-input workspace-preview-check"
+                                                       type="checkbox"
+                                                       checked="@_ownTeamIds.Contains(member.ClickUpUserId)"
+                                                       disabled="@_isBusy"
+                                                       aria-label="@($"Mark {member.Username} as own team")"
+                                                       @onchange="e => ToggleOwnTeam(member.ClickUpUserId, IsChecked(e))" />
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </section>
+            </div>
+
+            <div class="workspace-preview-footer">
+                <span class="text-muted small">@_ownTeamIds.Count of @_preview.Members.Count members marked as own team</span>
+                <div class="workspace-preview-actions">
+                    <button type="button" class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="ClosePreviewAsync">Cancel</button>
+                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SavePreviewAsync">
+                        Save
+                    </BusyButton>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private readonly List<ClickUpAccountDto> _accounts = [];
     private readonly List<ClickUpMemberDto> _members = [];
+    private readonly HashSet<int> _ownTeamIds = [];
     private CreateClickUpAccountFormModel _newAccount = new();
+    private ClickUpWorkspacePreviewDto? _preview;
+    private ElementReference _previewDialog;
+    private IJSObjectReference? _scrollLockModule;
     private string _accountSearch = string.Empty;
     private string _statusFilter = "all";
+    private string _memberSearch = string.Empty;
     private Guid? _membersAccountId;
     private string? _membersAccountName;
+    private string? _previewError;
     private bool _showAddForm;
     private bool _isLoading = true;
     private bool _isBusy;
     private bool _isError;
+    private bool _previewFocusPending;
     private string? _message;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAccountsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _scrollLockModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/deleteConfirm.js");
+        }
+
+        if (_scrollLockModule is not null)
+        {
+            await _scrollLockModule.InvokeVoidAsync("setScrollLock", _preview is not null);
+        }
+
+        if (_previewFocusPending && _preview is not null)
+        {
+            _previewFocusPending = false;
+            try
+            {
+                await _previewDialog.FocusAsync();
+            }
+            catch
+            {
+                // Focus is optional if the dialog is not yet focusable.
+            }
+        }
     }
 
     private IEnumerable<ClickUpAccountDto> FilteredAccounts =>
@@ -338,6 +497,21 @@
     private bool HasActiveFilters =>
         !string.IsNullOrWhiteSpace(_accountSearch)
         || !string.Equals(_statusFilter, "all", StringComparison.OrdinalIgnoreCase);
+
+    private IEnumerable<ClickUpMemberDto> FilteredPreviewMembers =>
+        _preview is null
+            ? []
+            : _preview.Members.Where(member =>
+            {
+                if (string.IsNullOrWhiteSpace(_memberSearch))
+                {
+                    return true;
+                }
+
+                var search = _memberSearch.Trim();
+                return member.Username.Contains(search, StringComparison.OrdinalIgnoreCase)
+                    || (member.Email?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false);
+            });
 
     private void ClearFilters()
     {
@@ -386,18 +560,27 @@
         _membersAccountName = null;
     }
 
-    private async Task CreateAccountAsync()
+    private async Task PreviewWorkspaceAsync()
     {
         _isBusy = true;
         _message = null;
+        _previewError = null;
 
         try
         {
-            await AccountApi.CreateAccountAsync(_newAccount.ToRequest());
-            _showAddForm = false;
+            var preview = await AccountApi.PreviewWorkspaceAsync(_newAccount.ToPreviewRequest());
+            if (preview is null)
+            {
+                _isError = true;
+                _message = "Workspace preview returned no details.";
+                return;
+            }
+
+            _preview = preview;
+            _ownTeamIds.Clear();
+            _memberSearch = string.Empty;
+            _previewFocusPending = true;
             _isError = false;
-            _message = "ClickUp account created and validated successfully.";
-            await LoadAccountsAsync();
         }
         catch (Exception ex)
         {
@@ -408,6 +591,118 @@
         {
             _isBusy = false;
         }
+    }
+
+    private async Task SavePreviewAsync()
+    {
+        if (_preview is null)
+        {
+            return;
+        }
+
+        _isBusy = true;
+        _previewError = null;
+
+        try
+        {
+            var result = await AccountApi.CreateAccountAsync(_newAccount.ToRequest(_ownTeamIds.ToList()));
+            _showAddForm = false;
+            _preview = null;
+            _ownTeamIds.Clear();
+            _isError = !string.IsNullOrWhiteSpace(result?.ImportWarning);
+            _message = BuildSaveMessage(result);
+            await LoadAccountsAsync();
+        }
+        catch (Exception ex)
+        {
+            _isError = true;
+            _previewError = ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private async Task ClosePreviewAsync()
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        _preview = null;
+        _previewError = null;
+        _memberSearch = string.Empty;
+        _ownTeamIds.Clear();
+        await Task.CompletedTask;
+    }
+
+    private async Task HandlePreviewKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            await ClosePreviewAsync();
+        }
+    }
+
+    private void ToggleOwnTeam(int clickUpUserId, bool isOwnTeam)
+    {
+        if (isOwnTeam)
+        {
+            _ownTeamIds.Add(clickUpUserId);
+        }
+        else
+        {
+            _ownTeamIds.Remove(clickUpUserId);
+        }
+    }
+
+    private void MarkFilteredMembers(bool mark)
+    {
+        foreach (var member in FilteredPreviewMembers)
+        {
+            ToggleOwnTeam(member.ClickUpUserId, mark);
+        }
+    }
+
+    private static bool IsChecked(ChangeEventArgs args) =>
+        args.Value switch
+        {
+            bool isChecked => isChecked,
+            string text => bool.TryParse(text, out var parsed) && parsed,
+            _ => false
+        };
+
+    private static string? GetSafeColor(string? color)
+    {
+        if (string.IsNullOrWhiteSpace(color))
+        {
+            return null;
+        }
+
+        var trimmed = color.Trim();
+        return System.Text.RegularExpressions.Regex.IsMatch(trimmed, "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+            ? trimmed
+            : null;
+    }
+
+    private static string BuildSaveMessage(CreateClickUpAccountResultDto? result)
+    {
+        if (!string.IsNullOrWhiteSpace(result?.ImportWarning))
+        {
+            return result.ImportWarning;
+        }
+
+        if (result is null || result.DevelopersMarked == 0)
+        {
+            return "ClickUp workspace saved. No own-team members were marked.";
+        }
+
+        var memberLabel = result.DevelopersMarked == 1 ? "member" : "members";
+        return result.DevelopersCreated > 0
+            ? $"ClickUp workspace saved. {result.DevelopersMarked} own-team {memberLabel} marked, including {result.DevelopersCreated} new developer record{(result.DevelopersCreated == 1 ? "" : "s")}."
+            : $"ClickUp workspace saved. {result.DevelopersMarked} own-team {memberLabel} marked on the developer registry.";
     }
 
     private async Task TestAccountAsync(Guid accountId)
@@ -542,4 +837,22 @@
         || message.Contains("connected", StringComparison.OrdinalIgnoreCase)
             ? "clickup-accounts-validation-ok"
             : "clickup-accounts-validation-warn";
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_scrollLockModule is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _scrollLockModule.InvokeVoidAsync("setScrollLock", false);
+            await _scrollLockModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // Page is unloading.
+        }
+    }
 }

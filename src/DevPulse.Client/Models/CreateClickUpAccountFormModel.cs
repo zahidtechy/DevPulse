@@ -6,6 +6,9 @@ public class CreateClickUpAccountFormModel
     public string WorkspaceId { get; set; } = string.Empty;
     public string AccessToken { get; set; } = string.Empty;
 
-    public CreateClickUpAccountRequest ToRequest() =>
+    public PreviewClickUpWorkspaceRequest ToPreviewRequest() =>
         new(Name.Trim(), WorkspaceId.Trim(), AccessToken.Trim());
+
+    public CreateClickUpAccountRequest ToRequest(IReadOnlyList<int> ownTeamClickUpUserIds) =>
+        new(Name.Trim(), WorkspaceId.Trim(), AccessToken.Trim(), ownTeamClickUpUserIds);
 }

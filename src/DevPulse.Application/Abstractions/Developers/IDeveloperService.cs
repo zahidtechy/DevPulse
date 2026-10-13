@@ -27,6 +27,11 @@ public interface IDeveloperService
         SyncFromClickUpRequest? request = null,
         CancellationToken cancellationToken = default);
 
+    Task<Result<ImportOwnTeamResult>> ImportOwnTeamAsync(
+        Guid clickUpAccountId,
+        IReadOnlyList<int> clickUpUserIds,
+        CancellationToken cancellationToken = default);
+
     Task<Result<DeveloperDto>> AddHubstaffMappingAsync(
         Guid developerId,
         AddDeveloperHubstaffMappingRequest request,

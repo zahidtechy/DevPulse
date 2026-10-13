@@ -124,6 +124,16 @@ public sealed class DeveloperRepository : IDeveloperRepository
         await _dbContext.DeveloperClickUpMappings
             .AnyAsync(x => x.DeveloperId == developerId && x.ClickUpAccountId == accountId, cancellationToken);
 
+    public async Task<DeveloperClickUpMapping?> GetClickUpMappingAsync(
+        Guid accountId,
+        int clickUpUserId,
+        CancellationToken cancellationToken = default) =>
+        await _dbContext.DeveloperClickUpMappings
+            .Include(x => x.Developer)
+            .FirstOrDefaultAsync(
+                x => x.ClickUpAccountId == accountId && x.ClickUpUserId == clickUpUserId,
+                cancellationToken);
+
     public async Task AddMappingAsync(DeveloperClickUpMapping mapping, CancellationToken cancellationToken = default)
     {
         _dbContext.DeveloperClickUpMappings.Add(mapping);

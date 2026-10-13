@@ -36,6 +36,55 @@ public sealed class ClickUpAccountService : IClickUpAccountService
             : Result<ClickUpAccountDto>.Success(MapToDto(account));
     }
 
+    public async Task<Result<ClickUpWorkspacePreviewDto>> PreviewAsync(
+        PreviewClickUpWorkspaceRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var validation = ValidateRequest(request.Name, request.WorkspaceId, request.AccessToken);
+        if (validation.IsFailure)
+        {
+            return Result<ClickUpWorkspacePreviewDto>.Failure(validation.Error!);
+        }
+
+        var workspaceId = request.WorkspaceId.Trim();
+        if (await _repository.ExistsByWorkspaceIdAsync(workspaceId, cancellationToken: cancellationToken))
+        {
+            return Result<ClickUpWorkspacePreviewDto>.Failure("A ClickUp account for this workspace already exists.");
+        }
+
+        try
+        {
+            var token = request.AccessToken.Trim();
+            var workspaces = await _apiClient.GetAuthorizedWorkspacesAsync(token, cancellationToken);
+            var matched = workspaces.FirstOrDefault(w => w.Id == workspaceId);
+            if (matched is null)
+            {
+                return Result<ClickUpWorkspacePreviewDto>.Failure(
+                    "Token is valid, but the configured workspace was not found for this token.");
+            }
+
+            var members = await _apiClient.GetWorkspaceMembersAsync(token, workspaceId, cancellationToken);
+            return Result<ClickUpWorkspacePreviewDto>.Success(new ClickUpWorkspacePreviewDto(
+                request.Name.Trim(),
+                workspaceId,
+                matched.Name,
+                matched.Color,
+                $"Connected successfully to workspace '{matched.Name}'.",
+                members
+                    .OrderBy(m => m.Username, StringComparer.OrdinalIgnoreCase)
+                    .ToList()));
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            return Result<ClickUpWorkspacePreviewDto>.Failure("ClickUp rejected the access token (401 Unauthorized).");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to preview ClickUp workspace {WorkspaceId}", workspaceId);
+            return Result<ClickUpWorkspacePreviewDto>.Failure(ex.Message);
+        }
+    }
+
     public async Task<Result<ClickUpAccountDto>> CreateAsync(CreateClickUpAccountRequest request, CancellationToken cancellationToken = default)
     {
         var validation = ValidateRequest(request.Name, request.WorkspaceId, request.AccessToken);

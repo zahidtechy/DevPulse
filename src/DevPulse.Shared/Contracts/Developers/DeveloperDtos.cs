@@ -18,7 +18,8 @@ public record DeveloperDto(
     WorkRole WorkRole = WorkRole.Developer,
     Guid? ReportingManagerDeveloperId = null,
     string? ReportingManagerName = null,
-    IReadOnlyList<DeveloperHubstaffMappingDto>? HubstaffMappings = null);
+    IReadOnlyList<DeveloperHubstaffMappingDto>? HubstaffMappings = null,
+    bool IsOwnTeam = false);
 
 public record DeveloperClickUpMappingDto(
     Guid Id,
@@ -53,6 +54,11 @@ public record SyncDevelopersResult(
     int MappingsAdded);
 
 public record SyncFromClickUpRequest(Guid? ClickUpAccountId = null);
+
+public record ImportOwnTeamResult(
+    int DevelopersCreated,
+    int DevelopersMarked,
+    int MappingsAdded);
 
 public record DeveloperRegistryQuery(
     Guid? ClickUpAccountId = null,

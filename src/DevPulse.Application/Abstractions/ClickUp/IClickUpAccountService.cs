@@ -6,6 +6,10 @@ public interface IClickUpAccountService
 
     Task<Result<ClickUpAccountDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<Result<ClickUpWorkspacePreviewDto>> PreviewAsync(
+        PreviewClickUpWorkspaceRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<Result<ClickUpAccountDto>> CreateAsync(CreateClickUpAccountRequest request, CancellationToken cancellationToken = default);
 
     Task<Result<ClickUpAccountDto>> UpdateAsync(Guid id, UpdateClickUpAccountRequest request, CancellationToken cancellationToken = default);
