@@ -538,6 +538,14 @@
             if (result is not null)
             {
                 _me = await AttendanceApi.GetMeAsync();
+                // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
+                await LoadHistoryAsync();
+                var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+                if (authState.User.IsInRole(AppRoles.Admin))
+                {
+                    await LoadAdminRecordsAsync();
+                    await LoadAnalyticsAsync();
+                }
                 _isError = false;
                 _message = result.NextAction == AttendanceNextActionDto.PunchOut ? "Punch in recorded." :
                     result.NextAction == AttendanceNextActionDto.Complete ? "Punch out recorded. Day complete." : "Punch recorded.";
@@ -565,7 +573,22 @@
                 _requestPunchIn ? ToUtc(_correctionDate, _correctionPunchInTime) : null,
                 _requestPunchOut ? ToUtc(_correctionDate, _correctionPunchOutTime) : null,
                 _correctionReason));
+            // TEMPORARY: manually refresh every attendance list after each mutation so all
+            // tabs show fresh data in this session. Cross-session views still go stale (no
+            // SignalR/polling yet) — decide on a real-time strategy (SignalR hub vs polling)
+            // before treating this as final.
             _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var isAdmin = authState.User.IsInRole(AppRoles.Admin);
+            if (isAdmin)
+            {
+                _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
+            }
+            await LoadHistoryAsync();
+            if (isAdmin)
+            {
+                await LoadAdminRecordsAsync();
+            }
             _correctionReason = string.Empty;
             _isError = false;
             _message = "Correction request submitted.";
@@ -599,7 +622,12 @@
         try
         {
             await AttendanceApi.ApproveCorrectionRequestAsync(id, new ReviewAttendanceCorrectionRequest(null, null, null));
+            // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
             _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
+            _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
+            await LoadHistoryAsync();
+            await LoadAdminRecordsAsync();
+            await LoadAnalyticsAsync();
             _message = "Correction request approved."; _isError = false;
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
@@ -610,7 +638,11 @@
         try
         {
             await AttendanceApi.RejectCorrectionRequestAsync(id, new RejectAttendanceCorrectionRequest(null));
+            // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
             _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
+            _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
+            await LoadHistoryAsync();
+            await LoadAdminRecordsAsync();
             _message = "Correction request rejected."; _isError = false;
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
@@ -622,6 +654,11 @@
         {
             await AttendanceApi.CancelCorrectionRequestAsync(id);
             _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.IsInRole(AppRoles.Admin))
+            {
+                _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
+            }
             _message = "Correction request cancelled."; _isError = false;
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
@@ -636,6 +673,8 @@
                     record.PunchInUtc ?? ToUtc(record.WorkDate, new TimeOnly(9, 0)),
                     record.PunchOutUtc ?? ToUtc(record.WorkDate, new TimeOnly(18, 0))));
             await LoadAdminRecordsAsync();
+            await LoadHistoryAsync();
+            await LoadAnalyticsAsync();
             _message = "Attendance record updated."; _isError = false;
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
