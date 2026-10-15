@@ -5468,8 +5468,12 @@ button.holiday-day:hover {
     overflow: auto;
 }
 
-.attendance-correction-scroll {
+.attendance-table-scroll.attendance-correction-scroll {
     max-height: min(28rem, calc(100vh - 18rem));
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: auto;
+    overscroll-behavior: contain;
 }
 
 .attendance-correction-scroll .attendance-empty-state {
@@ -5479,6 +5483,12 @@ button.holiday-day:hover {
 .attendance-correction-scroll .attendance-table-card {
     border: none;
     box-shadow: none;
+    overflow: visible;
+}
+
+.attendance-correction-scroll .attendance-table {
+    min-width: 42rem;
+    width: max-content;
 }
 
 /* Section headers */
