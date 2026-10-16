@@ -496,6 +496,11 @@
                     <BusyButton CssClass="btn btn-primary" IsBusy="_isAdminLoading" BusyText="..." OnClick="loadAction">Load</BusyButton>
                 </div>
             </div>
+            <div class="d-flex gap-2 flex-wrap mt-2">
+                <button type="button" class="period-chip" @onclick="() => SetAdminRangePresetAsync(0, 0, loadAction)">Today</button>
+                <button type="button" class="period-chip" @onclick="() => SetAdminRangePresetAsync(-1, -1, loadAction)">Yesterday</button>
+                <button type="button" class="period-chip" @onclick="() => SetAdminRangePresetAsync(-30, 0, loadAction)">Last 30 days</button>
+            </div>
         </div>
     </div>;
 
@@ -607,6 +612,14 @@
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
         finally { _isAdminLoading = false; }
+    }
+
+    private async Task SetAdminRangePresetAsync(int fromOffsetDays, int toOffsetDays, Func<Task> loadAction)
+    {
+        var today = GetOfficeToday();
+        _adminFrom = today.AddDays(fromOffsetDays);
+        _adminTo = today.AddDays(toOffsetDays);
+        await loadAction();
     }
 
     private async Task LoadAnalyticsAsync()
