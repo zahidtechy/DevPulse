@@ -1,0 +1,72 @@
+
+name: DevPulse CI
+
+on:
+  push:
+    branches:
+      - feature/ci_cd_test_branch_rifat
+  pull_request:
+    branches:
+      - feature/ci_cd_test_branch_rifat
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and publish DevPulse
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore "DevPulse.slnx"
+
+      - name: Build
+        run: dotnet build "DevPulse.slnx" --configuration Release --no-restore
+
+      - name: Publish server project
+        run: dotnet publish "src/DevPulse.Server/DevPulse.Server.csproj" --configuration Release --no-restore --output "${{ github.workspace }}\publish"
+
+      - name: Remove appsettings files from publish output
+        shell: pwsh
+        run: |
+          $publishPath = Join-Path $env:GITHUB_WORKSPACE "publish"
+
+          Get-ChildItem -Path $publishPath -Recurse -File |
+            Where-Object { $_.Name -like "appsettings*.json" } |
+            Remove-Item -Force
+
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          $publishPath = Join-Path $env:GITHUB_WORKSPACE "publish"
+
+          if (-not (Test-Path (Join-Path $publishPath "DevPulse.Server.dll"))) {
+            throw "DevPulse.Server.dll was not found in the publish output."
+          }
+
+          $settingsFiles = Get-ChildItem -Path $publishPath -Recurse -File |
+            Where-Object { $_.Name -like "appsettings*.json" }
+
+          if ($settingsFiles) {
+            throw "appsettings files were found in the publish output."
+          }
+
+          Write-Host "Publish output verified. No appsettings files included."
+
+      - name: Upload publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: devpulse-publish
+          path: publish/
+          if-no-files-found: error
+          retention-days: 7
