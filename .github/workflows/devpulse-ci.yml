@@ -181,6 +181,7 @@ jobs:
             }
 
             Write-Host "Deployment successful. HTTP $([int]$response.StatusCode)"
+            $global:LASTEXITCODE = 0
           }
           catch {
             $deploymentError = $_.Exception.Message
