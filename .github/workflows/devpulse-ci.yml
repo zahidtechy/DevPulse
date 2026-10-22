@@ -13,10 +13,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-devpulse
-  cancel-in-progress: false
-
 jobs:
   build:
     name: Build and publish DevPulse
@@ -40,32 +36,18 @@ jobs:
       - name: Publish server project
         run: dotnet publish "src/DevPulse.Server/DevPulse.Server.csproj" --configuration Release --no-restore --output "${{ github.workspace }}\publish"
 
-      - name: Remove appsettings files from publish output
-        shell: pwsh
-        run: |
-          $publishPath = Join-Path $env:GITHUB_WORKSPACE "publish"
-
-          Get-ChildItem -Path $publishPath -Recurse -File |
-            Where-Object { $_.Name -like "appsettings*.json" } |
-            Remove-Item -Force
-
       - name: Verify publish output
         shell: pwsh
         run: |
           $publishPath = Join-Path $env:GITHUB_WORKSPACE "publish"
 
-          if (-not (Test-Path (Join-Path $publishPath "DevPulse.Server.dll"))) {
-            throw "DevPulse.Server.dll was not found in the publish output."
+          foreach ($file in @("DevPulse.Server.dll", "web.config", "appsettings.json")) {
+            if (-not (Test-Path (Join-Path $publishPath $file))) {
+              throw "Required publish file is missing: $file"
+            }
           }
 
-          $settingsFiles = Get-ChildItem -Path $publishPath -Recurse -File |
-            Where-Object { $_.Name -like "appsettings*.json" }
-
-          if ($settingsFiles) {
-            throw "appsettings files were found in the publish output."
-          }
-
-          Write-Host "Publish output verified. No appsettings files included."
+          Write-Host "Publish output verified."
 
       - name: Upload publish artifact
         uses: actions/upload-artifact@v4
@@ -80,7 +62,12 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/feature/ci_cd_test_branch_rifat'
     runs-on: [self-hosted, Windows, X64, devpulse-deploy]
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    # Serialize deployments, without making PR builds compete for this lock.
+    concurrency:
+      group: deploy-devpulse
+      cancel-in-progress: false
 
     steps:
       - name: Download CI artifact
@@ -88,6 +75,78 @@ jobs:
         with:
           name: devpulse-publish
           path: deploy-publish
+
+      - name: Back up SQL Server database
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $sqlServer = ".\SQLEXPRESS"
+          $databaseName = "DevPulse"
+
+          $dbBackupRoot = "C:\SQLBackups\DevPulse"
+
+          if ($sqlServer -like "REPLACE_*" -or $databaseName -like "REPLACE_*") {
+            throw "Configure the SQL Server instance and database name before deployment."
+          }
+
+          if (-not (Test-Path -LiteralPath $dbBackupRoot -PathType Container)) {
+            throw "Database backup directory does not exist: $dbBackupRoot"
+          }
+
+          $backupFile = Join-Path $dbBackupRoot (
+            "DevPulse-DB-" + (Get-Date -Format "yyyyMMdd-HHmmss-fff") + ".bak"
+          )
+
+          $quotedDatabaseName = "[" + $databaseName.Replace("]", "]]") + "]"
+          $escapedBackupFile = $backupFile.Replace("'", "''")
+
+          # This connects to the master database so the workflow can execute BACKUP DATABASE against DevPulse
+          $connectionString = "Server=$sqlServer;Database=master;Integrated Security=SSPI;Encrypt=True;TrustServerCertificate=True;Connection Timeout=30;"
+          
+          $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString)
+
+          try {
+            $connection.Open()
+
+            # Create a full copy-only backup before deploying the application.
+            $command = $connection.CreateCommand()
+            $command.CommandTimeout = 0
+            $command.CommandText = @"
+          BACKUP DATABASE $quotedDatabaseName
+          TO DISK = N'$escapedBackupFile'
+          WITH COPY_ONLY, CHECKSUM, INIT, STATS = 10;
+          "@
+            [void]$command.ExecuteNonQuery()
+            $command.Dispose()
+
+            if (-not (Test-Path -LiteralPath $backupFile -PathType Leaf)) {
+              throw "SQL Server reported success, but the backup file is missing."
+            }
+
+            if ((Get-Item -LiteralPath $backupFile).Length -le 0) {
+              throw "Database backup file is empty."
+            }
+
+            Write-Host "Database backup created: $backupFile"
+          }
+          finally {
+            if ($connection.State -ne [System.Data.ConnectionState]::Closed) {
+              $connection.Close()
+            }
+            $connection.Dispose()
+          }
+
+          # Retain the two newest database backup files.
+          $backups = @(
+            Get-ChildItem -LiteralPath $dbBackupRoot -Filter "DevPulse-DB-*.bak" -File |
+              Sort-Object LastWriteTimeUtc -Descending
+          )
+
+          foreach ($oldBackup in @($backups | Select-Object -Skip 2)) {
+            Remove-Item -LiteralPath $oldBackup.FullName -Force
+            Write-Host "Removed old database backup: $($oldBackup.Name)"
+          }
 
       - name: Deploy, health check, and rollback
         shell: powershell
@@ -98,27 +157,28 @@ jobs:
           $backupRoot = "C:\inetpub\DevPulseBackups"
           $publishPath = Join-Path $env:GITHUB_WORKSPACE "deploy-publish"
           $offlineFile = Join-Path $sitePath "app_offline.htm"
-          $backupPath = Join-Path $backupRoot (Get-Date -Format "yyyyMMdd-HHmmss")
+          $backupPath = Join-Path $backupRoot (Get-Date -Format "yyyyMMdd-HHmmss-fff")
 
-          # Validate deployment files.
+          # Validate paths and required files before changing the live application.
+          if (-not (Test-Path -LiteralPath $sitePath -PathType Container)) {
+            throw "IIS application directory not found."
+          }
+
+          if (-not (Test-Path -LiteralPath $backupRoot -PathType Container)) {
+            throw "Application backup directory not found."
+          }
+
+          foreach ($file in @("DevPulse.Server.dll", "web.config", "appsettings.json")) {
+            if (-not (Test-Path (Join-Path $publishPath $file))) {
+              throw "Published application file is missing: $file"
+            }
+          }
+
           if (-not (Test-Path (Join-Path $sitePath "DevPulse.Server.dll"))) {
             throw "Existing live application not found. Deployment cancelled."
           }
 
-          if (-not (Test-Path (Join-Path $publishPath "DevPulse.Server.dll"))) {
-            throw "Published application DLL is missing."
-          }
-
-          if (-not (Test-Path (Join-Path $publishPath "web.config"))) {
-            throw "Published web.config is missing."
-          }
-
-          if (Get-ChildItem $publishPath -Recurse -File |
-              Where-Object { $_.Name -like "appsettings*.json" }) {
-            throw "Artifact contains appsettings files. Deployment cancelled."
-          }
-
-          # Back up the live application before changing anything.
+          # Back up all existing application files, including appsettings.
           New-Item -ItemType Directory -Path $backupPath -Force | Out-Null
 
           robocopy $sitePath $backupPath /E /COPY:DAT /R:1 /W:1 /XF app_offline.htm
@@ -126,24 +186,35 @@ jobs:
 
           if ($backupExitCode -ge 8 -or
               -not (Test-Path (Join-Path $backupPath "DevPulse.Server.dll"))) {
-            throw "Backup failed or is incomplete. Deployment cancelled."
+            throw "Application backup failed or is incomplete. Deployment cancelled."
           }
 
-          Write-Host "Backup created: $backupPath"
+          Write-Host "Application backup created: $backupPath"
 
           try {
-            # Take the application offline before replacing files.
-            Set-Content -Path $offlineFile `
+            # Take the application offline before deleting or replacing files.
+            Set-Content -LiteralPath $offlineFile `
               -Value "DevPulse deployment in progress." -Encoding UTF8
 
             Start-Sleep -Seconds 10
 
-            # Preserve production appsettings files.
-            robocopy $publishPath $sitePath /E /XF appsettings*.json /R:2 /W:2
+            # Remove all old files and directories, retaining the offline marker.
+            Get-ChildItem -LiteralPath $sitePath -Force |
+              Where-Object { $_.Name -ne "app_offline.htm" } |
+              Remove-Item -Recurse -Force
+
+            # Copy the complete artifact, including appsettings*.json.
+            robocopy $publishPath $sitePath /E /COPY:DAT /R:2 /W:2
             $copyExitCode = $LASTEXITCODE
 
             if ($copyExitCode -ge 8) {
-              throw "Deployment file copy failed. Starting rollback."
+              throw "Deployment file copy failed."
+            }
+
+            foreach ($file in @("DevPulse.Server.dll", "web.config", "appsettings.json")) {
+              if (-not (Test-Path (Join-Path $sitePath $file))) {
+                throw "Deployed application file is missing: $file"
+              }
             }
 
             # Bring the new version online.
@@ -186,13 +257,13 @@ jobs:
           catch {
             $deploymentError = $_.Exception.Message
             Write-Host "Deployment failed: $deploymentError"
-            Write-Host "Restoring backup: $backupPath"
+            Write-Host "Restoring application backup: $backupPath"
 
             # Keep the application offline during rollback.
-            Set-Content -Path $offlineFile `
+            Set-Content -LiteralPath $offlineFile `
               -Value "DevPulse rollback in progress." -Encoding UTF8
 
-            # Restore the previous files and remove newly deployed files.
+            # Restore old files and remove files introduced by the failed release.
             robocopy $backupPath $sitePath /MIR /COPY:DAT /R:2 /W:2 /XF app_offline.htm
             $rollbackExitCode = $LASTEXITCODE
 
@@ -202,25 +273,22 @@ jobs:
 
             Remove-Item -LiteralPath $offlineFile -Force
 
-            throw "Deployment failed; previous files restored. Reason: $deploymentError"
+            throw "Deployment failed; previous application files restored. Reason: $deploymentError"
           }
 
-
-      - name: Clean up old backups
+      - name: Clean up old application backups
+        if: success()
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
           $backupRoot = "C:\inetpub\DevPulseBackups"
 
           $backups = @(
-            Get-ChildItem -Path $backupRoot -Directory |
-              Sort-Object LastWriteTime -Descending
+            Get-ChildItem -LiteralPath $backupRoot -Directory |
+              Sort-Object LastWriteTimeUtc -Descending
           )
 
-          # Keep the 5 most recent backups.
-          $oldBackups = $backups | Select-Object -Skip 5
-
-          foreach ($backup in $oldBackups) {
-            Remove-Item -LiteralPath $backup.FullName -Recurse -Force
-            Write-Host "Removed old backup: $($backup.Name)"
+          foreach ($oldBackup in @($backups | Select-Object -Skip 5)) {
+            Remove-Item -LiteralPath $oldBackup.FullName -Recurse -Force
+            Write-Host "Removed old application backup: $($oldBackup.Name)"
           }
-
