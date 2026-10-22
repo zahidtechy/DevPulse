@@ -4,10 +4,10 @@ name: DevPulse CI
 on:
   push:
     branches:
-      - feature/ci_cd_test_branch_rifat
+      - production
   pull_request:
     branches:
-      - feature/ci_cd_test_branch_rifat
+      - production
   workflow_dispatch:
 
 permissions:
@@ -60,7 +60,7 @@ jobs:
   deploy:
     name: Deploy DevPulse to IIS
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/ci_cd_test_branch_rifat'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
     runs-on: [self-hosted, Windows, X64, devpulse-deploy]
     timeout-minutes: 20
 
@@ -70,6 +70,15 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      - name: Clean deployment workspace
+        shell: powershell
+        run: |
+          $publishPath = Join-Path $env:GITHUB_WORKSPACE "deploy-publish"
+
+          if (Test-Path -LiteralPath $publishPath) {
+            Remove-Item -LiteralPath $publishPath -Recurse -Force
+          }
+
       - name: Download CI artifact
         uses: actions/download-artifact@v4
         with:
@@ -81,7 +90,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $sqlServer = ".\SQLEXPRESS"
+          $sqlServer = "."
           $databaseName = "DevPulse"
 
           $dbBackupRoot = "C:\SQLBackups\DevPulse"
