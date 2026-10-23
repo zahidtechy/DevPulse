@@ -1,0 +1,157 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@if (IsVisible)
+{
+    <div class="dp-modal-backdrop" @onclick="HandleBackdropClick">
+        <div class="dp-modal"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="@_titleId"
+             tabindex="-1"
+             @ref="_dialogRef"
+             @onclick:stopPropagation="true"
+             @onkeydown="HandleKeyDown">
+            <div class="dp-modal-header">
+                <h2 class="dp-modal-title" id="@_titleId">@Title</h2>
+                <button type="button"
+                        class="btn-close"
+                        aria-label="Close"
+                        disabled="@IsBusy"
+                        @onclick="CloseAsync"></button>
+            </div>
+            <div class="dp-modal-body">
+                @ChildContent
+            </div>
+            @if (FooterContent is not null)
+            {
+                <div class="dp-modal-footer">
+                    @FooterContent
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private readonly string _titleId = $"dp-modal-title-{Guid.NewGuid():N}";
+    private ElementReference _dialogRef;
+    private IJSObjectReference? _module;
+    private bool _wasVisible;
+    private bool _focusPending;
+
+    [Parameter]
+    public bool IsVisible { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    [Parameter]
+    public bool CloseOnBackdropClick { get; set; }
+
+    [Parameter]
+    public bool CloseOnEscape { get; set; } = true;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? FooterContent { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (IsVisible && !_wasVisible)
+        {
+            _focusPending = true;
+        }
+
+        if (!IsVisible)
+        {
+            _focusPending = false;
+        }
+
+        _wasVisible = IsVisible;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/modal.js");
+        }
+
+        if (_module is null)
+        {
+            return;
+        }
+
+        await _module.InvokeVoidAsync("setScrollLock", IsVisible);
+
+        if (_focusPending && IsVisible)
+        {
+            _focusPending = false;
+
+            try
+            {
+                await _module.InvokeVoidAsync("focusFirst", _dialogRef);
+            }
+            catch (JSDisconnectedException)
+            {
+                // Page is unloading.
+            }
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task HandleBackdropClick()
+    {
+        if (!CloseOnBackdropClick || IsBusy)
+        {
+            return;
+        }
+
+        await CloseAsync();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (CloseOnEscape && args.Key == "Escape" && !IsBusy)
+        {
+            await CloseAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _module.InvokeVoidAsync("setScrollLock", false);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Page is unloading.
+        }
+
+        await _module.DisposeAsync();
+    }
+}
