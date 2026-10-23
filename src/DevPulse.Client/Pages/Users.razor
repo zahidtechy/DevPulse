@@ -179,6 +179,16 @@
         </FooterContent>
     </ModalDialog>
 
+    @if (_deleteTarget is not null)
+    {
+        <DeleteConfirmation IsVisible="_showDeleteConfirm"
+                            IsVisibleChanged="OnDeleteConfirmVisibilityChanged"
+                            Title="@($"Delete \"{_deleteTarget.DisplayName}\"?")"
+                            Message="@GetDeleteConfirmMessage(_deleteTarget)"
+                            IsBusy="_isBusy"
+                            OnConfirm="ConfirmDeleteAsync" />
+    }
+
     @if (_isLoading)
     {
         <LoadingIndicator Text="Loading users..." />
@@ -341,7 +351,7 @@
                                                     <span class="bi-key" aria-hidden="true"></span>
                                                     Reset
                                                 </button>
-                                                <button class="btn btn-sm btn-outline-danger" disabled="@_isBusy" @onclick="() => DeleteUserAsync(user.Id)" title="Delete user">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_isBusy" @onclick="() => ShowDeleteConfirmation(user)" title="Delete user">
                                                     <span class="bi-trash" aria-hidden="true"></span>
                                                     Delete
                                                 </button>
@@ -373,6 +383,8 @@
     private bool _createDeveloper;
     private Guid? _editingUserId;
     private Guid? _resetPasswordUserId;
+    private UserDto? _deleteTarget;
+    private bool _showDeleteConfirm;
     private string _resetPasswordDisplayName = string.Empty;
     private string _resetPasswordEmail = string.Empty;
     private string _resetPassword = string.Empty;
@@ -655,6 +667,45 @@
             _isBusy = false;
         }
     }
+
+    private void ShowDeleteConfirmation(UserDto user)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        _deleteTarget = user;
+        _showDeleteConfirm = true;
+        _message = null;
+    }
+
+    private Task OnDeleteConfirmVisibilityChanged(bool isVisible)
+    {
+        _showDeleteConfirm = isVisible;
+
+        if (!isVisible && !_isBusy)
+        {
+            _deleteTarget = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleteTarget is null)
+        {
+            return;
+        }
+
+        await DeleteUserAsync(_deleteTarget.Id);
+        _showDeleteConfirm = false;
+        _deleteTarget = null;
+    }
+
+    private static string GetDeleteConfirmMessage(UserDto user) =>
+        $"Are you sure you want to delete \"{user.DisplayName}\" ({user.Email})? This action cannot be undone.";
 
     private async Task DeleteUserAsync(Guid id)
     {
