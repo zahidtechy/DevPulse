@@ -1,5 +1,13 @@
-export function setScrollLock(locked) {
-    document.body.classList.toggle('dp-modal-open', locked);
+const scrollLocks = new Set();
+
+export function setScrollLock(owner, locked) {
+    if (locked) {
+        scrollLocks.add(owner);
+    } else {
+        scrollLocks.delete(owner);
+    }
+
+    document.body.classList.toggle('dp-modal-open', scrollLocks.size > 0);
 }
 
 export function focusFirst(container) {

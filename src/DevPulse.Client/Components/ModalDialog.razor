@@ -34,6 +34,7 @@
 }
 
 @code {
+    private readonly string _instanceId = $"dp-modal-{Guid.NewGuid():N}";
     private readonly string _titleId = $"dp-modal-title-{Guid.NewGuid():N}";
     private ElementReference _dialogRef;
     private IJSObjectReference? _module;
@@ -91,7 +92,7 @@
             return;
         }
 
-        await _module.InvokeVoidAsync("setScrollLock", IsVisible);
+        await _module.InvokeVoidAsync("setScrollLock", _instanceId, IsVisible);
 
         if (_focusPending && IsVisible)
         {
@@ -145,7 +146,7 @@
 
         try
         {
-            await _module.InvokeVoidAsync("setScrollLock", false);
+            await _module.InvokeVoidAsync("setScrollLock", _instanceId, false);
         }
         catch (JSDisconnectedException)
         {

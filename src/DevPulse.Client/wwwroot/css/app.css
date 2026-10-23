@@ -7755,10 +7755,6 @@ button.holiday-day:hover {
     opacity: 0.9;
 }
 
-.users-form-card .card-body {
-    padding: 1.1rem 1.25rem;
-}
-
 .users-form-divider {
     border-top: 1px solid var(--dp-border);
 }

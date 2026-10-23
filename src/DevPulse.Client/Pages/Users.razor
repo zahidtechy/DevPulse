@@ -27,41 +27,51 @@
         <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
     }
 
-    @if (_isBusy && !_isLoading && !_showAddForm)
+    @if (_isBusy && !_isLoading && !_showAddForm && !_resetPasswordUserId.HasValue)
     {
         <LoadingIndicator Text="Processing..." />
     }
 
-    @if (_resetPasswordUserId.HasValue)
-    {
-        <div class="filter-card card mb-4 users-form-card">
-            <div class="card-body">
-                <div class="filter-section-header mb-1">
-                    <span class="filter-section-label">Reset password</span>
+    <ModalDialog IsVisible="_resetPasswordUserId.HasValue"
+                 Title="Reset Password"
+                 IsBusy="_isBusy"
+                 OnClose="HideResetPasswordForm">
+        <ChildContent>
+            @if (!string.IsNullOrWhiteSpace(_resetPasswordError))
+            {
+                <div class="alert alert-danger" role="alert">@_resetPasswordError</div>
+            }
+
+            <p class="text-muted small mb-3">
+                Set a new password for <strong>@_resetPasswordDisplayName</strong> (@_resetPasswordEmail).
+            </p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="resetPassword">New password</label>
+                    <input id="resetPassword"
+                           type="password"
+                           class="form-control"
+                           @bind="_resetPassword"
+                           autocomplete="new-password" />
+                    <div class="form-text">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
                 </div>
-                <p class="text-muted small mb-3">
-                    Set a new password for <strong>@_resetPasswordDisplayName</strong> (@_resetPasswordEmail).
-                </p>
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">New password</label>
-                        <input type="password" class="form-control" @bind="_resetPassword" autocomplete="new-password" />
-                        <div class="form-text">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Confirm password</label>
-                        <input type="password" class="form-control" @bind="_resetPasswordConfirm" autocomplete="new-password" />
-                    </div>
-                </div>
-                <div class="filter-actions mt-3">
-                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideResetPasswordForm">Cancel</button>
-                    <BusyButton CssClass="btn btn-warning" IsBusy="_isBusy" BusyText="Resetting..." OnClick="ResetPasswordAsync">
-                        Reset Password
-                    </BusyButton>
+                <div class="col-md-6">
+                    <label class="form-label" for="resetPasswordConfirm">Confirm password</label>
+                    <input id="resetPasswordConfirm"
+                           type="password"
+                           class="form-control"
+                           @bind="_resetPasswordConfirm"
+                           autocomplete="new-password" />
                 </div>
             </div>
-        </div>
-    }
+        </ChildContent>
+        <FooterContent>
+            <button type="button" class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideResetPasswordForm">Cancel</button>
+            <BusyButton CssClass="btn btn-warning" IsBusy="_isBusy" BusyText="Resetting..." OnClick="ResetPasswordAsync">
+                Reset Password
+            </BusyButton>
+        </FooterContent>
+    </ModalDialog>
 
     <ModalDialog IsVisible="_showAddForm"
                  Title="@(_editingUserId.HasValue ? "Edit User" : "Add User")"
@@ -371,6 +381,7 @@
     private string _selectedDeveloperId = string.Empty;
     private string? _message;
     private string? _formError;
+    private string? _resetPasswordError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -534,6 +545,7 @@
         _resetPasswordEmail = user.Email;
         _resetPassword = string.Empty;
         _resetPasswordConfirm = string.Empty;
+        _resetPasswordError = null;
         _message = null;
     }
 
@@ -544,6 +556,7 @@
         _resetPasswordEmail = string.Empty;
         _resetPassword = string.Empty;
         _resetPasswordConfirm = string.Empty;
+        _resetPasswordError = null;
     }
 
     private async Task ResetPasswordAsync()
@@ -553,17 +566,17 @@
             return;
         }
 
+        _resetPasswordError = null;
+
         if (string.IsNullOrWhiteSpace(_resetPassword))
         {
-            _isError = true;
-            _message = "New password is required.";
+            _resetPasswordError = "New password is required.";
             return;
         }
 
         if (_resetPassword != _resetPasswordConfirm)
         {
-            _isError = true;
-            _message = "Passwords do not match.";
+            _resetPasswordError = "Passwords do not match.";
             return;
         }
 
@@ -579,8 +592,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            _resetPasswordError = ex.Message;
         }
         finally
         {
