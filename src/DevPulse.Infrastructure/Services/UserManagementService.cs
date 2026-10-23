@@ -218,7 +218,9 @@ public sealed class UserManagementService : IUserManagementService
         if (roles.Contains(AppRoles.Admin))
         {
             var adminCount = 0;
-            foreach (var admin in _userManager.Users)
+            var users = await _userManager.Users.ToListAsync();
+
+            foreach (var admin in users)
             {
                 if (await _userManager.IsInRoleAsync(admin, AppRoles.Admin))
                 {
