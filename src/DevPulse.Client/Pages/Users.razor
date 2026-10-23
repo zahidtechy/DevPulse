@@ -109,6 +109,16 @@
                         }
                     </select>
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="telegramId">Telegram ID</label>
+                    <input id="telegramId"
+                           class="form-control"
+                           inputmode="numeric"
+                           maxlength="32"
+                           placeholder="e.g. 123456789"
+                           @bind="_newUser.TelegramId" />
+                    <div class="form-text">Optional numeric Telegram user ID for direct notifications.</div>
+                </div>
                 @if (_editingUserId.HasValue)
                 {
                     <div class="col-md-6 d-flex align-items-end">
@@ -507,6 +517,7 @@
         _newUser.Password = string.Empty;
         _newUser.DisplayName = string.Empty;
         _newUser.Role = AppRoles.User;
+        _newUser.TelegramId = string.Empty;
         _editIsActive = true;
         _createDeveloper = false;
         _selectedDeveloperId = string.Empty;
@@ -523,6 +534,7 @@
         _newUser.Email = user.Email;
         _newUser.DisplayName = user.DisplayName;
         _newUser.Role = user.Role;
+        _newUser.TelegramId = user.TelegramId ?? string.Empty;
         _editIsActive = user.IsActive;
         _createDeveloper = false;
         _selectedDeveloperId = user.DeveloperId?.ToString() ?? string.Empty;
@@ -634,7 +646,8 @@
                     _newUser.DisplayName,
                     _newUser.Role,
                     _editIsActive,
-                    developerId));
+                    developerId,
+                    _newUser.TelegramId));
                 _isError = false;
                 _message = "User updated.";
             }
@@ -646,7 +659,8 @@
                     _newUser.DisplayName,
                     _newUser.Role,
                     developerId,
-                    _createDeveloper));
+                    _createDeveloper,
+                    _newUser.TelegramId));
                 _isError = false;
                 _message = _createDeveloper
                     ? "User and developer profile created."
@@ -768,5 +782,7 @@
         public string DisplayName { get; set; } = string.Empty;
 
         public string Role { get; set; } = AppRoles.User;
+
+        public string TelegramId { get; set; } = string.Empty;
     }
 }

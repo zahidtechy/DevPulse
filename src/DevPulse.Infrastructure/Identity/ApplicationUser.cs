@@ -17,4 +17,10 @@ public sealed class ApplicationUser : IdentityUser<Guid>
     public Guid? DeveloperId { get; set; }
 
     public Developer? Developer { get; set; }
+
+    /// <summary>
+    /// Optional Telegram user ID used for direct notifications.
+    /// Stored as a string because it is an external identifier, not a numeric value.
+    /// </summary>
+    public string? TelegramId { get; set; }
 }

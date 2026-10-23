@@ -57,6 +57,19 @@ public sealed class UserManagementService : IUserManagementService
             return Result<UserDto>.Failure("Choose either an existing developer or creating a new one, not both.");
         }
 
+        if (!TryNormalizeTelegramId(request.TelegramId, out var telegramId))
+        {
+            return Result<UserDto>.Failure("Telegram ID must be a positive numeric user ID.");
+        }
+
+        if (telegramId is not null
+            && await _userManager.Users.AnyAsync(
+                u => u.TelegramId == telegramId,
+                cancellationToken))
+        {
+            return Result<UserDto>.Failure("That Telegram ID is already linked to another user.");
+        }
+
         var existing = await _userManager.FindByEmailAsync(request.Email.Trim());
         if (existing is not null)
         {
@@ -78,7 +91,8 @@ public sealed class UserManagementService : IUserManagementService
             EmailConfirmed = true,
             IsActive = true,
             CreatedAtUtc = DateTime.UtcNow,
-            DeveloperId = developerLink.Value
+            DeveloperId = developerLink.Value,
+            TelegramId = telegramId
         };
 
         var createResult = await _userManager.CreateAsync(user, request.Password);
@@ -116,6 +130,19 @@ public sealed class UserManagementService : IUserManagementService
             return Result<UserDto>.Failure("User not found.");
         }
 
+        if (!TryNormalizeTelegramId(request.TelegramId, out var telegramId))
+        {
+            return Result<UserDto>.Failure("Telegram ID must be a positive numeric user ID.");
+        }
+
+        if (telegramId is not null
+            && await _userManager.Users.AnyAsync(
+                u => u.TelegramId == telegramId && u.Id != id,
+                cancellationToken))
+        {
+            return Result<UserDto>.Failure("That Telegram ID is already linked to another user.");
+        }
+
         if (request.DeveloperId.HasValue)
         {
             var linkValidation = await ValidateDeveloperLinkAsync(request.DeveloperId.Value, user.Id, cancellationToken);
@@ -128,6 +155,7 @@ public sealed class UserManagementService : IUserManagementService
         user.DisplayName = request.DisplayName.Trim();
         user.IsActive = request.IsActive;
         user.DeveloperId = request.DeveloperId;
+        user.TelegramId = telegramId;
 
         var updateResult = await _userManager.UpdateAsync(user);
         if (!updateResult.Succeeded)
@@ -300,6 +328,28 @@ public sealed class UserManagementService : IUserManagementService
         }
 
         return names;
+    }
+
+    private static bool TryNormalizeTelegramId(string? value, out string? telegramId)
+    {
+        telegramId = null;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.Length > 32
+            || !trimmed.All(char.IsAsciiDigit)
+            || !long.TryParse(trimmed, out var numericId)
+            || numericId <= 0)
+        {
+            return false;
+        }
+
+        telegramId = numericId.ToString();
+        return true;
     }
 
     private static string? ValidateUserInput(string email, string password, string displayName, string role)

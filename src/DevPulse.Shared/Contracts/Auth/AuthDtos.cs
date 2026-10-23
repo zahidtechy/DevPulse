@@ -15,7 +15,8 @@ public sealed record UserDto(
     bool IsActive,
     DateTime CreatedAtUtc,
     Guid? DeveloperId = null,
-    string? DeveloperName = null);
+    string? DeveloperName = null,
+    string? TelegramId = null);
 
 public sealed record CreateUserRequest(
     string Email,
@@ -23,13 +24,15 @@ public sealed record CreateUserRequest(
     string DisplayName,
     string Role,
     Guid? DeveloperId = null,
-    bool CreateDeveloper = false);
+    bool CreateDeveloper = false,
+    string? TelegramId = null);
 
 public sealed record UpdateUserRequest(
     string DisplayName,
     string Role,
     bool IsActive,
-    Guid? DeveloperId = null);
+    Guid? DeveloperId = null,
+    string? TelegramId = null);
 
 public sealed record ChangePasswordRequest(string NewPassword);
 
