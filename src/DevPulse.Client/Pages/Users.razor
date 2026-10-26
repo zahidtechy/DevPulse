@@ -48,20 +48,19 @@
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label" for="resetPassword">New password</label>
-                    <input id="resetPassword"
-                           type="password"
-                           class="form-control"
-                           @bind="_resetPassword"
-                           autocomplete="new-password" />
-                    <div class="form-text">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
+                    <PasswordInput id="resetPassword"
+                                   name="resetPassword"
+                                   @bind-Value="_resetPassword"
+                                   autocomplete="new-password"
+                                   aria-describedby="resetPasswordHelp" />
+                    <div class="form-text" id="resetPasswordHelp">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" for="resetPasswordConfirm">Confirm password</label>
-                    <input id="resetPasswordConfirm"
-                           type="password"
-                           class="form-control"
-                           @bind="_resetPasswordConfirm"
-                           autocomplete="new-password" />
+                    <PasswordInput id="resetPasswordConfirm"
+                                   name="resetPasswordConfirm"
+                                   @bind-Value="_resetPasswordConfirm"
+                                   autocomplete="new-password" />
                 </div>
             </div>
         </ChildContent>
@@ -91,9 +90,13 @@
                         <input type="email" class="form-control" @bind="_newUser.Email" />
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Password</label>
-                        <input type="password" class="form-control" @bind="_newUser.Password" autocomplete="new-password" />
-                        <div class="form-text">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
+                        <label class="form-label" for="newUserPassword">Password</label>
+                        <PasswordInput id="newUserPassword"
+                                       name="newUserPassword"
+                                       @bind-Value="_newUser.Password"
+                                       autocomplete="new-password"
+                                       aria-describedby="newUserPasswordHelp" />
+                        <div class="form-text" id="newUserPasswordHelp">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
                     </div>
                 }
                 <div class="col-md-6">
