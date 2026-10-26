@@ -25,7 +25,7 @@
     {
         UpdateDisplay();
 
-        if (PunchOutUtc.HasValue)
+        if (PunchInUtc is null || PunchOutUtc.HasValue)
         {
             StopTimer();
         }

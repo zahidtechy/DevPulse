@@ -375,6 +375,9 @@
     private TimeOnly _correctionPunchOutTime = new(18, 0);
     private string _correctionReason = string.Empty;
     private Timer? _punchWindowTimer;
+    private Timer? _meRefreshTimer;
+    private bool _isRefreshingMe;
+    private int _meVersion;
 
     protected override async Task OnInitializedAsync()
     {
@@ -384,6 +387,7 @@
         _adminFrom = today.AddDays(-30);
         _adminTo = today;
         _punchWindowTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+        _meRefreshTimer = new Timer(_ => _ = InvokeAsync(RefreshMeAsync), null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
         await LoadAsync();
     }
 
@@ -497,9 +501,9 @@
                 </div>
             </div>
             <div class="d-flex gap-2 flex-wrap mt-2">
-                <button type="button" class="period-chip" @onclick="() => SetAdminRangePresetAsync(0, 0, loadAction)">Today</button>
-                <button type="button" class="period-chip" @onclick="() => SetAdminRangePresetAsync(-1, -1, loadAction)">Yesterday</button>
-                <button type="button" class="period-chip" @onclick="() => SetAdminRangePresetAsync(-30, 0, loadAction)">Last 30 days</button>
+                <button type="button" class="period-chip" disabled="@_isAdminLoading" @onclick="() => SetAdminRangePresetAsync(0, 0, loadAction)">Today</button>
+                <button type="button" class="period-chip" disabled="@_isAdminLoading" @onclick="() => SetAdminRangePresetAsync(-1, -1, loadAction)">Yesterday</button>
+                <button type="button" class="period-chip" disabled="@_isAdminLoading" @onclick="() => SetAdminRangePresetAsync(-30, 0, loadAction)">Last 30 days</button>
             </div>
         </div>
     </div>;
@@ -509,8 +513,7 @@
         _isLoading = true;
         try
         {
-            _me = await AttendanceApi.GetMeAsync();
-            _maxCorrectionDate = GetOfficeToday().ToString("yyyy-MM-dd");
+            ApplyMe(await AttendanceApi.GetMeAsync());
 
             var correctionsTask = AttendanceApi.GetMyCorrectionRequestsAsync();
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -534,6 +537,73 @@
         finally { _isLoading = false; }
     }
 
+    private void ApplyMe(AttendanceMeDto me)
+    {
+        _me = me;
+        _meVersion++;
+        _maxCorrectionDate = GetOfficeToday().ToString("yyyy-MM-dd");
+    }
+
+    private void ClearFeedback()
+    {
+        _isError = false;
+        _message = null;
+    }
+
+    private void SetActionMessage(string successMessage)
+    {
+        if (!_isError)
+        {
+            _message = successMessage;
+            return;
+        }
+
+        var detail = string.IsNullOrWhiteSpace(_message) ? string.Empty : $" {_message}";
+        _message = $"{successMessage} Some attendance lists could not be refreshed.{detail}";
+    }
+
+    private async Task RefreshMeAsync()
+    {
+        if (_isRefreshingMe || _isPunching || _isLoading)
+        {
+            return;
+        }
+
+        _isRefreshingMe = true;
+        var version = _meVersion;
+        try
+        {
+            var me = await AttendanceApi.GetMeAsync();
+            if (_isPunching || version != _meVersion)
+            {
+                return;
+            }
+
+            ApplyMe(me);
+            StateHasChanged();
+        }
+        catch
+        {
+            // Background refresh is best effort; keep the last known state.
+        }
+        finally
+        {
+            _isRefreshingMe = false;
+        }
+    }
+
+    private async Task RefreshMeBestEffortAsync()
+    {
+        try
+        {
+            ApplyMe(await AttendanceApi.GetMeAsync());
+        }
+        catch
+        {
+            // Keep the last known state; the 60-second background refresh will retry.
+        }
+    }
+
     private async Task PunchAsync()
     {
         _isPunching = true;
@@ -542,7 +612,8 @@
             var result = await AttendanceApi.PunchAsync();
             if (result is not null)
             {
-                _me = await AttendanceApi.GetMeAsync();
+                ClearFeedback();
+                await RefreshMeBestEffortAsync();
                 // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
                 await LoadHistoryAsync();
                 var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -551,9 +622,10 @@
                     await LoadAdminRecordsAsync();
                     await LoadAnalyticsAsync();
                 }
-                _isError = false;
-                _message = result.NextAction == AttendanceNextActionDto.PunchOut ? "Punch in recorded." :
+
+                var successMessage = result.NextAction == AttendanceNextActionDto.PunchOut ? "Punch in recorded." :
                     result.NextAction == AttendanceNextActionDto.Complete ? "Punch out recorded. Day complete." : "Punch recorded.";
+                SetActionMessage(successMessage);
             }
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
@@ -573,6 +645,7 @@
         _isSubmittingCorrection = true;
         try
         {
+            ClearFeedback();
             await AttendanceApi.SubmitCorrectionRequestAsync(new CreateAttendanceCorrectionRequest(
                 _correctionDate,
                 _requestPunchIn ? ToUtc(_correctionDate, _correctionPunchInTime) : null,
@@ -595,8 +668,7 @@
                 await LoadAdminRecordsAsync();
             }
             _correctionReason = string.Empty;
-            _isError = false;
-            _message = "Correction request submitted.";
+            SetActionMessage("Correction request submitted.");
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
         finally { _isSubmittingCorrection = false; }
@@ -616,6 +688,11 @@
 
     private async Task SetAdminRangePresetAsync(int fromOffsetDays, int toOffsetDays, Func<Task> loadAction)
     {
+        if (_isAdminLoading)
+        {
+            return;
+        }
+
         var today = GetOfficeToday();
         _adminFrom = today.AddDays(fromOffsetDays);
         _adminTo = today.AddDays(toOffsetDays);
@@ -634,14 +711,16 @@
     {
         try
         {
+            ClearFeedback();
             await AttendanceApi.ApproveCorrectionRequestAsync(id, new ReviewAttendanceCorrectionRequest(null, null, null));
             // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
+            await RefreshMeBestEffortAsync();
             _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
             _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
             await LoadHistoryAsync();
             await LoadAdminRecordsAsync();
             await LoadAnalyticsAsync();
-            _message = "Correction request approved."; _isError = false;
+            SetActionMessage("Correction request approved.");
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
     }
@@ -650,13 +729,14 @@
     {
         try
         {
+            ClearFeedback();
             await AttendanceApi.RejectCorrectionRequestAsync(id, new RejectAttendanceCorrectionRequest(null));
             // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
             _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
             _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
             await LoadHistoryAsync();
             await LoadAdminRecordsAsync();
-            _message = "Correction request rejected."; _isError = false;
+            SetActionMessage("Correction request rejected.");
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
     }
@@ -665,6 +745,7 @@
     {
         try
         {
+            ClearFeedback();
             await AttendanceApi.CancelCorrectionRequestAsync(id);
             _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -672,7 +753,7 @@
             {
                 _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
             }
-            _message = "Correction request cancelled."; _isError = false;
+            SetActionMessage("Correction request cancelled.");
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
     }
@@ -681,14 +762,16 @@
     {
         try
         {
+            ClearFeedback();
             await AttendanceApi.AdminUpsertRecordAsync(record.DeveloperId, record.WorkDate,
                 new AdminUpsertAttendanceRecordRequest(
                     record.PunchInUtc ?? ToUtc(record.WorkDate, new TimeOnly(9, 0)),
                     record.PunchOutUtc ?? ToUtc(record.WorkDate, new TimeOnly(18, 0))));
+            await RefreshMeBestEffortAsync();
             await LoadAdminRecordsAsync();
             await LoadHistoryAsync();
             await LoadAnalyticsAsync();
-            _message = "Attendance record updated."; _isError = false;
+            SetActionMessage("Attendance record updated.");
         }
         catch (Exception ex) { _isError = true; _message = ex.Message; }
     }
@@ -820,5 +903,6 @@
     public void Dispose()
     {
         _punchWindowTimer?.Dispose();
+        _meRefreshTimer?.Dispose();
     }
 }

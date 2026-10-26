@@ -5455,6 +5455,16 @@ button.holiday-day:hover {
     margin-bottom: 0.65rem;
 }
 
+.attendance-filter-bar .period-chip:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.attendance-filter-bar .period-chip:disabled:hover {
+    border-color: var(--dp-border);
+    color: var(--dp-text-secondary);
+}
+
 .attendance-filter-row {
     display: grid;
     grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr) auto;
