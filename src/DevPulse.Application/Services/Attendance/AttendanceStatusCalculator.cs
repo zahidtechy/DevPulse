@@ -43,35 +43,19 @@ public sealed class AttendanceStatusCalculator
         return AttendanceDayStatusDto.OnTime;
     }
 
-    public decimal? ComputeWorkHours(
-        AttendanceRecord record,
-        AttendanceSettings settings,
-        TimeZoneInfo timeZone)
+    public decimal? ComputeWorkHours(AttendanceRecord record)
     {
         if (!record.PunchInUtc.HasValue || !record.PunchOutUtc.HasValue)
         {
             return null;
         }
 
-        var punchInLocal = TimeZoneInfo.ConvertTimeFromUtc(record.PunchInUtc.Value, timeZone);
-        var punchOutLocal = TimeZoneInfo.ConvertTimeFromUtc(record.PunchOutUtc.Value, timeZone);
-        var punchInTime = TimeOnly.FromDateTime(punchInLocal);
-        var punchOutTime = TimeOnly.FromDateTime(punchOutLocal);
-
-        var effectiveIn = punchInTime <= settings.BufferStartTime
-            ? settings.WorkStartTime
-            : punchInTime;
-
-        var effectiveOut = punchOutTime >= settings.BufferEndTime
-            ? settings.WorkEndTime
-            : punchOutTime;
-
-        if (effectiveOut <= effectiveIn)
+        var duration = record.PunchOutUtc.Value - record.PunchInUtc.Value;
+        if (duration <= TimeSpan.Zero)
         {
             return null;
         }
 
-        var duration = effectiveOut.ToTimeSpan() - effectiveIn.ToTimeSpan();
         return Math.Round((decimal)duration.TotalHours, 2);
     }
 

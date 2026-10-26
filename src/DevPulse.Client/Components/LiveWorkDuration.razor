@@ -1,0 +1,81 @@
+@implements IDisposable
+
+<span class="@CssClass">@_display</span>
+
+@code {
+    [Parameter]
+    public DateTime? PunchInUtc { get; set; }
+
+    [Parameter]
+    public DateTime? PunchOutUtc { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    private string _display = "—";
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        UpdateDisplay();
+        StartTimerIfNeeded();
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateDisplay();
+
+        if (PunchOutUtc.HasValue)
+        {
+            StopTimer();
+        }
+        else
+        {
+            StartTimerIfNeeded();
+        }
+    }
+
+    private void StartTimerIfNeeded()
+    {
+        if (_timer is not null || PunchInUtc is null || PunchOutUtc.HasValue)
+        {
+            return;
+        }
+
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            UpdateDisplay();
+            StateHasChanged();
+        }), null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private void UpdateDisplay()
+    {
+        if (PunchInUtc is null)
+        {
+            _display = "—";
+            return;
+        }
+
+        var end = PunchOutUtc ?? DateTime.UtcNow;
+        var duration = end - PunchInUtc.Value;
+        if (duration < TimeSpan.Zero)
+        {
+            _display = "—";
+            return;
+        }
+
+        _display = WorkDurationFormatter.Format(duration, includeSeconds: PunchOutUtc is null);
+    }
+
+    public void Dispose()
+    {
+        StopTimer();
+    }
+}

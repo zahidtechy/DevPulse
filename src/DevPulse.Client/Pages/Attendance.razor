@@ -166,10 +166,12 @@
                                                 <span class="attendance-badge corrected">Corrected</span>
                                             }
                                         </div>
-                                        <div class="attendance-time-tile @(_me.TodayRecord?.WorkHours is not null ? "filled" : null)">
+                                        <div class="attendance-time-tile @(_me.TodayRecord?.PunchInUtc is not null ? "filled" : null)">
                                             <span class="attendance-time-tile-icon bi-hourglass-split" aria-hidden="true"></span>
                                             <span class="attendance-time-label">Hours worked</span>
-                                            <strong class="attendance-time-value">@(_me.TodayRecord?.WorkHours?.ToString("0.##") ?? "—")</strong>
+                                            <LiveWorkDuration CssClass="attendance-time-value"
+                                                              PunchInUtc="_me.TodayRecord?.PunchInUtc"
+                                                              PunchOutUtc="_me.TodayRecord?.PunchOutUtc" />
                                         </div>
                                     </div>
                                 </div>

@@ -570,7 +570,7 @@ public sealed class AttendanceService : IAttendanceService
     private AttendanceRecordDto MapRecord(AttendanceRecord record, AttendanceSettings settings, TimeZoneInfo timeZone)
     {
         var status = _statusCalculator.ComputeStatus(record, settings, timeZone);
-        var workHours = _statusCalculator.ComputeWorkHours(record, settings, timeZone);
+        var workHours = _statusCalculator.ComputeWorkHours(record);
         var developerName = record.Developer?.Name ?? string.Empty;
 
         return new AttendanceRecordDto(
