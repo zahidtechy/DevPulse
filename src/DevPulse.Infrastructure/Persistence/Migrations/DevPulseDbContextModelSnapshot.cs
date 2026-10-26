@@ -126,6 +126,12 @@ namespace DevPulse.Infrastructure.Persistence.Migrations
                     b.Property<int>("PunchOutAllowMinutesAfterWorkEnd")
                         .HasColumnType("int");
 
+                    b.Property<bool>("StrictPunchIn")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("StrictPunchOut")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 

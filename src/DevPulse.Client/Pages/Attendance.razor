@@ -421,17 +421,14 @@
             return _me.CanPunchIn;
         }
 
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(_me.OfficeTimeZoneId);
-            var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            var currentTime = TimeOnly.FromDateTime(localNow);
-            return currentTime >= _me.PunchInEarliestTime.Value && _me.CanPunchIn;
-        }
-        catch
+        var currentTime = GetOfficeCurrentTime();
+        if (currentTime is null)
         {
             return _me.CanPunchIn;
         }
+
+        return currentTime >= _me.PunchInEarliestTime.Value
+            && (_me.PunchInLatestTime is null || currentTime <= _me.PunchInLatestTime.Value);
     }
 
     private bool IsPunchOutAllowed()
@@ -441,25 +438,26 @@
             return _me.CanPunchOut;
         }
 
+        var currentTime = GetOfficeCurrentTime();
+        if (currentTime is null)
+        {
+            return _me.CanPunchOut;
+        }
+
+        return currentTime >= _me.PunchOutEarliestTime.Value
+            && (_me.PunchOutLatestTime is null || currentTime <= _me.PunchOutLatestTime.Value);
+    }
+
+    private TimeOnly? GetOfficeCurrentTime()
+    {
         try
         {
             var tz = TimeZoneInfo.FindSystemTimeZoneById(_me.OfficeTimeZoneId);
-            var currentTime = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
-            if (currentTime < _me.PunchOutEarliestTime.Value)
-            {
-                return false;
-            }
-
-            if (_me.PunchOutLatestTime is not null && currentTime > _me.PunchOutLatestTime.Value)
-            {
-                return false;
-            }
-
-            return true;
+            return TimeOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
         }
         catch
         {
-            return _me.CanPunchOut;
+            return null;
         }
     }
 
@@ -706,11 +704,10 @@
 
     private string GetPunchHint() => _me.NextAction switch
     {
-        AttendanceNextActionDto.PunchIn when !IsPunchInAllowed() =>
-            $"Punch in opens at {FormatPunchTime(_me.PunchInEarliestTime)}.",
+        AttendanceNextActionDto.PunchIn when !IsPunchInAllowed() => GetPunchInLockedHint(),
         AttendanceNextActionDto.PunchIn => "Press and hold the fingerprint for about one second.",
         AttendanceNextActionDto.PunchOut when !IsPunchOutAllowed() => GetPunchOutLockedHint(),
-        AttendanceNextActionDto.PunchOut => "Hold again when you are ready to leave.",
+        AttendanceNextActionDto.PunchOut => $"Hold again when you are ready to leave. Punch out closes at {FormatPunchTime(_me.PunchOutLatestTime)}.",
         AttendanceNextActionDto.Complete => "You have already punched in and out today.",
         _ => string.Empty
     };
@@ -792,20 +789,27 @@
         _ => string.Empty
     };
 
+    private string GetPunchInLockedHint()
+    {
+        var currentTime = GetOfficeCurrentTime();
+        if (currentTime is not null
+            && _me.PunchInLatestTime is not null
+            && currentTime > _me.PunchInLatestTime.Value)
+        {
+            return $"Punch in closed at {FormatPunchTime(_me.PunchInLatestTime)}. Submit an attendance correction if needed.";
+        }
+
+        return $"Punch in opens at {FormatPunchTime(_me.PunchInEarliestTime)}.";
+    }
+
     private string GetPunchOutLockedHint()
     {
-        try
+        var currentTime = GetOfficeCurrentTime();
+        if (currentTime is not null
+            && _me.PunchOutLatestTime is not null
+            && currentTime > _me.PunchOutLatestTime.Value)
         {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(_me.OfficeTimeZoneId);
-            var currentTime = TimeOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
-            if (_me.PunchOutLatestTime is not null && currentTime > _me.PunchOutLatestTime.Value)
-            {
-                return $"Punch out closed at {FormatPunchTime(_me.PunchOutLatestTime)}.";
-            }
-        }
-        catch
-        {
-            // Fall through to the open-window message.
+            return $"Punch out closed at {FormatPunchTime(_me.PunchOutLatestTime)}.";
         }
 
         return $"Punch out is available after {FormatPunchTime(_me.PunchOutEarliestTime)} until {FormatPunchTime(_me.PunchOutLatestTime)}.";

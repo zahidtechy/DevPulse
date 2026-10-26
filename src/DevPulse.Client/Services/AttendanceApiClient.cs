@@ -45,7 +45,7 @@ public sealed class AttendanceApiClient : IAttendanceApiClient
     public async Task<AttendanceMeDto> GetMeAsync(CancellationToken cancellationToken = default)
     {
         var me = await _httpClient.GetFromJsonAsync<AttendanceMeDto>("api/attendance/me", _jsonOptions, cancellationToken);
-        return me ?? new AttendanceMeDto(null, null, false, AttendanceNextActionDto.PunchIn, null, "Asia/Dhaka", true, true, null, null, null);
+        return me ?? new AttendanceMeDto(null, null, false, AttendanceNextActionDto.PunchIn, null, "Asia/Dhaka", true, true, null, null, null, null);
     }
 
     public async Task<AttendancePunchResultDto?> PunchAsync(CancellationToken cancellationToken = default)
@@ -67,7 +67,7 @@ public sealed class AttendanceApiClient : IAttendanceApiClient
     public async Task<AttendanceSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
     {
         var settings = await _httpClient.GetFromJsonAsync<AttendanceSettingsDto>("api/attendance/settings", _jsonOptions, cancellationToken);
-        return settings ?? new AttendanceSettingsDto(new TimeOnly(9, 0), new TimeOnly(18, 0), new TimeOnly(9, 15), new TimeOnly(17, 45), 60, 120, "Asia/Dhaka", DateTime.UtcNow);
+        return settings ?? new AttendanceSettingsDto(new TimeOnly(9, 0), new TimeOnly(18, 0), new TimeOnly(9, 15), new TimeOnly(17, 45), 60, 120, "Asia/Dhaka", DateTime.UtcNow, false, false);
     }
 
     public async Task<AttendanceSettingsDto?> UpdateSettingsAsync(UpdateAttendanceSettingsRequest request, CancellationToken cancellationToken = default)
