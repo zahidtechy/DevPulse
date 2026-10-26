@@ -313,10 +313,10 @@ a:hover, .btn-link:hover {
 }
 
 .app-loading-logo {
+    display: block;
     width: 2.5rem;
     height: 2.5rem;
     border-radius: var(--dp-radius);
-    background: var(--dp-gradient-brand);
     box-shadow: 0 4px 14px rgba(var(--dp-primary-rgb), 0.3);
 }
 
