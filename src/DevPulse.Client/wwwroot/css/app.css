@@ -4721,7 +4721,7 @@ button.holiday-day:hover {
 
 .attendance-settings-timeline {
     margin-top: 1.25rem;
-    padding: 1rem 0.75rem 0.35rem;
+    padding: 2.75rem 0.75rem 0.35rem;
     border: 1px solid var(--dp-border);
     border-radius: var(--dp-radius-lg);
     background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
@@ -4788,7 +4788,27 @@ button.holiday-day:hover {
 
 .attendance-settings-timeline-marker.buffer .attendance-settings-timeline-marker-line {
     background: #0d9488;
-    height: 2.75rem;
+}
+
+/* Grace (buffer) labels sit above the track so they never collide with the
+   start/end/punch labels below it. */
+.attendance-settings-timeline-marker-text {
+    display: contents;
+}
+
+.attendance-settings-timeline-marker.buffer .attendance-settings-timeline-marker-line {
+    height: 3.5rem;
+}
+
+.attendance-settings-timeline-marker.buffer .attendance-settings-timeline-marker-text {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    position: absolute;
+    top: -2.05rem;
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 3.5rem;
 }
 
 .attendance-settings-timeline-marker-label {
@@ -5468,8 +5488,12 @@ button.holiday-day:hover {
     overflow: auto;
 }
 
-.attendance-correction-scroll {
+.attendance-table-scroll.attendance-correction-scroll {
     max-height: min(28rem, calc(100vh - 18rem));
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: auto;
+    overscroll-behavior: contain;
 }
 
 .attendance-correction-scroll .attendance-empty-state {
@@ -5479,6 +5503,12 @@ button.holiday-day:hover {
 .attendance-correction-scroll .attendance-table-card {
     border: none;
     box-shadow: none;
+    overflow: visible;
+}
+
+.attendance-correction-scroll .attendance-table {
+    min-width: 42rem;
+    width: max-content;
 }
 
 /* Section headers */
