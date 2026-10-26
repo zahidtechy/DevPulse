@@ -345,8 +345,10 @@
 
     private RenderFragment RenderTimelineMarker(TimeOnly time, string label, string variant) => @<div class="attendance-settings-timeline-marker @variant" style="left:@(GetTimelineLeft(time))%">
         <span class="attendance-settings-timeline-marker-line"></span>
-        <span class="attendance-settings-timeline-marker-label">@label</span>
-        <span class="attendance-settings-timeline-marker-time">@FormatTime(time)</span>
+        <span class="attendance-settings-timeline-marker-text">
+            <span class="attendance-settings-timeline-marker-label">@label</span>
+            <span class="attendance-settings-timeline-marker-time">@FormatTime(time)</span>
+        </span>
     </div>;
 
     private double GetTimelineLeft(TimeOnly time)
