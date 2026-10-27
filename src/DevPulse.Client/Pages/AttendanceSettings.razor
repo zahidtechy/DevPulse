@@ -325,7 +325,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.AttendanceSettings);
         }
         finally
         {
@@ -348,11 +348,11 @@
                 _timeZoneId,
                 _strictPunchIn,
                 _strictPunchOut));
-            Toast.Success("Attendance settings saved.");
+            Toast.Success("Attendance settings saved.", key: ToastKeys.AttendanceSettings);
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.AttendanceSettings);
         }
         finally
         {

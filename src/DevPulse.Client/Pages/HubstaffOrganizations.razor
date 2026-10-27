@@ -135,7 +135,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.HubstaffOrganizations);
         }
         finally
         {
@@ -156,7 +156,7 @@
     {
         if (string.IsNullOrWhiteSpace(_form.PersonalAccessToken))
         {
-            Toast.Warning("Enter a PAT before detecting organizations.");
+            Toast.Warning("Enter a PAT before detecting organizations.", key: ToastKeys.HubstaffOrganizations);
             return;
         }
 
@@ -171,11 +171,11 @@
                 _form.SelectedOrganizationId = items[0].OrganizationId.ToString();
             }
 
-            Toast.Success($"Found {items.Count} organization(s).");
+            Toast.Success($"Found {items.Count} organization(s).", key: ToastKeys.HubstaffOrganizations);
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.HubstaffOrganizations);
         }
         finally
         {
@@ -190,12 +190,12 @@
         {
             await HubstaffApi.CreateOrganizationAsync(_form.ToRequest());
             _showAddForm = false;
-            Toast.Success("Hubstaff organization saved. PAT encrypted in database.");
+            Toast.Success("Hubstaff organization saved. PAT encrypted in database.", key: ToastKeys.HubstaffOrganizations);
             await LoadOrganizationsAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.HubstaffOrganizations);
         }
         finally
         {
@@ -211,17 +211,17 @@
             var result = await HubstaffApi.TestConnectionAsync(id);
             if (result?.IsConnected == true)
             {
-                Toast.Success(result.Message ?? "Connection test completed.");
+                Toast.Success(result.Message ?? "Connection test completed.", key: ToastKeys.HubstaffOrganizations);
             }
             else
             {
-                Toast.Error(result?.Message ?? "Connection test failed.");
+                Toast.Error(result?.Message ?? "Connection test failed.", key: ToastKeys.HubstaffOrganizations);
             }
             await LoadOrganizationsAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.HubstaffOrganizations);
         }
         finally
         {
@@ -239,7 +239,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.HubstaffOrganizations);
         }
         finally
         {
@@ -254,11 +254,11 @@
         {
             await HubstaffApi.DeleteOrganizationAsync(id);
             await LoadOrganizationsAsync();
-            Toast.Success("Organization removed.");
+            Toast.Success("Organization removed.", key: ToastKeys.HubstaffOrganizations);
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.HubstaffOrganizations);
         }
         finally
         {

@@ -422,7 +422,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load Hubstaff organizations: {ex.Message}");
+            Toast.Error($"Failed to load Hubstaff organizations: {ex.Message}", key: ToastKeys.Developers);
         }
     }
 
@@ -440,7 +440,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load ClickUp workspaces: {ex.Message}");
+            Toast.Error($"Failed to load ClickUp workspaces: {ex.Message}", key: ToastKeys.Developers);
         }
     }
 
@@ -456,7 +456,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load developers: {ex.Message}");
+            Toast.Error($"Failed to load developers: {ex.Message}", key: ToastKeys.Developers);
         }
         finally
         {
@@ -475,7 +475,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load reporting manager options: {ex.Message}");
+            Toast.Error($"Failed to load reporting manager options: {ex.Message}", key: ToastKeys.Developers);
         }
     }
 
@@ -521,13 +521,13 @@
 
         if (string.IsNullOrWhiteSpace(_mappingForm.WorkspaceId))
         {
-            Toast.Warning("Please select a workspace.");
+            Toast.Warning("Please select a workspace.", key: ToastKeys.Developers);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(_mappingForm.Email))
         {
-            Toast.Warning("Email is required to resolve the ClickUp user.");
+            Toast.Warning("Email is required to resolve the ClickUp user.", key: ToastKeys.Developers);
             return;
         }
 
@@ -541,12 +541,12 @@
 
             _mappingDeveloperId = null;
             _mappingForm = new MappingFormModel();
-            Toast.Success("Developer mapped to ClickUp workspace successfully.");
+            Toast.Success("Developer mapped to ClickUp workspace successfully.", key: ToastKeys.Developers);
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {
@@ -562,12 +562,12 @@
         {
             await DeveloperApi.CreateDeveloperAsync(_newDeveloper.ToRequest());
             _showAddForm = false;
-            Toast.Success("Developer created successfully.");
+            Toast.Success("Developer created successfully.", key: ToastKeys.Developers);
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {
@@ -651,12 +651,12 @@
                 : "all accounts";
             Toast.Success(result is null
                 ? $"Sync from {accountLabel} completed."
-                : $"Sync from {accountLabel} complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.");
+                : $"Sync from {accountLabel} complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.", key: ToastKeys.Developers);
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {
@@ -673,12 +673,12 @@
             var result = await DeveloperApi.SyncFromHubstaffAsync(new SyncFromHubstaffRequest(null));
             Toast.Success(result is null
                 ? "Sync from Hubstaff completed."
-                : $"Sync from Hubstaff complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.");
+                : $"Sync from Hubstaff complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.", key: ToastKeys.Developers);
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {
@@ -708,7 +708,7 @@
     {
         if (!_hubstaffMappingDeveloperId.HasValue || !Guid.TryParse(_hubstaffMappingForm.OrganizationId, out var orgId))
         {
-            Toast.Warning("Select a Hubstaff organization.");
+            Toast.Warning("Select a Hubstaff organization.", key: ToastKeys.Developers);
             return;
         }
 
@@ -720,12 +720,12 @@
                 new AddDeveloperHubstaffMappingByEmailRequest(orgId, _hubstaffMappingForm.Email));
 
             _hubstaffMappingDeveloperId = null;
-            Toast.Success("Developer mapped to Hubstaff successfully.");
+            Toast.Success("Developer mapped to Hubstaff successfully.", key: ToastKeys.Developers);
             await LoadDevelopersAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {
@@ -750,12 +750,12 @@
 
             Toast.Success(isActive
                 ? $"{developer.Name} marked active."
-                : $"{developer.Name} marked inactive. Reports and analytics are unchanged.");
+                : $"{developer.Name} marked inactive. Reports and analytics are unchanged.", key: ToastKeys.Developers);
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {
@@ -783,12 +783,12 @@
                     role,
                     developer.ReportingManagerDeveloperId));
 
-            Toast.Success($"{developer.Name} set as {role}.");
+            Toast.Success($"{developer.Name} set as {role}.", key: ToastKeys.Developers);
             await LoadDevelopersAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {
@@ -819,12 +819,12 @@
 
             Toast.Success(managerId.HasValue
                 ? $"{developer.Name} assigned to reporting manager."
-                : $"{developer.Name} reporting manager cleared.");
+                : $"{developer.Name} reporting manager cleared.", key: ToastKeys.Developers);
             await LoadDevelopersAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {
@@ -893,12 +893,12 @@
         try
         {
             await DeveloperApi.DeleteDeveloperAsync(id);
-            Toast.Success("Developer deleted.");
+            Toast.Success("Developer deleted.", key: ToastKeys.Developers);
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Developers);
         }
         finally
         {

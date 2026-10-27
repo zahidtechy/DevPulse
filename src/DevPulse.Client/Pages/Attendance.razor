@@ -528,7 +528,7 @@
                 _myCorrections = await correctionsTask;
             }
         }
-        catch (Exception ex) { Toast.Error(ex.Message); }
+        catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
         finally { _isLoading = false; }
     }
 
@@ -539,18 +539,18 @@
         _maxCorrectionDate = GetOfficeToday().ToString("yyyy-MM-dd");
     }
 
-    private void SetActionMessage(string successMessage)
+    private void SetActionMessage(string successMessage, string? toastKey = null)
     {
         if (string.IsNullOrWhiteSpace(_refreshError))
         {
-            Toast.Success(successMessage);
+            Toast.Success(successMessage, key: toastKey ?? ToastKeys.Attendance);
             return;
         }
 
         // The action itself succeeded, but one or more lists failed to refresh. Keep the
         // original combined message so the user knows the views may be stale, and show it
         // as an error (sticky) since they may need to reload.
-        Toast.Error($"{successMessage} Some attendance lists could not be refreshed. {_refreshError}");
+        Toast.Error($"{successMessage} Some attendance lists could not be refreshed. {_refreshError}", key: toastKey ?? ToastKeys.Attendance);
         _refreshError = null;
     }
 
@@ -560,7 +560,7 @@
 
         if (notify)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Attendance);
         }
     }
 
@@ -630,7 +630,7 @@
                 SetActionMessage(successMessage);
             }
         }
-        catch (Exception ex) { Toast.Error(ex.Message); }
+        catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
         finally { _isPunching = false; }
     }
 
@@ -672,9 +672,9 @@
                 await LoadAdminRecordsAsync(notifyOnError: false);
             }
             _correctionReason = string.Empty;
-            SetActionMessage("Correction request submitted.");
+            SetActionMessage("Correction request submitted.", ToastKeys.AttendanceCorrectionSubmit);
         }
-        catch (Exception ex) { Toast.Error(ex.Message); }
+        catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.AttendanceCorrectionSubmit); }
         finally { _isSubmittingCorrection = false; }
     }
 
@@ -730,7 +730,7 @@
             await LoadAnalyticsAsync(notifyOnError: false);
             SetActionMessage("Correction request approved.");
         }
-        catch (Exception ex) { Toast.Error(ex.Message); }
+        catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
     }
 
     private async Task RejectCorrectionAsync(Guid id)
@@ -746,7 +746,7 @@
             await LoadAdminRecordsAsync(notifyOnError: false);
             SetActionMessage("Correction request rejected.");
         }
-        catch (Exception ex) { Toast.Error(ex.Message); }
+        catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
     }
 
     private async Task CancelCorrectionAsync(Guid id)
@@ -763,7 +763,7 @@
             }
             SetActionMessage("Correction request cancelled.");
         }
-        catch (Exception ex) { Toast.Error(ex.Message); }
+        catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
     }
 
     private async Task AdminQuickFixAsync(AttendanceRecordDto record)
@@ -781,7 +781,7 @@
             await LoadAnalyticsAsync(notifyOnError: false);
             SetActionMessage("Attendance record updated.");
         }
-        catch (Exception ex) { Toast.Error(ex.Message); }
+        catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
     }
 
     private void SetTab(AttendanceTab tab)

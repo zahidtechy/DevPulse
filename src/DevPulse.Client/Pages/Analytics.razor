@@ -553,7 +553,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load workspace accounts: {ex.Message}");
+            Toast.Error($"Failed to load workspace accounts: {ex.Message}", key: ToastKeys.Analytics);
         }
         finally
         {
@@ -571,7 +571,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load developers: {ex.Message}");
+            Toast.Error($"Failed to load developers: {ex.Message}", key: ToastKeys.Analytics);
         }
     }
 
@@ -680,12 +680,12 @@
         try
         {
             var result = await AnalyticsApi.RunSyncAsync();
-            Toast.Success(result?.Message ?? "KPI sync completed.");
+            Toast.Success(result?.Message ?? "KPI sync completed.", key: ToastKeys.KpiSync);
             await LoadSyncStatusAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.KpiSync);
         }
         finally
         {
@@ -697,13 +697,13 @@
     {
         if (_fromDate.Date > _toDate.Date)
         {
-            Toast.Warning("From date must be on or before to date.");
+            Toast.Warning("From date must be on or before to date.", key: ToastKeys.Analytics);
             return;
         }
 
         if (!_selectedAccountId.HasValue)
         {
-            Toast.Warning("Select a workspace account first.");
+            Toast.Warning("Select a workspace account first.", key: ToastKeys.Analytics);
             _kpis = null;
             return;
         }
@@ -723,7 +723,7 @@
             {
                 _kpis = null;
                 _previousKpis = null;
-                Toast.Error("No active developers are mapped to the selected workspace account.");
+                Toast.Error("No active developers are mapped to the selected workspace account.", key: ToastKeys.Analytics);
                 return;
             }
 
@@ -755,7 +755,7 @@
             {
                 _kpis = null;
                 _previousKpis = null;
-                Toast.Error("Unable to load analytics from the database. Run a KPI sync first.");
+                Toast.Error("Unable to load analytics from the database. Run a KPI sync first.", key: ToastKeys.Analytics);
                 return;
             }
 
@@ -771,7 +771,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Analytics);
             _kpis = null;
             _previousKpis = null;
             _slaChecks = [];
