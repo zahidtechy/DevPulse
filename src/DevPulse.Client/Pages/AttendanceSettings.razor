@@ -1,6 +1,7 @@
 @page "/attendance-settings"
 @attribute [Authorize(Policy = "AdminOnly")]
 @inject IAttendanceApiClient AttendanceApi
+@inject ToastService Toast
 @implements IDisposable
 
 <PageTitle>@AppBranding.PageTitle("Attendance Settings")</PageTitle>
@@ -15,11 +16,6 @@
             </p>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_isLoading)
     {
@@ -274,8 +270,6 @@
 @code {
     private bool _isLoading = true;
     private bool _isBusy;
-    private bool _isError;
-    private string? _message;
     private TimeOnly _workStart = new(9, 0);
     private TimeOnly _workEnd = new(18, 0);
     private TimeOnly _bufferStart = new(9, 15);
@@ -331,8 +325,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -343,7 +336,6 @@
     private async Task SaveAsync()
     {
         _isBusy = true;
-        _message = null;
         try
         {
             await AttendanceApi.UpdateSettingsAsync(new UpdateAttendanceSettingsRequest(
@@ -356,13 +348,11 @@
                 _timeZoneId,
                 _strictPunchIn,
                 _strictPunchOut));
-            _isError = false;
-            _message = "Attendance settings saved.";
+            Toast.Success("Attendance settings saved.");
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {

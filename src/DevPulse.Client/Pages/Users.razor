@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = AppRoles.Admin)]
 @inject IUserApiClient UserApi
 @inject IDeveloperApiClient DeveloperApi
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("User Management")</PageTitle>
 
@@ -21,11 +22,6 @@
             </button>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_isBusy && !_isLoading && !_showAddForm && !_resetPasswordUserId.HasValue)
     {
@@ -391,7 +387,6 @@
     private bool _showAddForm;
     private bool _isLoading = true;
     private bool _isBusy;
-    private bool _isError;
     private bool _editIsActive = true;
     private bool _createDeveloper;
     private Guid? _editingUserId;
@@ -404,7 +399,6 @@
     private string _resetPasswordConfirm = string.Empty;
     private string _developerSearch = string.Empty;
     private string _selectedDeveloperId = string.Empty;
-    private string? _message;
     private string? _formError;
     private string? _resetPasswordError;
 
@@ -465,8 +459,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -484,8 +477,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
     }
 
@@ -526,7 +518,6 @@
         _selectedDeveloperId = string.Empty;
         _developerSearch = string.Empty;
         _showAddForm = true;
-        _message = null;
         _formError = null;
     }
 
@@ -543,7 +534,6 @@
         _selectedDeveloperId = user.DeveloperId?.ToString() ?? string.Empty;
         _developerSearch = string.Empty;
         _showAddForm = true;
-        _message = null;
         _formError = null;
     }
 
@@ -573,7 +563,6 @@
         _resetPassword = string.Empty;
         _resetPasswordConfirm = string.Empty;
         _resetPasswordError = null;
-        _message = null;
     }
 
     private void HideResetPasswordForm()
@@ -608,13 +597,11 @@
         }
 
         _isBusy = true;
-        _message = null;
 
         try
         {
             await UserApi.ChangePasswordAsync(_resetPasswordUserId.Value, new ChangePasswordRequest(_resetPassword));
-            _isError = false;
-            _message = $"Password reset for {_resetPasswordDisplayName}.";
+            Toast.Success($"Password reset for {_resetPasswordDisplayName}.");
             HideResetPasswordForm();
         }
         catch (Exception ex)
@@ -636,7 +623,6 @@
         }
 
         _isBusy = true;
-        _message = null;
         _formError = null;
 
         try
@@ -651,8 +637,7 @@
                     _editIsActive,
                     developerId,
                     _newUser.TelegramId));
-                _isError = false;
-                _message = "User updated.";
+                Toast.Success("User updated.");
             }
             else
             {
@@ -664,12 +649,11 @@
                     developerId,
                     _createDeveloper,
                     _newUser.TelegramId));
-                _isError = false;
-                _message = _createDeveloper
+                Toast.Success(_createDeveloper
                     ? "User and developer profile created."
                     : developerId.HasValue
                         ? "User created and linked to developer."
-                        : "User created.";
+                        : "User created.");
             }
 
             HideForm();
@@ -694,7 +678,6 @@
 
         _deleteTarget = user;
         _showDeleteConfirm = true;
-        _message = null;
     }
 
     private Task OnDeleteConfirmVisibilityChanged(bool isVisible)
@@ -727,19 +710,16 @@
     private async Task DeleteUserAsync(Guid id)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             await UserApi.DeleteUserAsync(id);
-            _isError = false;
-            _message = "User deleted.";
+            Toast.Success("User deleted.");
             await LoadUsersAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {

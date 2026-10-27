@@ -1,6 +1,7 @@
 @page "/leave-settings"
 @attribute [Authorize(Policy = "AdminOnly")]
 @inject ILeaveApiClient LeaveApi
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("Leave Settings")</PageTitle>
 
@@ -14,11 +15,6 @@
             </p>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_isLoading)
     {
@@ -151,9 +147,7 @@
     private bool _isLoading = true;
     private bool _isBusy;
     private bool _isTesting;
-    private bool _isError;
     private bool _hasToken;
-    private string? _message;
     private string? _botToken;
     private string? _chatId;
     private int _weekendBitmask = 65;
@@ -258,7 +252,6 @@
     private async Task SaveAsync()
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -291,7 +284,6 @@
     private async Task TestTelegramAsync()
     {
         _isTesting = true;
-        _message = null;
 
         try
         {
@@ -311,7 +303,13 @@
 
     private void ShowMessage(string message, bool isError)
     {
-        _message = message;
-        _isError = isError;
+        if (isError)
+        {
+            Toast.Error(message);
+        }
+        else
+        {
+            Toast.Success(message);
+        }
     }
 }

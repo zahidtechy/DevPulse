@@ -6,6 +6,7 @@
 @inject IReportApiClient ReportApi
 @inject IAnalyticsApiClient AnalyticsApi
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("Developer Reports")</PageTitle>
 
@@ -19,11 +20,6 @@
             </p>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     <div class="reports-workspace">
         <div class="filter-card card reports-toolbar">
@@ -629,8 +625,6 @@
     private bool _isBusy;
     private bool _isSyncing;
     private bool _isExporting;
-    private bool _isError;
-    private string? _message;
     private string _developerSearch = string.Empty;
     private string _taskSearch = string.Empty;
     private IJSObjectReference? _fileDownloadModule;
@@ -776,19 +770,16 @@
     private async Task RunSyncAsync()
     {
         _isSyncing = true;
-        _message = null;
 
         try
         {
             var result = await AnalyticsApi.RunSyncAsync();
-            _isError = false;
-            _message = result?.Message ?? "Report data synced.";
+            Toast.Success(result?.Message ?? "Report data synced.");
             await LoadSyncStatusAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -815,8 +806,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = $"Failed to load accounts: {ex.Message}";
+            Toast.Error($"Failed to load accounts: {ex.Message}");
         }
         finally
         {
@@ -836,8 +826,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = $"Failed to load developers: {ex.Message}";
+            Toast.Error($"Failed to load developers: {ex.Message}");
         }
         finally
         {
@@ -924,8 +913,7 @@
     {
         if (_selectedDeveloperIds.Count == 0)
         {
-            _isError = true;
-            _message = "Select at least one developer.";
+            Toast.Warning("Select at least one developer.");
             return;
         }
 
@@ -934,13 +922,11 @@
 
         if (fromDate > toDate)
         {
-            _isError = true;
-            _message = "From date must be on or before to date.";
+            Toast.Warning("From date must be on or before to date.");
             return;
         }
 
         _isBusy = true;
-        _message = null;
         _report = null;
         _taskSearch = string.Empty;
 
@@ -958,13 +944,11 @@
                 accountIds);
 
             _report = await ReportApi.GenerateDeveloperReportAsync(request);
-            _isError = false;
-            _message = $"Report generated for {FormatPeriod(fromDate, toDate)}.";
+            Toast.Success($"Report generated for {FormatPeriod(fromDate, toDate)}.");
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -980,7 +964,6 @@
         }
 
         _isExporting = true;
-        _message = null;
 
         try
         {
@@ -990,13 +973,11 @@
             var base64 = Convert.ToBase64String(fileBytes);
             var module = await GetFileDownloadModuleAsync();
             await module.InvokeVoidAsync("downloadFromBytes", fileName, contentType, base64);
-            _isError = false;
-            _message = "Report exported to Excel.";
+            Toast.Success("Report exported to Excel.");
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
