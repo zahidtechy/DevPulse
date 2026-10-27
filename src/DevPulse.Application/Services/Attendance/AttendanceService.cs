@@ -49,7 +49,7 @@ public sealed class AttendanceService : IAttendanceService
         var canPunchIn = nextAction != AttendanceNextActionDto.PunchIn
             || _statusCalculator.CanPunchInNow(settings, timeZone, nowUtc);
         var canPunchOut = nextAction != AttendanceNextActionDto.PunchOut
-            || _statusCalculator.CanPunchOutNow(settings, timeZone, nowUtc);
+            || _statusCalculator.CanPunchOutNow(settings, timeZone, nowUtc, record);
 
         return new AttendanceMeDto(
             developer.Id,
@@ -61,8 +61,9 @@ public sealed class AttendanceService : IAttendanceService
             canPunchIn,
             canPunchOut,
             _statusCalculator.GetPunchInEarliestTime(settings),
-            _statusCalculator.GetPunchOutEarliestTime(settings),
-            _statusCalculator.GetPunchOutLatestTime(settings));
+            _statusCalculator.GetPunchOutEarliestTime(settings, record, timeZone),
+            _statusCalculator.GetPunchOutLatestTime(settings),
+            _statusCalculator.GetPunchInLatestTime(settings));
     }
 
     public async Task<Result<AttendancePunchResultDto>> PunchAsync(string userEmail, CancellationToken cancellationToken = default)
@@ -96,8 +97,9 @@ public sealed class AttendanceService : IAttendanceService
             if (!_statusCalculator.CanPunchInNow(settings, timeZone, nowUtc))
             {
                 var earliest = _statusCalculator.GetPunchInEarliestTime(settings);
+                var latest = _statusCalculator.GetPunchInLatestTime(settings);
                 return Result<AttendancePunchResultDto>.Failure(
-                    $"Punch in is available from {earliest:HH:mm} until {settings.WorkEndTime:HH:mm} office time.");
+                    $"Punch in is available from {earliest:HH:mm} until {latest:HH:mm} office time.");
             }
 
             record = new AttendanceRecord
@@ -112,12 +114,13 @@ public sealed class AttendanceService : IAttendanceService
         }
         else if (nextAction == AttendanceNextActionDto.PunchOut)
         {
-            if (!_statusCalculator.CanPunchOutNow(settings, timeZone, nowUtc))
+            if (!_statusCalculator.CanPunchOutNow(settings, timeZone, nowUtc, record))
             {
-                var earliest = _statusCalculator.GetPunchOutEarliestTime(settings);
+                var earliest = _statusCalculator.GetPunchOutEarliestTime(settings, record, timeZone);
                 var latest = _statusCalculator.GetPunchOutLatestTime(settings);
+                var earliestLabel = earliest?.ToString("HH:mm") ?? "punch in";
                 return Result<AttendancePunchResultDto>.Failure(
-                    $"Punch out is available after {earliest:HH:mm} until {latest:HH:mm} office time.");
+                    $"Punch out is available after {earliestLabel} until {latest:HH:mm} office time.");
             }
 
             record.PunchOutUtc = nowUtc;
@@ -170,6 +173,8 @@ public sealed class AttendanceService : IAttendanceService
         settings.BufferEndTime = request.BufferEndTime;
         settings.PunchInAllowMinutesBeforeWorkStart = request.PunchInAllowMinutesBeforeWorkStart;
         settings.PunchOutAllowMinutesAfterWorkEnd = request.PunchOutAllowMinutesAfterWorkEnd;
+        settings.StrictPunchIn = request.StrictPunchIn;
+        settings.StrictPunchOut = request.StrictPunchOut;
         settings.OfficeTimeZoneId = request.OfficeTimeZoneId.Trim();
         settings.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -565,7 +570,7 @@ public sealed class AttendanceService : IAttendanceService
     private AttendanceRecordDto MapRecord(AttendanceRecord record, AttendanceSettings settings, TimeZoneInfo timeZone)
     {
         var status = _statusCalculator.ComputeStatus(record, settings, timeZone);
-        var workHours = _statusCalculator.ComputeWorkHours(record, settings, timeZone);
+        var workHours = _statusCalculator.ComputeWorkHours(record);
         var developerName = record.Developer?.Name ?? string.Empty;
 
         return new AttendanceRecordDto(
@@ -590,7 +595,9 @@ public sealed class AttendanceService : IAttendanceService
             settings.PunchInAllowMinutesBeforeWorkStart,
             settings.PunchOutAllowMinutesAfterWorkEnd,
             settings.OfficeTimeZoneId,
-            settings.UpdatedAtUtc);
+            settings.UpdatedAtUtc,
+            settings.StrictPunchIn,
+            settings.StrictPunchOut);
 
     private static AttendanceCorrectionRequestDto MapCorrectionRequest(AttendanceCorrectionRequest request) =>
         new(
@@ -634,6 +641,11 @@ public sealed class AttendanceService : IAttendanceService
         if (request.BufferEndTime < request.WorkStartTime || request.BufferEndTime > request.WorkEndTime)
         {
             return Result.Failure("Buffer end time must be between work start and work end.");
+        }
+
+        if (request.BufferEndTime < request.BufferStartTime)
+        {
+            return Result.Failure("Buffer end time must be after buffer start time.");
         }
 
         if (request.PunchInAllowMinutesBeforeWorkStart < 0 || request.PunchInAllowMinutesBeforeWorkStart > 12 * 60)

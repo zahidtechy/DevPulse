@@ -38,6 +38,8 @@ public sealed class AttendanceRepository : IAttendanceRepository
             existing.BufferEndTime = settings.BufferEndTime;
             existing.PunchInAllowMinutesBeforeWorkStart = settings.PunchInAllowMinutesBeforeWorkStart;
             existing.PunchOutAllowMinutesAfterWorkEnd = settings.PunchOutAllowMinutesAfterWorkEnd;
+            existing.StrictPunchIn = settings.StrictPunchIn;
+            existing.StrictPunchOut = settings.StrictPunchOut;
             existing.OfficeTimeZoneId = settings.OfficeTimeZoneId;
             existing.UpdatedAtUtc = settings.UpdatedAtUtc;
         }

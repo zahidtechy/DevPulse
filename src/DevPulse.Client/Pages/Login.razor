@@ -29,7 +29,10 @@
                 </div>
                 <div class="mb-4">
                     <label class="form-label" for="password">Password</label>
-                    <InputText id="password" type="password" class="form-control" @bind-Value="_model.Password" autocomplete="current-password" />
+                    <PasswordInput id="password"
+                                   name="password"
+                                   @bind-Value="_model.Password"
+                                   autocomplete="current-password" />
                 </div>
                 <button class="btn btn-primary w-100" disabled="@_isBusy" type="submit">
                     <span class="btn-busy-content">

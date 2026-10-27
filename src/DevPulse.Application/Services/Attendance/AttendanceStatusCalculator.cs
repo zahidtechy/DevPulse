@@ -43,35 +43,19 @@ public sealed class AttendanceStatusCalculator
         return AttendanceDayStatusDto.OnTime;
     }
 
-    public decimal? ComputeWorkHours(
-        AttendanceRecord record,
-        AttendanceSettings settings,
-        TimeZoneInfo timeZone)
+    public decimal? ComputeWorkHours(AttendanceRecord record)
     {
         if (!record.PunchInUtc.HasValue || !record.PunchOutUtc.HasValue)
         {
             return null;
         }
 
-        var punchInLocal = TimeZoneInfo.ConvertTimeFromUtc(record.PunchInUtc.Value, timeZone);
-        var punchOutLocal = TimeZoneInfo.ConvertTimeFromUtc(record.PunchOutUtc.Value, timeZone);
-        var punchInTime = TimeOnly.FromDateTime(punchInLocal);
-        var punchOutTime = TimeOnly.FromDateTime(punchOutLocal);
-
-        var effectiveIn = punchInTime <= settings.BufferStartTime
-            ? settings.WorkStartTime
-            : punchInTime;
-
-        var effectiveOut = punchOutTime >= settings.BufferEndTime
-            ? settings.WorkEndTime
-            : punchOutTime;
-
-        if (effectiveOut <= effectiveIn)
+        var duration = record.PunchOutUtc.Value - record.PunchInUtc.Value;
+        if (duration <= TimeSpan.Zero)
         {
             return null;
         }
 
-        var duration = effectiveOut.ToTimeSpan() - effectiveIn.ToTimeSpan();
         return Math.Round((decimal)duration.TotalHours, 2);
     }
 
@@ -110,8 +94,27 @@ public sealed class AttendanceStatusCalculator
     public TimeOnly GetPunchInEarliestTime(AttendanceSettings settings) =>
         SubtractMinutes(settings.WorkStartTime, settings.PunchInAllowMinutesBeforeWorkStart);
 
-    public TimeOnly GetPunchOutEarliestTime(AttendanceSettings settings) =>
-        settings.WorkEndTime;
+    public TimeOnly GetPunchInLatestTime(AttendanceSettings settings) =>
+        settings.StrictPunchIn ? settings.BufferStartTime : settings.WorkEndTime;
+
+    public TimeOnly? GetPunchOutEarliestTime(
+        AttendanceSettings settings,
+        AttendanceRecord? record,
+        TimeZoneInfo timeZone)
+    {
+        if (settings.StrictPunchOut)
+        {
+            return settings.BufferEndTime;
+        }
+
+        if (record?.PunchInUtc is null)
+        {
+            return null;
+        }
+
+        var punchInLocal = TimeZoneInfo.ConvertTimeFromUtc(record.PunchInUtc.Value, timeZone);
+        return TimeOnly.FromDateTime(punchInLocal);
+    }
 
     public TimeOnly GetPunchOutLatestTime(AttendanceSettings settings) =>
         AddMinutes(settings.WorkEndTime, settings.PunchOutAllowMinutesAfterWorkEnd);
@@ -121,15 +124,25 @@ public sealed class AttendanceStatusCalculator
         var localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, timeZone);
         var currentTime = TimeOnly.FromDateTime(localNow);
         var earliest = GetPunchInEarliestTime(settings);
-        return currentTime >= earliest && currentTime <= settings.WorkEndTime;
+        return currentTime >= earliest && currentTime <= GetPunchInLatestTime(settings);
     }
 
-    public bool CanPunchOutNow(AttendanceSettings settings, TimeZoneInfo timeZone, DateTime utcNow)
+    public bool CanPunchOutNow(
+        AttendanceSettings settings,
+        TimeZoneInfo timeZone,
+        DateTime utcNow,
+        AttendanceRecord? record)
     {
         var localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, timeZone);
         var currentTime = TimeOnly.FromDateTime(localNow);
-        return currentTime >= GetPunchOutEarliestTime(settings)
-            && currentTime <= GetPunchOutLatestTime(settings);
+        var earliest = GetPunchOutEarliestTime(settings, record, timeZone);
+
+        if (earliest.HasValue && currentTime < earliest.Value)
+        {
+            return false;
+        }
+
+        return currentTime <= GetPunchOutLatestTime(settings);
     }
 
     public static bool IsWeekend(DateOnly date, int weekendDaysBitmask)
