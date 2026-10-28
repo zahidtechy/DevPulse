@@ -384,6 +384,13 @@ public sealed class AttendanceService : IAttendanceService
         return requests.Select(MapCorrectionRequest).ToList();
     }
 
+    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var requests = await _attendanceRepository.GetCorrectionRequestsAsync(cancellationToken);
+        return requests.Select(MapCorrectionRequest).ToList();
+    }
+
     public async Task<Result<AttendanceCorrectionRequestDto>> ApproveCorrectionRequestAsync(
         Guid requestId,
         Guid adminUserId,

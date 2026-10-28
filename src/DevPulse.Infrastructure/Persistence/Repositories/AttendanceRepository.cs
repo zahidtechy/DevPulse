@@ -131,6 +131,14 @@ public sealed class AttendanceRepository : IAttendanceRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<AttendanceCorrectionRequest>> GetCorrectionRequestsAsync(
+        CancellationToken cancellationToken = default) =>
+        await QueryCorrectionRequests()
+            .OrderBy(x => x.Status == AttendanceCorrectionStatus.Pending ? 0 : 1)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
     public async Task AddCorrectionRequestAsync(AttendanceCorrectionRequest request, CancellationToken cancellationToken = default)
     {
         _dbContext.AttendanceCorrectionRequests.Add(request);

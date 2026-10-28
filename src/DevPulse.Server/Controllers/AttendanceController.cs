@@ -118,6 +118,15 @@ public sealed class AttendanceController : ControllerBase
         return Ok(requests);
     }
 
+    [HttpGet("correction-requests/all")]
+    [Authorize(Policy = "AdminOnly")]
+    [ProducesResponseType(typeof(IReadOnlyList<AttendanceCorrectionRequestDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetCorrectionRequests(CancellationToken cancellationToken)
+    {
+        var requests = await _attendanceService.GetCorrectionRequestsAsync(cancellationToken);
+        return Ok(requests);
+    }
+
     [HttpPost("correction-requests/{id:guid}/approve")]
     [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(AttendanceCorrectionRequestDto), StatusCodes.Status200OK)]

@@ -3,7 +3,7 @@
     <div class="attendance-empty-state">
         <div class="attendance-empty-icon" aria-hidden="true"></div>
         <h5>No correction requests</h5>
-        <p class="text-muted mb-0">@(AllowReview ? "There are no pending requests to review." : "You have not submitted any correction requests yet.")</p>
+        <p class="text-muted mb-0">@(AllowReview ? "There are no correction requests matching the current filters." : "You have not submitted any correction requests yet.")</p>
     </div>
 }
 else
@@ -32,15 +32,19 @@ else
                         <td class="attendance-reason-cell">@request.Reason</td>
                         <td><span class="attendance-badge @GetCorrectionStatusClass(request.Status)">@FormatCorrectionStatus(request.Status)</span></td>
                         <td class="attendance-table-actions">
-                            @if (AllowCancel && request.Status == AttendanceCorrectionStatusDto.Pending)
-                            {
-                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnCancel.InvokeAsync(request.Id)">Cancel</button>
-                            }
-                            @if (AllowReview && request.Status == AttendanceCorrectionStatusDto.Pending)
-                            {
-                                <button type="button" class="btn btn-sm btn-success me-1" @onclick="() => OnApprove.InvokeAsync(request.Id)">Approve</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnReject.InvokeAsync(request.Id)">Reject</button>
-                            }
+                            <div class="attendance-row-actions">
+                                @if (AllowCancel
+                                     && request.Status == AttendanceCorrectionStatusDto.Pending
+                                     && (!CancelOwnOnly || request.DeveloperId == CurrentDeveloperId))
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnCancel.InvokeAsync(request.Id)">Cancel</button>
+                                }
+                                @if (AllowReview && request.Status == AttendanceCorrectionStatusDto.Pending)
+                                {
+                                    <button type="button" class="btn btn-sm btn-success" @onclick="() => OnApprove.InvokeAsync(request.Id)">Approve</button>
+                                    <button type="button" class="btn btn-sm btn-danger" @onclick="() => OnReject.InvokeAsync(request.Id)">Reject</button>
+                                }
+                            </div>
                         </td>
                     </tr>
                 }
@@ -55,6 +59,12 @@ else
 
     [Parameter]
     public bool AllowCancel { get; set; }
+
+    [Parameter]
+    public bool CancelOwnOnly { get; set; }
+
+    [Parameter]
+    public Guid? CurrentDeveloperId { get; set; }
 
     [Parameter]
     public bool AllowReview { get; set; }

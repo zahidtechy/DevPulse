@@ -3404,6 +3404,16 @@ button.holiday-day:hover {
     color: #991b1b;
 }
 
+.leave-tab-count-user {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.period-chip.active .leave-tab-count-user {
+    background: #bfdbfe;
+    color: #1e40af;
+}
+
 .leave-notice {
     background: var(--dp-surface);
     border: 1px solid var(--dp-border);
@@ -5476,6 +5486,15 @@ button.holiday-day:hover {
     grid-template-columns: minmax(7rem, 1fr) minmax(7rem, 1fr) minmax(10rem, 2fr) auto;
 }
 
+.attendance-corrections-filter-row {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+}
+
+.attendance-corrections-filter-row-user {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
 .attendance-filter-field {
     min-width: 0;
 }
@@ -5522,6 +5541,45 @@ button.holiday-day:hover {
 .attendance-correction-actions {
     grid-column: 1 / -1;
 }
+
+/* Unified corrections tab */
+.attendance-corrections-panel {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.attendance-corrections-card {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.attendance-corrections-card .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    min-height: 0;
+}
+
+.attendance-corrections-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.attendance-corrections-filter-chips {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
 
 .attendance-side-card {
     background: var(--dp-surface);
@@ -5598,7 +5656,7 @@ button.holiday-day:hover {
 
 .attendance-correction-scroll .attendance-table {
     min-width: 42rem;
-    width: max-content;
+    width: 100%;
 }
 
 /* Section headers */
@@ -5718,6 +5776,13 @@ button.holiday-day:hover {
 .attendance-table-actions {
     white-space: nowrap;
     text-align: right;
+}
+
+.attendance-row-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
 }
 
 /* Empty state */

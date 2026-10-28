@@ -42,6 +42,9 @@ public interface IAttendanceRepository
     Task<IReadOnlyList<AttendanceCorrectionRequest>> GetPendingCorrectionRequestsAsync(
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<AttendanceCorrectionRequest>> GetCorrectionRequestsAsync(
+        CancellationToken cancellationToken = default);
+
     Task AddCorrectionRequestAsync(AttendanceCorrectionRequest request, CancellationToken cancellationToken = default);
 
     Task UpdateCorrectionRequestAsync(AttendanceCorrectionRequest request, CancellationToken cancellationToken = default);
