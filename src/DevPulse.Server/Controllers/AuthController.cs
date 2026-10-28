@@ -27,28 +27,18 @@ public sealed class AuthController : ControllerBase
         }
 
         var login = result.Value;
-        var claims = new List<Claim>
-        {
-            new(ClaimTypes.NameIdentifier, login.User.Id.ToString()),
-            new(ClaimTypes.Email, login.User.Email),
-            new(ClaimTypes.Name, login.User.DisplayName),
-            new(ClaimTypes.Role, login.User.Role)
-        };
-
-        var identity = new ClaimsIdentity(claims, IdentityConstants.ApplicationScheme);
-        var principal = new ClaimsPrincipal(identity);
         var authProperties = new AuthenticationProperties
         {
             IsPersistent = true,
-            ExpiresUtc = login.ExpiresAtUtc
+            ExpiresUtc = login.Response.ExpiresAtUtc
         };
 
         await HttpContext.SignInAsync(
             IdentityConstants.ApplicationScheme,
-            principal,
+            login.Principal,
             authProperties);
 
-        return Ok(login);
+        return Ok(login.Response);
     }
 
     [Authorize]
@@ -73,7 +63,9 @@ public sealed class AuthController : ControllerBase
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var email = User.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
-        var displayName = User.FindFirstValue(ClaimTypes.Name) ?? email;
+        var displayName = User.FindFirstValue(DevPulseClaimTypes.DisplayName)
+            ?? User.FindFirstValue(ClaimTypes.Name)
+            ?? email;
         var role = User.FindFirstValue(ClaimTypes.Role) ?? AppRoles.User;
 
         if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var id))
