@@ -5785,6 +5785,88 @@ button.holiday-day:hover {
     gap: 0.4rem;
 }
 
+/* Correction details modal */
+.attendance-details-grid {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+}
+
+.attendance-details-grid > div {
+    display: grid;
+    grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0.15rem 1rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--dp-border);
+}
+
+.attendance-details-grid > div:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.attendance-details-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--dp-text-secondary);
+}
+
+/* Status badges sit in the value column, so don't let them stretch to fill it
+   and don't inherit the inline margin-left meant for inline badge placement. */
+.attendance-details-grid .attendance-badge {
+    justify-self: start;
+    margin-left: 0;
+}
+
+@media (max-width: 575.98px) {
+    .attendance-details-grid > div,
+    .attendance-details-reason {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.attendance-details-value {
+    color: var(--dp-text);
+    font-weight: 600;
+}
+
+/* Reason / reviewer comment use the same label-left, value-right layout
+   as the rows above instead of stacking the value underneath the label. */
+.attendance-details-reason {
+    display: grid;
+    grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0.15rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.attendance-details-reason p {
+    margin-bottom: 0;
+    color: var(--dp-text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.attendance-details-actions {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+}
+
+.attendance-details-actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.attendance-details-actions .btn {
+    width: 100%;
+}
+
 /* Empty state */
 .attendance-empty-state {
     text-align: center;
@@ -8318,6 +8400,7 @@ body.dp-modal-open {
 .dp-modal-body {
     padding: 1.15rem 1.35rem;
     overflow-y: auto;
+    min-height: 0;
 }
 
 .dp-modal-footer {

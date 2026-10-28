@@ -265,6 +265,7 @@
                                                                 CurrentDeveloperId="_me.DeveloperId"
                                                                 AllowReview="_isAdmin"
                                                                 OfficeTimeZoneId="_me.OfficeTimeZoneId"
+                                                                OnDetails="OpenDetails"
                                                                 OnCancel="CancelCorrectionAsync"
                                                                 OnApprove="id => OpenReviewModal(id, true)"
                                                                 OnReject="id => OpenReviewModal(id, false)" />
@@ -408,6 +409,73 @@
             </BusyButton>
         </FooterContent>
     </ModalDialog>
+
+    <ModalDialog IsVisible="_showDetailsModal"
+                 Title="Correction details"
+                 OnClose="CloseDetails">
+        <ChildContent>
+            @if (GetDetailsCorrection() is { } details)
+            {
+                <div class="attendance-details-grid">
+                    <div>
+                        <span class="attendance-details-label">Developer</span>
+                        <span class="attendance-details-value">@details.DeveloperName</span>
+                    </div>
+                    <div>
+                        <span class="attendance-details-label">Date</span>
+                        <span class="attendance-details-value">@details.WorkDate.ToString("ddd, MMM d, yyyy")</span>
+                    </div>
+                    <div>
+                        <span class="attendance-details-label">Requested punch in</span>
+                        <span class="attendance-details-value">@FormatTimeOnly(details.RequestedPunchInUtc)</span>
+                    </div>
+                    <div>
+                        <span class="attendance-details-label">Requested punch out</span>
+                        <span class="attendance-details-value">@FormatTimeOnly(details.RequestedPunchOutUtc)</span>
+                    </div>
+                    <div>
+                        <span class="attendance-details-label">Status</span>
+                        <span class="attendance-badge @GetCorrectionStatusClass(details.Status)">@FormatCorrectionStatus(details.Status)</span>
+                    </div>
+                    <div>
+                        <span class="attendance-details-label">Submitted</span>
+                        <span class="attendance-details-value">@FormatUtcDateTime(details.CreatedAtUtc)</span>
+                    </div>
+                </div>
+
+                <div class="attendance-details-reason">
+                    <span class="attendance-details-label">Reason</span>
+                    <p class="mb-0">@details.Reason</p>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(details.ReviewerComment))
+                {
+                    <div class="attendance-details-reason">
+                        <span class="attendance-details-label">Reviewer comment</span>
+                        <p class="mb-0">@details.ReviewerComment</p>
+                    </div>
+                }
+
+                @if (details.Status == AttendanceCorrectionStatusDto.Pending
+                     && (CanCancelCorrection(details) || _isAdmin))
+                {
+                    <div class="attendance-details-actions">
+                        @if (CanCancelCorrection(details))
+                        {
+                            <button type="button" class="btn btn-outline-danger" @onclick="() => CancelFromDetailsAsync(details.Id)">Cancel request</button>
+                        }
+                        @if (_isAdmin)
+                        {
+                            <div class="attendance-details-actions-row">
+                                <button type="button" class="btn btn-success" @onclick="() => ReviewFromDetails(details.Id, true)">Approve</button>
+                                <button type="button" class="btn btn-danger" @onclick="() => ReviewFromDetails(details.Id, false)">Reject</button>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </ChildContent>
+    </ModalDialog>
 </div>
 
 @code {
@@ -438,6 +506,8 @@
     private string _maxCorrectionDate = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
     private string _minCorrectionDate = DateOnly.FromDateTime(DateTime.Today).AddDays(-30).ToString("yyyy-MM-dd");
     private bool _showCorrectionModal;
+    private bool _showDetailsModal;
+    private Guid? _detailsCorrectionId;
     private bool _showReviewModal;
     private bool _isReviewingCorrection;
     private bool _reviewIsApprove;
@@ -856,6 +926,55 @@
         finally { _isAdminLoading = false; }
     }
 
+    private void OpenDetails(Guid id)
+    {
+        _detailsCorrectionId = id;
+        _showDetailsModal = true;
+    }
+
+    private void CloseDetails()
+    {
+        _showDetailsModal = false;
+        _detailsCorrectionId = null;
+    }
+
+    private AttendanceCorrectionRequestDto? GetDetailsCorrection() =>
+        _detailsCorrectionId is null
+            ? null
+            : _corrections.FirstOrDefault(r => r.Id == _detailsCorrectionId.Value);
+
+    private bool CanCancelCorrection(AttendanceCorrectionRequestDto request) =>
+        request.Status == AttendanceCorrectionStatusDto.Pending
+        && (!_isAdmin || request.DeveloperId == _me.DeveloperId);
+
+    private async Task CancelFromDetailsAsync(Guid id)
+    {
+        CloseDetails();
+        await CancelCorrectionAsync(id);
+    }
+
+    private void ReviewFromDetails(Guid id, bool approve)
+    {
+        CloseDetails();
+        OpenReviewModal(id, approve);
+    }
+
+    private static string FormatCorrectionStatus(AttendanceCorrectionStatusDto status) => status switch
+    {
+        AttendanceCorrectionStatusDto.Pending => "Pending",
+        AttendanceCorrectionStatusDto.Approved => "Approved",
+        AttendanceCorrectionStatusDto.Rejected => "Rejected",
+        _ => status.ToString()
+    };
+
+    private static string GetCorrectionStatusClass(AttendanceCorrectionStatusDto status) => status switch
+    {
+        AttendanceCorrectionStatusDto.Pending => "pending",
+        AttendanceCorrectionStatusDto.Approved => "on-time",
+        AttendanceCorrectionStatusDto.Rejected => "incomplete",
+        _ => string.Empty
+    };
+
     private void OpenReviewModal(Guid id, bool approve)
     {
         _reviewCorrectionId = id;
@@ -1052,15 +1171,17 @@
         catch { return date.ToDateTime(time).ToUniversalTime(); }
     }
 
-    private string FormatUtc(DateTime? utc)
+    // Same date format as the Date column, plus the submit time.
+    private string FormatUtcDateTime(DateTime? utc)
     {
+        const string format = "ddd, MMM d, yyyy · h:mm tt";
         if (!utc.HasValue) return "—";
         try
         {
             var tz = TimeZoneInfo.FindSystemTimeZoneById(_me.OfficeTimeZoneId);
-            return TimeZoneInfo.ConvertTimeFromUtc(utc.Value, tz).ToString("g");
+            return TimeZoneInfo.ConvertTimeFromUtc(utc.Value, tz).ToString(format);
         }
-        catch { return utc.Value.ToLocalTime().ToString("g"); }
+        catch { return utc.Value.ToLocalTime().ToString(format); }
     }
 
     private string FormatTimeOnly(DateTime? utc)

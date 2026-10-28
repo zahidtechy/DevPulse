@@ -29,10 +29,11 @@ else
                         <td class="attendance-date-cell">@request.WorkDate.ToString("MMM d, yyyy")</td>
                         <td><span class="attendance-punch-time">@FormatUtc(request.RequestedPunchInUtc)</span></td>
                         <td><span class="attendance-punch-time">@FormatUtc(request.RequestedPunchOutUtc)</span></td>
-                        <td class="attendance-reason-cell">@request.Reason</td>
+                        <td class="attendance-reason-cell" title="@request.Reason">@TruncateReason(request.Reason)</td>
                         <td><span class="attendance-badge @GetCorrectionStatusClass(request.Status)">@FormatCorrectionStatus(request.Status)</span></td>
                         <td class="attendance-table-actions">
                             <div class="attendance-row-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OnDetails.InvokeAsync(request.Id)">Details</button>
                                 @if (AllowCancel
                                      && request.Status == AttendanceCorrectionStatusDto.Pending
                                      && (!CancelOwnOnly || request.DeveloperId == CurrentDeveloperId))
@@ -73,6 +74,9 @@ else
     public string OfficeTimeZoneId { get; set; } = "Asia/Dhaka";
 
     [Parameter]
+    public EventCallback<Guid> OnDetails { get; set; }
+
+    [Parameter]
     public EventCallback<Guid> OnCancel { get; set; }
 
     [Parameter]
@@ -80,6 +84,23 @@ else
 
     [Parameter]
     public EventCallback<Guid> OnReject { get; set; }
+
+    // Keep the reason column compact; the full text is available on hover (title)
+    // and in the row's details modal.
+    private const int ReasonPreviewLength = 30;
+
+    private static string TruncateReason(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return "—";
+        }
+
+        var trimmed = reason.Trim();
+        return trimmed.Length <= ReasonPreviewLength
+            ? trimmed
+            : $"{trimmed[..ReasonPreviewLength].TrimEnd()}…";
+    }
 
     private string FormatUtc(DateTime? utc)
     {
