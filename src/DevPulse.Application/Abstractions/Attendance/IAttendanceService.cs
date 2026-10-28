@@ -43,9 +43,6 @@ public interface IAttendanceService
         Guid requestId,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetPendingCorrectionRequestsAsync(
-        CancellationToken cancellationToken = default);
-
     Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(
         CancellationToken cancellationToken = default);
 

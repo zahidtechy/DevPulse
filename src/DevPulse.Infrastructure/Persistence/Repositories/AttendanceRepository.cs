@@ -113,21 +113,15 @@ public sealed class AttendanceRepository : IAttendanceRepository
                      && x.Status == AttendanceCorrectionStatus.Pending,
                 cancellationToken);
 
+    // Correction requests are always listed pending-first, newest first. Both read paths
+    // apply this here so callers don't have to re-sort.
     public async Task<IReadOnlyList<AttendanceCorrectionRequest>> GetCorrectionRequestsByDeveloperAsync(
         Guid developerId,
         CancellationToken cancellationToken = default) =>
         await QueryCorrectionRequests()
             .Where(x => x.DeveloperId == developerId)
-            .OrderByDescending(x => x.CreatedAtUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-    public async Task<IReadOnlyList<AttendanceCorrectionRequest>> GetPendingCorrectionRequestsAsync(
-        CancellationToken cancellationToken = default) =>
-        await QueryCorrectionRequests()
-            .Where(x => x.Status == AttendanceCorrectionStatus.Pending)
-            .OrderBy(x => x.WorkDate)
-            .ThenBy(x => x.Developer!.Name)
+            .OrderBy(x => x.Status == AttendanceCorrectionStatus.Pending ? 0 : 1)
+            .ThenByDescending(x => x.CreatedAtUtc)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 

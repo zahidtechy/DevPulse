@@ -377,13 +377,6 @@ public sealed class AttendanceService : IAttendanceService
         return Result.Success();
     }
 
-    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetPendingCorrectionRequestsAsync(
-        CancellationToken cancellationToken = default)
-    {
-        var requests = await _attendanceRepository.GetPendingCorrectionRequestsAsync(cancellationToken);
-        return requests.Select(MapCorrectionRequest).ToList();
-    }
-
     public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(
         CancellationToken cancellationToken = default)
     {

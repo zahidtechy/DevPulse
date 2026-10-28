@@ -143,7 +143,7 @@
                                         <div class="attendance-time-tile @(_me.TodayRecord?.PunchInUtc is not null ? "filled" : null)">
                                             <span class="attendance-time-tile-icon bi-box-arrow-in-right" aria-hidden="true"></span>
                                             <span class="attendance-time-label">Punch in</span>
-                                            <strong class="attendance-time-value">@FormatTimeOnly(_me.TodayRecord?.PunchInUtc)</strong>
+                                            <strong class="attendance-time-value">@AttendanceFormatter.FormatTime(_me.TodayRecord?.PunchInUtc, _me.OfficeTimeZoneId)</strong>
                                             @if (_me.TodayRecord?.PunchInIsCorrected == true)
                                             {
                                                 <span class="attendance-badge corrected">Corrected</span>
@@ -152,7 +152,7 @@
                                         <div class="attendance-time-tile @(_me.TodayRecord?.PunchOutUtc is not null ? "filled" : null)">
                                             <span class="attendance-time-tile-icon bi-box-arrow-right" aria-hidden="true"></span>
                                             <span class="attendance-time-label">Punch out</span>
-                                            <strong class="attendance-time-value">@FormatTimeOnly(_me.TodayRecord?.PunchOutUtc)</strong>
+                                            <strong class="attendance-time-value">@AttendanceFormatter.FormatTime(_me.TodayRecord?.PunchOutUtc, _me.OfficeTimeZoneId)</strong>
                                             @if (_me.TodayRecord?.PunchOutIsCorrected == true)
                                             {
                                                 <span class="attendance-badge corrected">Corrected</span>
@@ -260,9 +260,7 @@
 
                                 <div class="attendance-table-scroll attendance-correction-scroll">
                                     <AttendanceCorrectionsTable Requests="GetFilteredCorrections()"
-                                                                AllowCancel="true"
-                                                                CancelOwnOnly="_isAdmin"
-                                                                CurrentDeveloperId="_me.DeveloperId"
+                                                                CanCancel="CanCancelCorrection"
                                                                 AllowReview="_isAdmin"
                                                                 OfficeTimeZoneId="_me.OfficeTimeZoneId"
                                                                 OnDetails="OpenDetails"
@@ -427,19 +425,19 @@
                     </div>
                     <div>
                         <span class="attendance-details-label">Requested punch in</span>
-                        <span class="attendance-details-value">@FormatTimeOnly(details.RequestedPunchInUtc)</span>
+                        <span class="attendance-details-value">@AttendanceFormatter.FormatTime(details.RequestedPunchInUtc, _me.OfficeTimeZoneId)</span>
                     </div>
                     <div>
                         <span class="attendance-details-label">Requested punch out</span>
-                        <span class="attendance-details-value">@FormatTimeOnly(details.RequestedPunchOutUtc)</span>
+                        <span class="attendance-details-value">@AttendanceFormatter.FormatTime(details.RequestedPunchOutUtc, _me.OfficeTimeZoneId)</span>
                     </div>
                     <div>
                         <span class="attendance-details-label">Status</span>
-                        <span class="attendance-badge @GetCorrectionStatusClass(details.Status)">@FormatCorrectionStatus(details.Status)</span>
+                        <span class="attendance-badge @AttendanceFormatter.CorrectionStatusClass(details.Status)">@AttendanceFormatter.CorrectionStatusLabel(details.Status)</span>
                     </div>
                     <div>
                         <span class="attendance-details-label">Submitted</span>
-                        <span class="attendance-details-value">@FormatUtcDateTime(details.CreatedAtUtc)</span>
+                        <span class="attendance-details-value">@AttendanceFormatter.FormatDateTime(details.CreatedAtUtc, _me.OfficeTimeZoneId)</span>
                     </div>
                 </div>
 
@@ -456,15 +454,14 @@
                     </div>
                 }
 
-                @if (details.Status == AttendanceCorrectionStatusDto.Pending
-                     && (CanCancelCorrection(details) || _isAdmin))
+                @if (CanCancelCorrection(details) || CanReviewCorrection(details))
                 {
                     <div class="attendance-details-actions">
                         @if (CanCancelCorrection(details))
                         {
                             <button type="button" class="btn btn-outline-danger" @onclick="() => CancelFromDetailsAsync(details.Id)">Cancel request</button>
                         }
-                        @if (_isAdmin)
+                        @if (CanReviewCorrection(details))
                         {
                             <div class="attendance-details-actions-row">
                                 <button type="button" class="btn btn-success" @onclick="() => ReviewFromDetails(details.Id, true)">Approve</button>
@@ -943,9 +940,13 @@
             ? null
             : _corrections.FirstOrDefault(r => r.Id == _detailsCorrectionId.Value);
 
+    // Admins may only cancel their own requests (they approve or reject everyone else's).
     private bool CanCancelCorrection(AttendanceCorrectionRequestDto request) =>
         request.Status == AttendanceCorrectionStatusDto.Pending
         && (!_isAdmin || request.DeveloperId == _me.DeveloperId);
+
+    private bool CanReviewCorrection(AttendanceCorrectionRequestDto request) =>
+        _isAdmin && request.Status == AttendanceCorrectionStatusDto.Pending;
 
     private async Task CancelFromDetailsAsync(Guid id)
     {
@@ -958,22 +959,6 @@
         CloseDetails();
         OpenReviewModal(id, approve);
     }
-
-    private static string FormatCorrectionStatus(AttendanceCorrectionStatusDto status) => status switch
-    {
-        AttendanceCorrectionStatusDto.Pending => "Pending",
-        AttendanceCorrectionStatusDto.Approved => "Approved",
-        AttendanceCorrectionStatusDto.Rejected => "Rejected",
-        _ => status.ToString()
-    };
-
-    private static string GetCorrectionStatusClass(AttendanceCorrectionStatusDto status) => status switch
-    {
-        AttendanceCorrectionStatusDto.Pending => "pending",
-        AttendanceCorrectionStatusDto.Approved => "on-time",
-        AttendanceCorrectionStatusDto.Rejected => "incomplete",
-        _ => string.Empty
-    };
 
     private void OpenReviewModal(Guid id, bool approve)
     {
@@ -1120,10 +1105,9 @@
             }
         }
 
-        return query
-            .OrderBy(r => r.Status == AttendanceCorrectionStatusDto.Pending ? 0 : 1)
-            .ThenByDescending(r => r.CreatedAtUtc)
-            .ToList();
+        // Ordering (pending first, newest first) is applied by the API for both the admin
+        // and the developer list, so filtering never re-sorts.
+        return query.ToList();
     }
 
     private string GetPunchHint() => _me.NextAction switch
@@ -1170,50 +1154,6 @@
         }
         catch { return date.ToDateTime(time).ToUniversalTime(); }
     }
-
-    // Same date format as the Date column, plus the submit time.
-    private string FormatUtcDateTime(DateTime? utc)
-    {
-        const string format = "ddd, MMM d, yyyy · h:mm tt";
-        if (!utc.HasValue) return "—";
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(_me.OfficeTimeZoneId);
-            return TimeZoneInfo.ConvertTimeFromUtc(utc.Value, tz).ToString(format);
-        }
-        catch { return utc.Value.ToLocalTime().ToString(format); }
-    }
-
-    private string FormatTimeOnly(DateTime? utc)
-    {
-        if (!utc.HasValue) return "—";
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(_me.OfficeTimeZoneId);
-            return TimeZoneInfo.ConvertTimeFromUtc(utc.Value, tz).ToString("h:mm tt");
-        }
-        catch { return utc.Value.ToLocalTime().ToString("h:mm tt"); }
-    }
-
-    private static string FormatStatus(AttendanceDayStatusDto status) => status switch
-    {
-        AttendanceDayStatusDto.OnTime => "On time",
-        AttendanceDayStatusDto.Late => "Late",
-        AttendanceDayStatusDto.EarlyLeave => "Early leave",
-        AttendanceDayStatusDto.Incomplete => "Incomplete",
-        AttendanceDayStatusDto.Absent => "Absent",
-        _ => status.ToString()
-    };
-
-    private static string GetStatusClass(AttendanceDayStatusDto status) => status switch
-    {
-        AttendanceDayStatusDto.OnTime => "on-time",
-        AttendanceDayStatusDto.Late => "late",
-        AttendanceDayStatusDto.EarlyLeave => "early-leave",
-        AttendanceDayStatusDto.Incomplete => "incomplete",
-        AttendanceDayStatusDto.Absent => "absent",
-        _ => string.Empty
-    };
 
     private string GetPunchInLockedHint()
     {

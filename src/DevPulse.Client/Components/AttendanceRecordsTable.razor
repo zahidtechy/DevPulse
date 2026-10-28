@@ -37,14 +37,14 @@ else
                         }
                         <td class="attendance-date-cell">@record.WorkDate.ToString("MMM d, yyyy")</td>
                         <td>
-                            <span class="attendance-punch-time">@FormatUtc(record.PunchInUtc)</span>
+                            <span class="attendance-punch-time">@AttendanceFormatter.FormatTime(record.PunchInUtc, OfficeTimeZoneId)</span>
                             @if (record.PunchInIsCorrected)
                             {
                                 <span class="attendance-badge corrected">Corrected</span>
                             }
                         </td>
                         <td>
-                            <span class="attendance-punch-time">@FormatUtc(record.PunchOutUtc)</span>
+                            <span class="attendance-punch-time">@AttendanceFormatter.FormatTime(record.PunchOutUtc, OfficeTimeZoneId)</span>
                             @if (record.PunchOutIsCorrected)
                             {
                                 <span class="attendance-badge corrected">Corrected</span>
@@ -60,7 +60,7 @@ else
                                 @FormatDuration(record)
                             }
                         </td>
-                        <td><span class="attendance-badge @GetStatusClass(record.Status)">@FormatStatus(record.Status)</span></td>
+                        <td><span class="attendance-badge @AttendanceFormatter.DayStatusClass(record.Status)">@AttendanceFormatter.DayStatusLabel(record.Status)</span></td>
                         @if (ShowAdminEdit)
                         {
                             <td class="attendance-table-actions">
@@ -115,41 +115,4 @@ else
         }
     }
 
-    private string FormatUtc(DateTime? utc)
-    {
-        if (!utc.HasValue)
-        {
-            return "—";
-        }
-
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(OfficeTimeZoneId);
-            return TimeZoneInfo.ConvertTimeFromUtc(utc.Value, tz).ToString("h:mm tt");
-        }
-        catch
-        {
-            return utc.Value.ToLocalTime().ToString("h:mm tt");
-        }
-    }
-
-    private static string FormatStatus(AttendanceDayStatusDto status) => status switch
-    {
-        AttendanceDayStatusDto.OnTime => "On time",
-        AttendanceDayStatusDto.Late => "Late",
-        AttendanceDayStatusDto.EarlyLeave => "Early leave",
-        AttendanceDayStatusDto.Incomplete => "Incomplete",
-        AttendanceDayStatusDto.Absent => "Absent",
-        _ => status.ToString()
-    };
-
-    private static string GetStatusClass(AttendanceDayStatusDto status) => status switch
-    {
-        AttendanceDayStatusDto.OnTime => "on-time",
-        AttendanceDayStatusDto.Late => "late",
-        AttendanceDayStatusDto.EarlyLeave => "early-leave",
-        AttendanceDayStatusDto.Incomplete => "incomplete",
-        AttendanceDayStatusDto.Absent => "absent",
-        _ => string.Empty
-    };
 }

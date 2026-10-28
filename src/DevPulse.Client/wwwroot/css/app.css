@@ -5512,21 +5512,7 @@ button.holiday-day:hover {
     white-space: nowrap;
 }
 
-/* Correction layout */
-.attendance-correction-layout {
-    flex: 1;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
-    gap: 0.85rem;
-    align-items: start;
-    min-height: 0;
-}
-
-.attendance-correction-form,
-.attendance-correction-side {
-    min-width: 0;
-}
-
+/* Correction request form */
 .attendance-correction-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -5535,10 +5521,6 @@ button.holiday-day:hover {
 }
 
 .attendance-correction-reason {
-    grid-column: 1 / -1;
-}
-
-.attendance-correction-actions {
     grid-column: 1 / -1;
 }
 
@@ -5578,55 +5560,6 @@ button.holiday-day:hover {
     align-items: center;
     gap: 0.4rem;
     flex-wrap: wrap;
-}
-
-
-.attendance-side-card {
-    background: var(--dp-surface);
-    border: 1px solid var(--dp-border);
-    border-radius: var(--dp-radius-lg);
-    padding: 0.85rem 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-    min-height: 0;
-    height: 100%;
-}
-
-.attendance-side-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-}
-
-.attendance-side-title {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--dp-text-muted);
-}
-
-.attendance-side-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.35rem;
-    height: 1.35rem;
-    padding: 0 0.4rem;
-    border-radius: 999px;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    background: var(--dp-bg);
-    color: var(--dp-text-secondary);
-    border: 1px solid var(--dp-border);
-}
-
-.attendance-side-count-alert {
-    background: #fef2f2;
-    color: #b91c1c;
-    border-color: #fecaca;
 }
 
 .attendance-table-scroll {
@@ -5845,7 +5778,6 @@ button.holiday-day:hover {
 }
 
 .attendance-details-reason p {
-    margin-bottom: 0;
     color: var(--dp-text);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -6167,10 +6099,6 @@ button.holiday-day:hover {
         display: none;
     }
 
-    .attendance-correction-layout {
-        grid-template-columns: 1fr;
-    }
-
     .attendance-filter-row-admin {
         grid-template-columns: 1fr 1fr;
     }
@@ -6297,8 +6225,7 @@ button.holiday-day:hover {
         grid-template-columns: 1fr;
     }
 
-    .attendance-filter-action .btn,
-    .attendance-correction-actions .btn {
+    .attendance-filter-action .btn {
         width: 100%;
     }
 

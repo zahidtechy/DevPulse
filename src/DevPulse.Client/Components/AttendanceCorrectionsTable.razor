@@ -27,16 +27,14 @@ else
                     <tr>
                         <td class="attendance-dev-name">@request.DeveloperName</td>
                         <td class="attendance-date-cell">@request.WorkDate.ToString("MMM d, yyyy")</td>
-                        <td><span class="attendance-punch-time">@FormatUtc(request.RequestedPunchInUtc)</span></td>
-                        <td><span class="attendance-punch-time">@FormatUtc(request.RequestedPunchOutUtc)</span></td>
+                        <td><span class="attendance-punch-time">@AttendanceFormatter.FormatTime(request.RequestedPunchInUtc, OfficeTimeZoneId)</span></td>
+                        <td><span class="attendance-punch-time">@AttendanceFormatter.FormatTime(request.RequestedPunchOutUtc, OfficeTimeZoneId)</span></td>
                         <td class="attendance-reason-cell" title="@request.Reason">@TruncateReason(request.Reason)</td>
-                        <td><span class="attendance-badge @GetCorrectionStatusClass(request.Status)">@FormatCorrectionStatus(request.Status)</span></td>
+                        <td><span class="attendance-badge @AttendanceFormatter.CorrectionStatusClass(request.Status)">@AttendanceFormatter.CorrectionStatusLabel(request.Status)</span></td>
                         <td class="attendance-table-actions">
                             <div class="attendance-row-actions">
                                 <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OnDetails.InvokeAsync(request.Id)">Details</button>
-                                @if (AllowCancel
-                                     && request.Status == AttendanceCorrectionStatusDto.Pending
-                                     && (!CancelOwnOnly || request.DeveloperId == CurrentDeveloperId))
+                                @if (CanCancel?.Invoke(request) == true)
                                 {
                                     <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnCancel.InvokeAsync(request.Id)">Cancel</button>
                                 }
@@ -58,14 +56,9 @@ else
     [Parameter]
     public IReadOnlyList<AttendanceCorrectionRequestDto> Requests { get; set; } = [];
 
+    /// <summary>Decides whether the Cancel action applies to a given request.</summary>
     [Parameter]
-    public bool AllowCancel { get; set; }
-
-    [Parameter]
-    public bool CancelOwnOnly { get; set; }
-
-    [Parameter]
-    public Guid? CurrentDeveloperId { get; set; }
+    public Func<AttendanceCorrectionRequestDto, bool>? CanCancel { get; set; }
 
     [Parameter]
     public bool AllowReview { get; set; }
@@ -101,38 +94,4 @@ else
             ? trimmed
             : $"{trimmed[..ReasonPreviewLength].TrimEnd()}…";
     }
-
-    private string FormatUtc(DateTime? utc)
-    {
-        if (!utc.HasValue)
-        {
-            return "—";
-        }
-
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(OfficeTimeZoneId);
-            return TimeZoneInfo.ConvertTimeFromUtc(utc.Value, tz).ToString("h:mm tt");
-        }
-        catch
-        {
-            return utc.Value.ToLocalTime().ToString("h:mm tt");
-        }
-    }
-
-    private static string FormatCorrectionStatus(AttendanceCorrectionStatusDto status) => status switch
-    {
-        AttendanceCorrectionStatusDto.Pending => "Pending",
-        AttendanceCorrectionStatusDto.Approved => "Approved",
-        AttendanceCorrectionStatusDto.Rejected => "Rejected",
-        _ => status.ToString()
-    };
-
-    private static string GetCorrectionStatusClass(AttendanceCorrectionStatusDto status) => status switch
-    {
-        AttendanceCorrectionStatusDto.Pending => "pending",
-        AttendanceCorrectionStatusDto.Approved => "on-time",
-        AttendanceCorrectionStatusDto.Rejected => "incomplete",
-        _ => string.Empty
-    };
 }
