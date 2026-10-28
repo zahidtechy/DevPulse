@@ -20,6 +20,7 @@ public sealed class DevelopersController : ControllerBase
         var developers = await _developerService.GetAllAsync(cancellationToken);
         return Ok(developers);
     }
+
     [HttpGet("own-team")]
     [Authorize(Policy = "CanViewReports")]
     [ProducesResponseType(typeof(IReadOnlyList<DeveloperDto>), StatusCodes.Status200OK)]

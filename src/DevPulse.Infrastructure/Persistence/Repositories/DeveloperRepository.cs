@@ -1,5 +1,3 @@
-using DevPulse.Domain.DTOs;
-
 namespace DevPulse.Infrastructure.Persistence.Repositories;
 
 public sealed class DeveloperRepository : IDeveloperRepository
@@ -16,19 +14,12 @@ public sealed class DeveloperRepository : IDeveloperRepository
             .OrderBy(x => x.Name)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-    public async Task<IReadOnlyList<DeveloperDTO>> GetOwnTeamAsync(
-        CancellationToken cancellationToken = default) =>
-        await _dbContext.Developers
-            .Where(d => d.IsOwnTeam)
-            .OrderBy(d => d.Name)
-            .Select(d => new DeveloperDTO
-            {
-                Id = d.Id,
-                Name = d.Name,
-                Email = d.Email
-            })
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<Developer>> GetOwnTeamAsync(CancellationToken cancellationToken = default) =>
+       await QueryWithMappings()
+        .Where(x => x.IsOwnTeam == true)
+        .OrderBy(x => x.Name)
+        .AsNoTracking()
+        .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<Developer>> GetRegistryAsync(
         Guid? clickUpAccountId = null,

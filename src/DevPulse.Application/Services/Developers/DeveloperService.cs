@@ -1,4 +1,4 @@
-using DevPulse.Domain.DTOs;
+
 
 namespace DevPulse.Application.Services.Developers;
 
@@ -42,9 +42,10 @@ public sealed class DeveloperService : IDeveloperService
         var developers = await _developerRepository.GetAllAsync(cancellationToken);
         return developers.Select(MapToDto).ToList();
     }
-    public async Task<IReadOnlyList<DeveloperDTO>> GetOwnTeamAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<DeveloperDto>> GetOwnTeamAsync(CancellationToken cancellationToken = default)
     {
-        return await _developerRepository.GetOwnTeamAsync(cancellationToken);
+        var developers = await _developerRepository.GetOwnTeamAsync(cancellationToken);
+        return developers.Select(MapToDto).ToList();
     }
 
     public async Task<IReadOnlyList<DeveloperDto>> GetRegistryAsync(
