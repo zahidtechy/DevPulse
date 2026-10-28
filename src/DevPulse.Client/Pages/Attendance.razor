@@ -386,29 +386,69 @@
             <div class="attendance-correction-grid">
                 <div class="attendance-correction-field">
                     <label class="form-label">Date</label>
-                    <input type="date" class="form-control" @bind="_correctionDate" min="@_minCorrectionDate" max="@_maxCorrectionDate" />
+                    <input type="date"
+                           class="form-control"
+                           min="@_minCorrectionDate"
+                           max="@_maxCorrectionDate"
+                           disabled="@(_isSubmittingCorrection || _isCheckingCorrectionPunches)"
+                           @bind="_correctionDate"
+                           @bind:format="yyyy-MM-dd"
+                           @bind:after="CheckCorrectionPunchesAsync" />
                 </div>
-                <div class="attendance-correction-field">
-                    <div class="attendance-correction-check">
-                        <div class="form-check"><input class="form-check-input" type="checkbox" id="req-in" @bind="_requestPunchIn" /><label class="form-check-label" for="req-in">Missed punch in</label></div>
-                        @if (_requestPunchIn) { <input type="time" class="form-control mt-2" @bind="_correctionPunchInTime" /> }
+                <div class="attendance-correction-date-spacer" aria-hidden="true"></div>
+
+                @if (_isCheckingCorrectionPunches)
+                {
+                    <div class="attendance-correction-state">
+                        <LoadingIndicator Text="Checking existing punches..." Compact="true" />
                     </div>
-                </div>
-                <div class="attendance-correction-field">
-                    <div class="attendance-correction-check">
-                        <div class="form-check"><input class="form-check-input" type="checkbox" id="req-out" @bind="_requestPunchOut" /><label class="form-check-label" for="req-out">Missed punch out</label></div>
-                        @if (_requestPunchOut) { <input type="time" class="form-control mt-2" @bind="_correctionPunchOutTime" /> }
+                }
+                else if (!string.IsNullOrWhiteSpace(_correctionPunchCheckError))
+                {
+                    <div class="attendance-correction-state alert alert-danger mb-0" role="alert">
+                        <span>@_correctionPunchCheckError</span>
+                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="CheckCorrectionPunchesAsync">Try again</button>
                     </div>
-                </div>
-                <div class="attendance-correction-field attendance-correction-reason">
-                    <label class="form-label">Reason</label>
-                    <textarea class="form-control" rows="3" @bind="_correctionReason" maxlength="1000" placeholder="Briefly explain why you missed the punch..."></textarea>
-                </div>
+                }
+                else if (_hasCheckedCorrectionPunches && !_canRequestPunchIn && !_canRequestPunchOut)
+                {
+                    <div class="attendance-correction-state alert alert-success mb-0" role="status">
+                        Punch in and punch out already exist for this date.
+                    </div>
+                }
+                else if (_hasCheckedCorrectionPunches)
+                {
+                    @if (_canRequestPunchIn)
+                    {
+                        <div class="attendance-correction-field">
+                            <div class="attendance-correction-check">
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="req-in" disabled="@_isSubmittingCorrection" @bind="_requestPunchIn" /><label class="form-check-label" for="req-in">Missed punch in</label></div>
+                                @if (_requestPunchIn) { <input type="time" class="form-control mt-2" disabled="@_isSubmittingCorrection" @bind="_correctionPunchInTime" /> }
+                            </div>
+                        </div>
+                    }
+                    @if (_canRequestPunchOut)
+                    {
+                        <div class="attendance-correction-field">
+                            <div class="attendance-correction-check">
+                                <div class="form-check"><input class="form-check-input" type="checkbox" id="req-out" disabled="@_isSubmittingCorrection" @bind="_requestPunchOut" /><label class="form-check-label" for="req-out">Missed punch out</label></div>
+                                @if (_requestPunchOut) { <input type="time" class="form-control mt-2" disabled="@_isSubmittingCorrection" @bind="_correctionPunchOutTime" /> }
+                            </div>
+                        </div>
+                    }
+                    <div class="attendance-correction-field attendance-correction-reason">
+                        <label class="form-label">Reason</label>
+                        <textarea class="form-control" rows="3" disabled="@_isSubmittingCorrection" @bind="_correctionReason" maxlength="1000" placeholder="Briefly explain why you missed the punch..."></textarea>
+                    </div>
+                }
             </div>
         </ChildContent>
         <FooterContent>
             <button type="button" class="btn btn-outline-secondary" disabled="@_isSubmittingCorrection" @onclick="CloseCorrectionModal">Cancel</button>
-            <BusyButton CssClass="btn btn-primary" IsBusy="_isSubmittingCorrection" BusyText="Submitting..." OnClick="SubmitCorrectionAsync">Submit request</BusyButton>
+            @if (_hasCheckedCorrectionPunches && (_canRequestPunchIn || _canRequestPunchOut))
+            {
+                <BusyButton CssClass="btn btn-primary" IsBusy="_isSubmittingCorrection" BusyText="Submitting..." OnClick="SubmitCorrectionAsync">Submit request</BusyButton>
+            }
         </FooterContent>
     </ModalDialog>
 
@@ -536,6 +576,10 @@
     private bool _isLoadingHistory;
     private bool _isSubmittingCorrection;
     private bool _isLoadingCorrections;
+    private bool _isCheckingCorrectionPunches;
+    private bool _hasCheckedCorrectionPunches;
+    private bool _canRequestPunchIn;
+    private bool _canRequestPunchOut;
     private bool _isAdminLoading;
     private bool _correctionRequestsExpanded = true;
     private bool _attendanceRecordsExpanded = true;
@@ -571,6 +615,8 @@
     private TimeOnly _correctionPunchInTime = new(9, 0);
     private TimeOnly _correctionPunchOutTime = new(18, 0);
     private string _correctionReason = string.Empty;
+    private string? _correctionPunchCheckError;
+    private int _correctionPunchCheckVersion;
     private Timer? _punchWindowTimer;
     private Timer? _meRefreshTimer;
     private bool _isRefreshingMe;
@@ -863,9 +909,10 @@
         finally { _isLoadingHistory = false; }
     }
 
-    private void OpenCorrectionModal()
+    private async Task OpenCorrectionModal()
     {
         _showCorrectionModal = true;
+        await CheckCorrectionPunchesAsync();
     }
 
     private void CloseCorrectionModal()
@@ -875,11 +922,60 @@
             return;
         }
 
+        _correctionPunchCheckVersion++;
+        _isCheckingCorrectionPunches = false;
         _showCorrectionModal = false;
+    }
+
+    private async Task CheckCorrectionPunchesAsync()
+    {
+        var date = _correctionDate;
+        var checkVersion = ++_correctionPunchCheckVersion;
+
+        _isCheckingCorrectionPunches = true;
+        _hasCheckedCorrectionPunches = false;
+        _canRequestPunchIn = false;
+        _canRequestPunchOut = false;
+        _requestPunchIn = false;
+        _requestPunchOut = false;
+        _correctionPunchCheckError = null;
+
+        try
+        {
+            var records = await AttendanceApi.GetMyHistoryAsync(date, date);
+            if (checkVersion != _correctionPunchCheckVersion || !_showCorrectionModal)
+            {
+                return;
+            }
+
+            var record = records.FirstOrDefault(r => r.WorkDate == date);
+            _canRequestPunchIn = record?.PunchInUtc is null;
+            _canRequestPunchOut = record?.PunchOutUtc is null;
+            _hasCheckedCorrectionPunches = true;
+        }
+        catch (Exception ex)
+        {
+            if (checkVersion == _correctionPunchCheckVersion && _showCorrectionModal)
+            {
+                _correctionPunchCheckError = $"Could not check existing punches. {ex.Message}";
+            }
+        }
+        finally
+        {
+            if (checkVersion == _correctionPunchCheckVersion)
+            {
+                _isCheckingCorrectionPunches = false;
+            }
+        }
     }
 
     private async Task SubmitCorrectionAsync()
     {
+        if (!_hasCheckedCorrectionPunches || _isCheckingCorrectionPunches)
+        {
+            return;
+        }
+
         if (!_requestPunchIn && !_requestPunchOut)
         {
             Toast.Error("Select at least one punch to correct.", key: ToastKeys.AttendanceCorrectionSubmit);
@@ -1281,5 +1377,6 @@
     {
         _punchWindowTimer?.Dispose();
         _meRefreshTimer?.Dispose();
+        _correctionPunchCheckVersion++;
     }
 }

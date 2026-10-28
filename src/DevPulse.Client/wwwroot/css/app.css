@@ -5520,6 +5520,17 @@ button.holiday-day:hover {
     margin-top: 1rem;
 }
 
+.attendance-correction-state {
+    grid-column: 1 / -1;
+}
+
+.attendance-correction-state {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
 .attendance-correction-reason {
     grid-column: 1 / -1;
 }
@@ -6304,6 +6315,10 @@ button.holiday-day:hover {
 
     .attendance-correction-grid {
         grid-template-columns: 1fr;
+    }
+
+    .attendance-correction-date-spacer {
+        display: none;
     }
 
     .attendance-table-scroll,
