@@ -1,8 +1,11 @@
+using DevPulse.Domain.DTOs;
+
 namespace DevPulse.Application.Abstractions.Persistence;
 
 public interface IDeveloperRepository
 {
     Task<IReadOnlyList<Developer>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DeveloperDTO>> GetOwnTeamAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Returns all developers for the admin registry, with optional filters (ClickUp account, status, role, search).

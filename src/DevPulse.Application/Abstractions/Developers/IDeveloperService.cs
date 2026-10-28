@@ -1,9 +1,11 @@
+using DevPulse.Domain.DTOs;
+
 namespace DevPulse.Application.Abstractions.Developers;
 
 public interface IDeveloperService
 {
     Task<IReadOnlyList<DeveloperDto>> GetAllAsync(CancellationToken cancellationToken = default);
-
+    Task<IReadOnlyList<DeveloperDTO>> GetOwnTeamAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DeveloperDto>> GetRegistryAsync(
         DeveloperRegistryQuery query,
         CancellationToken cancellationToken = default);
