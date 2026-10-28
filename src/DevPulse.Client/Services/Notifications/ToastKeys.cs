@@ -1,11 +1,10 @@
 namespace DevPulse.Client.Services.Notifications;
 
 /// <summary>
-/// Correlation keys for the toast bus.
+/// Workflow keys for the toast bus.
 ///
-/// Toasts created with the same key replace each other, so retrying an action that
-/// previously failed clears the stale error instead of leaving it on screen until the
-/// user closes it. Keys are scoped to a page, or to a workflow that several pages share.
+/// The toast bus displays one global notification at a time, regardless of key. Keys remain
+/// available so a workflow can explicitly dismiss or query its currently visible toast.
 /// </summary>
 public static class ToastKeys
 {

@@ -18,11 +18,13 @@ public sealed record ToastMessage(
 
 /// <summary>
 /// Client-side notification bus used to surface transient success, error, warning,
-/// and info messages in the bottom-right toast stack.
+/// and info messages in the bottom-right notification area.
 /// </summary>
 public sealed class ToastService
 {
-    private const int MaxVisible = 5;
+    // Previous stacked-toast limit. Restore this together with the commented trimming loop
+    // in Show when multiple simultaneous notifications are desired again.
+    // private const int MaxVisible = 5;
     private const int DefaultDurationMs = 4000;
 
     private readonly List<ToastMessage> _toasts = new();
@@ -51,10 +53,9 @@ public sealed class ToastService
         => Show(message, ToastLevel.Info, title, durationMs, key);
 
     /// <summary>
-    /// Shows a toast. When <paramref name="key"/> is supplied, the toast is correlated with
-    /// that key: a later toast using the same key replaces it, and <see cref="Dismiss(string)"/>
-    /// can remove it. Use a key for problems that can be resolved later (for example a failed
-    /// operation that is retried) so the stale error disappears once the retry succeeds.
+    /// Shows a toast, replacing any currently visible notification and restarting its timer.
+    /// When <paramref name="key"/> is supplied, <see cref="Dismiss(string)"/> can remove the
+    /// current toast for that workflow.
     /// </summary>
     public void Show(string message, ToastLevel level, string? title = null, int? durationMs = null, string? key = null)
     {
@@ -67,27 +68,31 @@ public sealed class ToastService
         var normalized = message.Trim();
         var normalizedKey = string.IsNullOrWhiteSpace(key) ? null : key.Trim();
 
+        // Previous page/workflow correlation and duplicate-collapse behavior is retained for
+        // restoration when independent page-level toasts are needed again:
+        /*
         if (normalizedKey is not null)
         {
             var existing = _toasts.FirstOrDefault(t => string.Equals(t.Key, normalizedKey, StringComparison.Ordinal));
             if (existing is not null)
             {
-                // An identical repeat keeps the toast (and its remaining timer) as-is.
                 if (existing.Level == level && string.Equals(existing.Message, normalized, StringComparison.Ordinal))
                 {
                     return;
                 }
 
-                // A correlated update supersedes the earlier toast, so resolving the problem
-                // replaces the stale error instead of leaving it on screen.
                 _toasts.Remove(existing);
             }
         }
         else if (_toasts.Any(t => t.Level == level && string.Equals(t.Message, normalized, StringComparison.Ordinal)))
         {
-            // Collapse duplicates so double-clicks or repeated failures do not stack up.
             return;
         }
+        */
+
+        // Keep a single global toast. A new Id makes ToastContainer cancel the previous timer
+        // and schedule the full duration again, including for repeated messages.
+        _toasts.Clear();
 
         var toast = new ToastMessage(
             Guid.NewGuid(),
@@ -99,10 +104,11 @@ public sealed class ToastService
 
         _toasts.Add(toast);
 
-        while (_toasts.Count > MaxVisible)
-        {
-            _toasts.RemoveAt(0);
-        }
+        // Previous stacked-toast trimming behavior:
+        // while (_toasts.Count > MaxVisible)
+        // {
+        //     _toasts.RemoveAt(0);
+        // }
 
         OnChange?.Invoke();
     }
