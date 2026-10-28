@@ -23,6 +23,7 @@ public sealed record ToastMessage(
 public sealed class ToastService
 {
     private const int MaxVisible = 5;
+    private const int DefaultDurationMs = 4000;
 
     private readonly List<ToastMessage> _toasts = new();
 
@@ -53,7 +54,7 @@ public sealed class ToastService
     /// Shows a toast. When <paramref name="key"/> is supplied, the toast is correlated with
     /// that key: a later toast using the same key replaces it, and <see cref="Dismiss(string)"/>
     /// can remove it. Use a key for problems that can be resolved later (for example a failed
-    /// operation that is retried) so the stale sticky error disappears once the retry succeeds.
+    /// operation that is retried) so the stale error disappears once the retry succeeds.
     /// </summary>
     public void Show(string message, ToastLevel level, string? title = null, int? durationMs = null, string? key = null)
     {
@@ -108,7 +109,7 @@ public sealed class ToastService
 
     /// <summary>
     /// Removes the toast associated with <paramref name="key"/>, if it is still visible.
-    /// Intended for "the problem is gone now" signals so a sticky error can clear itself.
+    /// Intended for "the problem is gone now" signals so a correlated error can clear itself.
     /// </summary>
     public void Dismiss(string key)
     {
@@ -162,10 +163,10 @@ public sealed class ToastService
 
     private static int GetDefaultDuration(ToastLevel level) => level switch
     {
-        // Errors stay until the user acknowledges them.
-        ToastLevel.Error => 0,
-        ToastLevel.Warning => 6000,
-        _ => 4000
+        // Previous per-level behavior is retained here for discoverability:
+        // ToastLevel.Error => 0,       // Sticky until manually dismissed.
+        // ToastLevel.Warning => 6000,
+        _ => DefaultDurationMs
     };
 
     private static string GetDefaultTitle(ToastLevel level) => level switch
