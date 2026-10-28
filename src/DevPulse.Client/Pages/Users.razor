@@ -490,7 +490,7 @@
                 .Select(u => u.DeveloperId!.Value)
                 .ToHashSet();
 
-            IEnumerable<DeveloperDto> available = _developers.Where(d => !linkedIds.Contains(d.Id));
+            IEnumerable<DeveloperDto> available = _developers.Where(d => !linkedIds.Contains(d.Id) && d.IsOwnTeam);
 
             if (!string.IsNullOrWhiteSpace(_developerSearch))
             {
