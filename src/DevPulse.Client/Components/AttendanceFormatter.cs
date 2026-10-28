@@ -10,12 +10,16 @@ public static class AttendanceFormatter
 {
     public const string TimeFormat = "h:mm tt";
     public const string DateTimeFormat = "ddd, MMM d, yyyy · h:mm tt";
+    public const string CorrectedAtFormat = "MMM d, yyyy · h:mm tt";
 
     public static string FormatTime(DateTime? utc, string timeZoneId) =>
         Format(utc, timeZoneId, TimeFormat);
 
     public static string FormatDateTime(DateTime? utc, string timeZoneId) =>
         Format(utc, timeZoneId, DateTimeFormat);
+
+    public static string FormatCorrectedAt(DateTime? utc, string timeZoneId) =>
+        Format(utc, timeZoneId, CorrectedAtFormat);
 
     private static string Format(DateTime? utc, string timeZoneId, string format)
     {

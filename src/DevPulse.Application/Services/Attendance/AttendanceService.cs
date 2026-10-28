@@ -403,12 +403,14 @@ public sealed class AttendanceService : IAttendanceService
 
         var punchIn = request.ApprovedPunchInUtc ?? entity.RequestedPunchInUtc;
         var punchOut = request.ApprovedPunchOutUtc ?? entity.RequestedPunchOutUtc;
+        var reviewedAtUtc = DateTime.UtcNow;
 
         var upsertResult = await ApplyCorrectedPunchesAsync(
             entity.DeveloperId,
             entity.WorkDate,
             punchIn,
             punchOut,
+            reviewedAtUtc,
             cancellationToken);
         if (upsertResult.IsFailure)
         {
@@ -418,7 +420,7 @@ public sealed class AttendanceService : IAttendanceService
         entity.Status = AttendanceCorrectionStatus.Approved;
         entity.ReviewerComment = NormalizeOptionalText(request.ReviewerComment, MaxCommentLength);
         entity.ReviewedByUserId = adminUserId;
-        entity.ReviewedAtUtc = DateTime.UtcNow;
+        entity.ReviewedAtUtc = reviewedAtUtc;
 
         await _attendanceRepository.UpdateCorrectionRequestAsync(entity, cancellationToken);
         return Result<AttendanceCorrectionRequestDto>.Success(MapCorrectionRequest(entity));
@@ -474,6 +476,7 @@ public sealed class AttendanceService : IAttendanceService
             workDate,
             request.PunchInUtc,
             request.PunchOutUtc,
+            DateTime.UtcNow,
             cancellationToken);
         if (applyResult.IsFailure)
         {
@@ -493,6 +496,7 @@ public sealed class AttendanceService : IAttendanceService
         DateOnly workDate,
         DateTime? punchInUtc,
         DateTime? punchOutUtc,
+        DateTime correctedAtUtc,
         CancellationToken cancellationToken)
     {
         if (!punchInUtc.HasValue && !punchOutUtc.HasValue)
@@ -512,16 +516,18 @@ public sealed class AttendanceService : IAttendanceService
             };
         }
 
-        if (punchInUtc.HasValue)
+        if (punchInUtc.HasValue && record.PunchInUtc != punchInUtc)
         {
             record.PunchInUtc = punchInUtc;
             record.PunchInIsCorrected = true;
+            record.PunchInCorrectedAtUtc = correctedAtUtc;
         }
 
-        if (punchOutUtc.HasValue)
+        if (punchOutUtc.HasValue && record.PunchOutUtc != punchOutUtc)
         {
             record.PunchOutUtc = punchOutUtc;
             record.PunchOutIsCorrected = true;
+            record.PunchOutCorrectedAtUtc = correctedAtUtc;
         }
 
         if (record.PunchInUtc.HasValue
@@ -567,7 +573,10 @@ public sealed class AttendanceService : IAttendanceService
         return AttendanceNextActionDto.Complete;
     }
 
-    private AttendanceRecordDto MapRecord(AttendanceRecord record, AttendanceSettings settings, TimeZoneInfo timeZone)
+    private AttendanceRecordDto MapRecord(
+        AttendanceRecord record,
+        AttendanceSettings settings,
+        TimeZoneInfo timeZone)
     {
         var status = _statusCalculator.ComputeStatus(record, settings, timeZone);
         var workHours = _statusCalculator.ComputeWorkHours(record);
@@ -583,7 +592,9 @@ public sealed class AttendanceService : IAttendanceService
             record.PunchInIsCorrected,
             record.PunchOutIsCorrected,
             status,
-            workHours);
+            workHours,
+            record.PunchInCorrectedAtUtc,
+            record.PunchOutCorrectedAtUtc);
     }
 
     private static AttendanceSettingsDto MapSettings(AttendanceSettings settings) =>

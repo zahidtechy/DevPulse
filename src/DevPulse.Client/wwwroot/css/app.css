@@ -5488,11 +5488,11 @@ button.holiday-day:hover {
 
 .attendance-corrections-filter-row {
     width: 100%;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
 }
 
 .attendance-corrections-filter-row-user {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
 }
 
 .attendance-filter-field {
@@ -5555,11 +5555,87 @@ button.holiday-day:hover {
     flex-wrap: wrap;
 }
 
+.attendance-section-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.attendance-collapse-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--dp-text-secondary);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.attendance-collapse-toggle:hover {
+    background: var(--dp-bg);
+    color: var(--dp-primary);
+}
+
+.attendance-collapse-toggle:focus-visible {
+    outline: 2px solid var(--dp-primary);
+    outline-offset: 2px;
+}
+
+.attendance-collapsible-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    min-height: 0;
+}
+
+.attendance-collapsible-content[hidden] {
+    display: none;
+}
+
 .attendance-corrections-filter-chips {
     display: flex;
     align-items: center;
     gap: 0.4rem;
     flex-wrap: wrap;
+}
+
+/* Admin all-records grid shown under the corrections table */
+.attendance-corrections-records {
+    display: flex;
+    flex-direction: column;
+    margin-top: 0.85rem;
+    min-height: 0;
+}
+
+.attendance-connected-records-card {
+    width: 100%;
+    min-height: 0;
+}
+
+.attendance-connected-records-card .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    min-height: 0;
+}
+
+.attendance-connected-records-scroll .attendance-table-card {
+    border: none;
+    box-shadow: none;
+    overflow: visible;
+}
+
+.attendance-connected-records-scroll .attendance-empty-state {
+    padding: 1.5rem 1rem;
 }
 
 .attendance-table-scroll {
@@ -5590,6 +5666,14 @@ button.holiday-day:hover {
 .attendance-correction-scroll .attendance-table {
     min-width: 42rem;
     width: 100%;
+}
+
+.attendance-correction-scroll .attendance-table thead th,
+.attendance-connected-records-scroll .attendance-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-shadow: inset 0 -1px 0 var(--dp-border);
 }
 
 /* Section headers */
@@ -5756,8 +5840,7 @@ button.holiday-day:hover {
 }
 
 @media (max-width: 575.98px) {
-    .attendance-details-grid > div,
-    .attendance-details-reason {
+    .attendance-details-grid > div {
         grid-template-columns: minmax(0, 1fr);
     }
 }
@@ -5767,17 +5850,7 @@ button.holiday-day:hover {
     font-weight: 600;
 }
 
-/* Reason / reviewer comment use the same label-left, value-right layout
-   as the rows above instead of stacking the value underneath the label. */
-.attendance-details-reason {
-    display: grid;
-    grid-template-columns: minmax(8rem, 11rem) minmax(0, 1fr);
-    align-items: baseline;
-    gap: 0.15rem 1rem;
-    margin-bottom: 1rem;
-}
-
-.attendance-details-reason p {
+.attendance-details-copy {
     color: var(--dp-text);
     white-space: pre-wrap;
     overflow-wrap: anywhere;

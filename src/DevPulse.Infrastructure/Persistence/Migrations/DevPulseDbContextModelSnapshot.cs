@@ -80,10 +80,16 @@ namespace DevPulse.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("DeveloperId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("PunchInCorrectedAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<bool>("PunchInIsCorrected")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("PunchInUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PunchOutCorrectedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<bool>("PunchOutIsCorrected")

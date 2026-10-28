@@ -70,7 +70,10 @@ public record AttendanceRecordDto(
     bool PunchInIsCorrected,
     bool PunchOutIsCorrected,
     AttendanceDayStatusDto Status,
-    decimal? WorkHours);
+    decimal? WorkHours,
+    // When each punch was last corrected on the attendance record (UTC).
+    DateTime? PunchInCorrectedAtUtc = null,
+    DateTime? PunchOutCorrectedAtUtc = null);
 
 public record AttendancePunchResultDto(
     AttendanceRecordDto Record,

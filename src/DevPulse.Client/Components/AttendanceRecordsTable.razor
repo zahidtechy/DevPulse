@@ -40,14 +40,14 @@ else
                             <span class="attendance-punch-time">@AttendanceFormatter.FormatTime(record.PunchInUtc, OfficeTimeZoneId)</span>
                             @if (record.PunchInIsCorrected)
                             {
-                                <span class="attendance-badge corrected">Corrected</span>
+                                <span class="attendance-badge corrected">@FormatCorrectedLabel(record.PunchInCorrectedAtUtc)</span>
                             }
                         </td>
                         <td>
                             <span class="attendance-punch-time">@AttendanceFormatter.FormatTime(record.PunchOutUtc, OfficeTimeZoneId)</span>
                             @if (record.PunchOutIsCorrected)
                             {
-                                <span class="attendance-badge corrected">Corrected</span>
+                                <span class="attendance-badge corrected">@FormatCorrectedLabel(record.PunchOutCorrectedAtUtc)</span>
                             }
                         </td>
                         <td class="attendance-hours-cell">
@@ -64,7 +64,7 @@ else
                         @if (ShowAdminEdit)
                         {
                             <td class="attendance-table-actions">
-                                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => OnAdminEdit.InvokeAsync(record)">Set times</button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => OnAdminEdit.InvokeAsync(record)">Auto fill attendance</button>
                             </td>
                         }
                     </tr>
@@ -89,6 +89,11 @@ else
 
     [Parameter]
     public EventCallback<AttendanceRecordDto> OnAdminEdit { get; set; }
+
+    private string FormatCorrectedLabel(DateTime? correctedAtUtc) =>
+        correctedAtUtc is null
+            ? "Corrected"
+            : $"Corrected on {AttendanceFormatter.FormatCorrectedAt(correctedAtUtc, OfficeTimeZoneId)}";
 
     private static string FormatDuration(AttendanceRecordDto record)
     {

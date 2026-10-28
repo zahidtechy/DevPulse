@@ -16,7 +16,11 @@ public class AttendanceRecord
 
     public bool PunchInIsCorrected { get; set; }
 
+    public DateTime? PunchInCorrectedAtUtc { get; set; }
+
     public bool PunchOutIsCorrected { get; set; }
+
+    public DateTime? PunchOutCorrectedAtUtc { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
