@@ -19,9 +19,20 @@ builder.Services.AddAuthorizationCore(options =>
 
 builder.Services.AddScoped<CookieAuthenticationStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<CookieAuthenticationStateProvider>());
-builder.Services.AddScoped(sp => new HttpClient
+builder.Services.AddSingleton<SessionState>();
+builder.Services.AddScoped(sp =>
 {
-    BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)
+    // A DelegatingHandler requires an inner transport. In Blazor WebAssembly,
+    // HttpClientHandler uses the browser's Fetch API.
+    var handler = new SessionAuthHandler(sp.GetRequiredService<SessionState>())
+    {
+        InnerHandler = new HttpClientHandler()
+    };
+
+    return new HttpClient(handler)
+    {
+        BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)
+    };
 });
 
 builder.Services.AddSingleton<ToastService>();

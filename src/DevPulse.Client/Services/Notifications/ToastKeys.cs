@@ -11,6 +11,7 @@ public static class ToastKeys
 {
     public const string Login = "login";
     public const string ChangePassword = "change-password";
+    public const string Session = "session";
 
     public const string Attendance = "attendance";
     public const string AttendanceCorrectionSubmit = "attendance-correction-submit";

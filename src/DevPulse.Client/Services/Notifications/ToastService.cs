@@ -30,6 +30,13 @@ public sealed class ToastService
 
     public IReadOnlyList<ToastMessage> Toasts => _toasts;
 
+    /// <summary>
+    /// While true, error toasts are dropped. Used between detecting an expired session and
+    /// the user signing in again, so failing requests cannot cover the login page in stale
+    /// "session expired" / "Failed to fetch" messages.
+    /// </summary>
+    public bool SuppressErrors { get; set; }
+
     public void Success(string message, string? title = null, int? durationMs = null, string? key = null)
         => Show(message, ToastLevel.Success, title, durationMs, key);
 
@@ -50,7 +57,8 @@ public sealed class ToastService
     /// </summary>
     public void Show(string message, ToastLevel level, string? title = null, int? durationMs = null, string? key = null)
     {
-        if (string.IsNullOrWhiteSpace(message))
+        if (string.IsNullOrWhiteSpace(message)
+            || (SuppressErrors && level == ToastLevel.Error))
         {
             return;
         }

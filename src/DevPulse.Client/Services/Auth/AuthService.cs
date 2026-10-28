@@ -41,8 +41,22 @@ public sealed class AuthService : IAuthService
 
     public async Task LogoutAsync(CancellationToken cancellationToken = default)
     {
-        await _httpClient.PostAsync("api/auth/logout", null, cancellationToken);
-        _authStateProvider.NotifyAuthenticationStateChanged();
+        try
+        {
+            using var response = await _httpClient.PostAsync("api/auth/logout", null, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // The local sign-out still proceeds when the request is cut short or times out.
+        }
+        catch (HttpRequestException)
+        {
+            // The local sign-out still proceeds when the server cannot be reached.
+        }
+        finally
+        {
+            _authStateProvider.NotifySignedOut();
+        }
     }
 
     public async Task ChangePasswordAsync(SelfChangePasswordRequest request, CancellationToken cancellationToken = default)
