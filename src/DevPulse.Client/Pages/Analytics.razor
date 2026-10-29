@@ -5,6 +5,7 @@
 @inject IDeveloperApiClient DeveloperApi
 @inject IAnalyticsApiClient AnalyticsApi
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("MIS Analytics")</PageTitle>
 
@@ -18,16 +19,6 @@
             </p>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="alert alert-danger leave-alert" role="alert">@_error</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(_syncMessage))
-    {
-        <div class="alert alert-success leave-alert" role="status">@_syncMessage</div>
-    }
 
     <div class="analytics-workspace">
         <div class="filter-card card analytics-toolbar">
@@ -525,8 +516,6 @@
     private bool _isLoadingAccounts = true;
     private bool _isLoading;
     private bool _isSyncing;
-    private string? _error;
-    private string? _syncMessage;
     private KpiSyncStatusResponse? _syncStatus;
     private DateTime? _dataSyncedAtUtc;
     private bool _chartsPending;
@@ -564,7 +553,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"Failed to load workspace accounts: {ex.Message}";
+            Toast.Error($"Failed to load workspace accounts: {ex.Message}");
         }
         finally
         {
@@ -582,7 +571,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"Failed to load developers: {ex.Message}";
+            Toast.Error($"Failed to load developers: {ex.Message}");
         }
     }
 
@@ -607,7 +596,6 @@
     private Task OnWorkspaceSelectedAsync(string? accountId)
     {
         _selectedAccountId = Guid.TryParse(accountId, out var id) ? id : null;
-        _error = null;
         // Keep prior results until user regenerates; clear if selection removed.
         if (!_selectedAccountId.HasValue)
         {
@@ -626,7 +614,6 @@
         _slaChecks = [];
         _weeklyThroughput = [];
         _atRiskDevelopers = [];
-        _error = null;
     }
 
     private void ApplyPreset(PeriodPreset preset)
@@ -689,18 +676,16 @@
     private async Task RunSyncAsync()
     {
         _isSyncing = true;
-        _syncMessage = null;
-        _error = null;
 
         try
         {
             var result = await AnalyticsApi.RunSyncAsync();
-            _syncMessage = result?.Message ?? "KPI sync completed.";
+            Toast.Success(result?.Message ?? "KPI sync completed.");
             await LoadSyncStatusAsync();
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -712,20 +697,18 @@
     {
         if (_fromDate.Date > _toDate.Date)
         {
-            _error = "From date must be on or before to date.";
+            Toast.Warning("From date must be on or before to date.");
             return;
         }
 
         if (!_selectedAccountId.HasValue)
         {
-            _error = "Select a workspace account first.";
+            Toast.Warning("Select a workspace account first.");
             _kpis = null;
             return;
         }
 
         _isLoading = true;
-        _error = null;
-        _syncMessage = null;
 
         try
         {
@@ -740,7 +723,7 @@
             {
                 _kpis = null;
                 _previousKpis = null;
-                _error = "No active developers are mapped to the selected workspace account.";
+                Toast.Error("No active developers are mapped to the selected workspace account.");
                 return;
             }
 
@@ -772,7 +755,7 @@
             {
                 _kpis = null;
                 _previousKpis = null;
-                _error = "Unable to load analytics from the database. Run a KPI sync first.";
+                Toast.Error("Unable to load analytics from the database. Run a KPI sync first.");
                 return;
             }
 
@@ -788,7 +771,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            Toast.Error(ex.Message);
             _kpis = null;
             _previousKpis = null;
             _slaChecks = [];

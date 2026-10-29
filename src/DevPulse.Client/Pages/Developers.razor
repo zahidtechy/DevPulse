@@ -3,6 +3,7 @@
 @inject IDeveloperApiClient DeveloperApi
 @inject IClickUpAccountApiClient ClickUpAccountApi
 @inject IHubstaffOrganizationApiClient HubstaffOrgApi
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("Developers")</PageTitle>
 
@@ -38,11 +39,6 @@
             </button>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_isBusy && !_isLoading)
     {
@@ -410,8 +406,6 @@
     private bool _showAddForm;
     private bool _isLoading = true;
     private bool _isBusy;
-    private bool _isError;
-    private string? _message;
 
     protected override async Task OnInitializedAsync()
     {
@@ -428,8 +422,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = $"Failed to load Hubstaff organizations: {ex.Message}";
+            Toast.Error($"Failed to load Hubstaff organizations: {ex.Message}");
         }
     }
 
@@ -447,15 +440,13 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = $"Failed to load ClickUp workspaces: {ex.Message}";
+            Toast.Error($"Failed to load ClickUp workspaces: {ex.Message}");
         }
     }
 
     private async Task LoadDevelopersAsync()
     {
         _isLoading = true;
-        _message = null;
 
         try
         {
@@ -465,8 +456,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = $"Failed to load developers: {ex.Message}";
+            Toast.Error($"Failed to load developers: {ex.Message}");
         }
         finally
         {
@@ -485,8 +475,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = $"Failed to load reporting manager options: {ex.Message}";
+            Toast.Error($"Failed to load reporting manager options: {ex.Message}");
         }
     }
 
@@ -499,7 +488,6 @@
     {
         _showAddForm = true;
         _newDeveloper = new CreateDeveloperFormModel();
-        _message = null;
     }
 
     private void HideAddForm()
@@ -516,7 +504,6 @@
             Email = developer.Email ?? string.Empty,
             WorkspaceId = _clickUpAccounts.Count == 1 ? _clickUpAccounts[0].WorkspaceId : string.Empty
         };
-        _message = null;
     }
 
     private void CancelMappingForm()
@@ -534,20 +521,17 @@
 
         if (string.IsNullOrWhiteSpace(_mappingForm.WorkspaceId))
         {
-            _isError = true;
-            _message = "Please select a workspace.";
+            Toast.Warning("Please select a workspace.");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(_mappingForm.Email))
         {
-            _isError = true;
-            _message = "Email is required to resolve the ClickUp user.";
+            Toast.Warning("Email is required to resolve the ClickUp user.");
             return;
         }
 
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -557,14 +541,12 @@
 
             _mappingDeveloperId = null;
             _mappingForm = new MappingFormModel();
-            _isError = false;
-            _message = "Developer mapped to ClickUp workspace successfully.";
+            Toast.Success("Developer mapped to ClickUp workspace successfully.");
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -575,20 +557,17 @@
     private async Task CreateDeveloperAsync()
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             await DeveloperApi.CreateDeveloperAsync(_newDeveloper.ToRequest());
             _showAddForm = false;
-            _isError = false;
-            _message = "Developer created successfully.";
+            Toast.Success("Developer created successfully.");
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -659,7 +638,6 @@
     private async Task SyncFromClickUpAsync()
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -668,19 +646,17 @@
                 : null;
 
             var result = await DeveloperApi.SyncFromClickUpAsync(request);
-            _isError = false;
             var accountLabel = Guid.TryParse(_selectedAccountId, out var selectedId)
                 ? _clickUpAccounts.FirstOrDefault(a => a.Id == selectedId)?.Name ?? "selected account"
                 : "all accounts";
-            _message = result is null
+            Toast.Success(result is null
                 ? $"Sync from {accountLabel} completed."
-                : $"Sync from {accountLabel} complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.";
+                : $"Sync from {accountLabel} complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.");
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -691,21 +667,18 @@
     private async Task SyncFromHubstaffAsync()
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             var result = await DeveloperApi.SyncFromHubstaffAsync(new SyncFromHubstaffRequest(null));
-            _isError = false;
-            _message = result is null
+            Toast.Success(result is null
                 ? "Sync from Hubstaff completed."
-                : $"Sync from Hubstaff complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.";
+                : $"Sync from Hubstaff complete: {result.DevelopersCreated} created, {result.DevelopersUpdated} updated, {result.MappingsAdded} mappings added.");
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -735,8 +708,7 @@
     {
         if (!_hubstaffMappingDeveloperId.HasValue || !Guid.TryParse(_hubstaffMappingForm.OrganizationId, out var orgId))
         {
-            _isError = true;
-            _message = "Select a Hubstaff organization.";
+            Toast.Warning("Select a Hubstaff organization.");
             return;
         }
 
@@ -748,14 +720,12 @@
                 new AddDeveloperHubstaffMappingByEmailRequest(orgId, _hubstaffMappingForm.Email));
 
             _hubstaffMappingDeveloperId = null;
-            _isError = false;
-            _message = "Developer mapped to Hubstaff successfully.";
+            Toast.Success("Developer mapped to Hubstaff successfully.");
             await LoadDevelopersAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -766,7 +736,6 @@
     private async Task SetDeveloperActiveAsync(DeveloperDto developer, bool isActive)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -779,16 +748,14 @@
                     developer.WorkRole,
                     developer.ReportingManagerDeveloperId));
 
-            _isError = false;
-            _message = isActive
+            Toast.Success(isActive
                 ? $"{developer.Name} marked active."
-                : $"{developer.Name} marked inactive. Reports and analytics are unchanged.";
+                : $"{developer.Name} marked inactive. Reports and analytics are unchanged.");
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -804,7 +771,6 @@
         }
 
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -817,14 +783,12 @@
                     role,
                     developer.ReportingManagerDeveloperId));
 
-            _isError = false;
-            _message = $"{developer.Name} set as {role}.";
+            Toast.Success($"{developer.Name} set as {role}.");
             await LoadDevelopersAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -841,7 +805,6 @@
         }
 
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -854,16 +817,14 @@
                     developer.WorkRole,
                     managerId));
 
-            _isError = false;
-            _message = managerId.HasValue
+            Toast.Success(managerId.HasValue
                 ? $"{developer.Name} assigned to reporting manager."
-                : $"{developer.Name} reporting manager cleared.";
+                : $"{developer.Name} reporting manager cleared.");
             await LoadDevelopersAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -928,19 +889,16 @@
     private async Task DeleteDeveloperAsync(Guid id)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             await DeveloperApi.DeleteDeveloperAsync(id);
-            _isError = false;
-            _message = "Developer deleted.";
+            Toast.Success("Developer deleted.");
             await ReloadDevelopersAndManagerCandidatesAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {

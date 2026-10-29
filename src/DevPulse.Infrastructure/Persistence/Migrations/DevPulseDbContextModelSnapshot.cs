@@ -126,6 +126,12 @@ namespace DevPulse.Infrastructure.Persistence.Migrations
                     b.Property<int>("PunchOutAllowMinutesAfterWorkEnd")
                         .HasColumnType("int");
 
+                    b.Property<bool>("StrictPunchIn")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("StrictPunchOut")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -905,6 +911,10 @@ namespace DevPulse.Infrastructure.Persistence.Migrations
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("TelegramId")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
 
@@ -925,6 +935,10 @@ namespace DevPulse.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex")
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
+
+                    b.HasIndex("TelegramId")
+                        .IsUnique()
+                        .HasFilter("[TelegramId] IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });

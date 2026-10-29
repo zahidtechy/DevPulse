@@ -1,0 +1,195 @@
+@implements IDisposable
+@inject ToastService Toast
+
+@if (Toast.Toasts.Count > 0)
+{
+    <div class="dp-toast-region">
+        @foreach (var toast in Toast.Toasts)
+        {
+            <div @key="toast.Id"
+                 class="dp-toast dp-toast-@LevelClass(toast.Level)"
+                 role="@(toast.Level == ToastLevel.Error ? "alert" : "status")"
+                 aria-live="@(toast.Level == ToastLevel.Error ? "assertive" : "polite")"
+                 @onmouseenter="() => PauseToast(toast.Id)"
+                 @onmouseleave="() => ResumeToast(toast.Id)">
+                <span class="dp-toast-icon @IconClass(toast.Level)" aria-hidden="true"></span>
+                <div class="dp-toast-body">
+                    <p class="dp-toast-title">@toast.Title</p>
+                    <p class="dp-toast-message">@toast.Message</p>
+                </div>
+                <button type="button"
+                        class="dp-toast-close"
+                        aria-label="Dismiss notification"
+                        @onclick="() => Dismiss(toast.Id)">
+                    <span class="bi-x-lg" aria-hidden="true"></span>
+                </button>
+                @if (toast.DurationMs > 0)
+                {
+                    <span class="dp-toast-progress"
+                          style="animation-duration:@(toast.DurationMs)ms"
+                          aria-hidden="true"></span>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private readonly Dictionary<Guid, ToastTimer> _timers = new();
+
+    protected override void OnInitialized()
+    {
+        Toast.OnChange += HandleToastChanged;
+        ReconcileTimers();
+    }
+
+    private void HandleToastChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            ReconcileTimers();
+            StateHasChanged();
+        });
+    }
+
+    private void ReconcileTimers()
+    {
+        var activeIds = Toast.Toasts.Select(t => t.Id).ToHashSet();
+
+        foreach (var id in _timers.Keys.Where(id => !activeIds.Contains(id)).ToList())
+        {
+            CancelTimer(id);
+        }
+
+        foreach (var toast in Toast.Toasts)
+        {
+            if (toast.DurationMs > 0 && !_timers.ContainsKey(toast.Id))
+            {
+                ScheduleDismiss(toast.Id, toast.DurationMs);
+            }
+        }
+    }
+
+    private void ScheduleDismiss(Guid id, int durationMs)
+    {
+        CancelTimer(id);
+
+        var timer = new ToastTimer(durationMs, Environment.TickCount64, new CancellationTokenSource());
+        _timers[id] = timer;
+
+        _ = DismissAfterDelayAsync(id, timer);
+    }
+
+    private async Task DismissAfterDelayAsync(Guid id, ToastTimer timer)
+    {
+        try
+        {
+            await Task.Delay(timer.RemainingMs, timer.Cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (timer.Cancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await InvokeAsync(() =>
+        {
+            CancelTimer(id);
+            Toast.Remove(id);
+        });
+    }
+
+    private void PauseToast(Guid id)
+    {
+        if (!_timers.TryGetValue(id, out var timer))
+        {
+            return;
+        }
+
+        timer.RemainingMs = Math.Max(
+            0,
+            timer.RemainingMs - (int)(Environment.TickCount64 - timer.StartedAtTick));
+
+        timer.Cancellation.Cancel();
+    }
+
+    private void ResumeToast(Guid id)
+    {
+        if (!_timers.TryGetValue(id, out var timer))
+        {
+            return;
+        }
+
+        if (timer.RemainingMs <= 0)
+        {
+            CancelTimer(id);
+            Toast.Remove(id);
+            return;
+        }
+
+        ScheduleDismiss(id, timer.RemainingMs);
+    }
+
+    private void Dismiss(Guid id)
+    {
+        CancelTimer(id);
+        Toast.Remove(id);
+    }
+
+    private void CancelTimer(Guid id)
+    {
+        if (!_timers.Remove(id, out var timer))
+        {
+            return;
+        }
+
+        timer.Cancellation.Cancel();
+        timer.Cancellation.Dispose();
+    }
+
+    private static string LevelClass(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "success",
+        ToastLevel.Error => "error",
+        ToastLevel.Warning => "warning",
+        _ => "info"
+    };
+
+    private static string IconClass(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "bi-check-circle-fill",
+        ToastLevel.Error => "bi-exclamation-octagon-fill",
+        ToastLevel.Warning => "bi-exclamation-triangle-fill",
+        _ => "bi-info-circle-fill"
+    };
+
+    public void Dispose()
+    {
+        Toast.OnChange -= HandleToastChanged;
+
+        foreach (var id in _timers.Keys.ToList())
+        {
+            CancelTimer(id);
+        }
+    }
+
+    private sealed class ToastTimer
+    {
+        public ToastTimer(int remainingMs, long startedAtTick, CancellationTokenSource cancellation)
+        {
+            RemainingMs = remainingMs;
+            StartedAtTick = startedAtTick;
+            Cancellation = cancellation;
+        }
+
+        public int RemainingMs { get; set; }
+
+        public long StartedAtTick { get; set; }
+
+        public CancellationTokenSource Cancellation { get; }
+    }
+}

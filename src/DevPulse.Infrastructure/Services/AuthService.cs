@@ -72,5 +72,6 @@ public sealed class AuthService : IAuthService
             user.IsActive,
             user.CreatedAtUtc,
             user.DeveloperId,
-            developerName);
+            developerName,
+            user.TelegramId);
 }

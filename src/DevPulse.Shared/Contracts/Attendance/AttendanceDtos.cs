@@ -34,7 +34,8 @@ public record AttendanceMeDto(
     bool CanPunchOut = true,
     TimeOnly? PunchInEarliestTime = null,
     TimeOnly? PunchOutEarliestTime = null,
-    TimeOnly? PunchOutLatestTime = null);
+    TimeOnly? PunchOutLatestTime = null,
+    TimeOnly? PunchInLatestTime = null);
 
 public record AttendanceSettingsDto(
     TimeOnly WorkStartTime,
@@ -44,7 +45,9 @@ public record AttendanceSettingsDto(
     int PunchInAllowMinutesBeforeWorkStart,
     int PunchOutAllowMinutesAfterWorkEnd,
     string OfficeTimeZoneId,
-    DateTime UpdatedAtUtc);
+    DateTime UpdatedAtUtc,
+    bool StrictPunchIn = false,
+    bool StrictPunchOut = false);
 
 public record UpdateAttendanceSettingsRequest(
     TimeOnly WorkStartTime,
@@ -53,7 +56,9 @@ public record UpdateAttendanceSettingsRequest(
     TimeOnly BufferEndTime,
     int PunchInAllowMinutesBeforeWorkStart,
     int PunchOutAllowMinutesAfterWorkEnd,
-    string OfficeTimeZoneId);
+    string OfficeTimeZoneId,
+    bool StrictPunchIn = false,
+    bool StrictPunchOut = false);
 
 public record AttendanceRecordDto(
     Guid Id,

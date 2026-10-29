@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = AppRoles.Admin)]
 @inject IUserApiClient UserApi
 @inject IDeveloperApiClient DeveloperApi
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("User Management")</PageTitle>
 
@@ -22,150 +23,179 @@
         </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
-
-    @if (_isBusy && !_isLoading)
+    @if (_isBusy && !_isLoading && !_showAddForm && !_resetPasswordUserId.HasValue)
     {
         <LoadingIndicator Text="Processing..." />
     }
 
-    @if (_resetPasswordUserId.HasValue)
-    {
-        <div class="filter-card card mb-4 users-form-card">
-            <div class="card-body">
-                <div class="filter-section-header mb-1">
-                    <span class="filter-section-label">Reset password</span>
+    <ModalDialog IsVisible="_resetPasswordUserId.HasValue"
+                 Title="Reset Password"
+                 IsBusy="_isBusy"
+                 OnClose="HideResetPasswordForm">
+        <ChildContent>
+            @if (!string.IsNullOrWhiteSpace(_resetPasswordError))
+            {
+                <div class="alert alert-danger" role="alert">@_resetPasswordError</div>
+            }
+
+            <p class="text-muted small mb-3">
+                Set a new password for <strong>@_resetPasswordDisplayName</strong> (@_resetPasswordEmail).
+            </p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="resetPassword">New password</label>
+                    <PasswordInput id="resetPassword"
+                                   name="resetPassword"
+                                   @bind-Value="_resetPassword"
+                                   autocomplete="new-password"
+                                   aria-describedby="resetPasswordHelp" />
+                    <div class="form-text" id="resetPasswordHelp">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
                 </div>
-                <p class="text-muted small mb-3">
-                    Set a new password for <strong>@_resetPasswordDisplayName</strong> (@_resetPasswordEmail).
-                </p>
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">New password</label>
-                        <input type="password" class="form-control" @bind="_resetPassword" autocomplete="new-password" />
-                        <div class="form-text">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Confirm password</label>
-                        <input type="password" class="form-control" @bind="_resetPasswordConfirm" autocomplete="new-password" />
-                    </div>
-                </div>
-                <div class="filter-actions mt-3">
-                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideResetPasswordForm">Cancel</button>
-                    <BusyButton CssClass="btn btn-warning" IsBusy="_isBusy" BusyText="Resetting..." OnClick="ResetPasswordAsync">
-                        Reset Password
-                    </BusyButton>
+                <div class="col-md-6">
+                    <label class="form-label" for="resetPasswordConfirm">Confirm password</label>
+                    <PasswordInput id="resetPasswordConfirm"
+                                   name="resetPasswordConfirm"
+                                   @bind-Value="_resetPasswordConfirm"
+                                   autocomplete="new-password" />
                 </div>
             </div>
-        </div>
-    }
+        </ChildContent>
+        <FooterContent>
+            <button type="button" class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideResetPasswordForm">Cancel</button>
+            <BusyButton CssClass="btn btn-warning" IsBusy="_isBusy" BusyText="Resetting..." OnClick="ResetPasswordAsync">
+                Reset Password
+            </BusyButton>
+        </FooterContent>
+    </ModalDialog>
 
-    @if (_showAddForm)
-    {
-        <div class="filter-card card mb-4 users-form-card">
-            <div class="card-body">
-                <div class="filter-section-header mb-3">
-                    <span class="filter-section-label">@(_editingUserId.HasValue ? "Edit User" : "New User")</span>
-                </div>
-                <div class="row g-3">
-                    @if (!_editingUserId.HasValue)
-                    {
-                        <div class="col-md-4">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-control" @bind="_newUser.Email" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Password</label>
-                            <input type="password" class="form-control" @bind="_newUser.Password" autocomplete="new-password" />
-                            <div class="form-text">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
-                        </div>
-                    }
-                    <div class="col-md-4">
-                        <label class="form-label">Display name</label>
-                        <input class="form-control" @bind="_newUser.DisplayName" />
+    <ModalDialog IsVisible="_showAddForm"
+                 Title="@(_editingUserId.HasValue ? "Edit User" : "Add User")"
+                 IsBusy="_isBusy"
+                 OnClose="HideForm">
+        <ChildContent>
+            @if (!string.IsNullOrWhiteSpace(_formError))
+            {
+                <div class="alert alert-danger" role="alert">@_formError</div>
+            }
+
+            <div class="row g-3">
+                @if (!_editingUserId.HasValue)
+                {
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" @bind="_newUser.Email" />
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Role</label>
-                        <select class="form-select" @bind="_newUser.Role">
-                            @foreach (var role in AppRoles.All)
+                    <div class="col-md-6">
+                        <label class="form-label" for="newUserPassword">Password</label>
+                        <PasswordInput id="newUserPassword"
+                                       name="newUserPassword"
+                                       @bind-Value="_newUser.Password"
+                                       autocomplete="new-password"
+                                       aria-describedby="newUserPasswordHelp" />
+                        <div class="form-text" id="newUserPasswordHelp">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
+                    </div>
+                }
+                <div class="col-md-6">
+                    <label class="form-label">Display name</label>
+                    <input class="form-control" @bind="_newUser.DisplayName" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Role</label>
+                    <select class="form-select" @bind="_newUser.Role">
+                        @foreach (var role in AppRoles.All)
+                        {
+                            <option value="@role">@role</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="telegramId">Telegram ID</label>
+                    <input id="telegramId"
+                           class="form-control"
+                           inputmode="numeric"
+                           maxlength="32"
+                           placeholder="e.g. 123456789"
+                           @bind="_newUser.TelegramId" />
+                    <div class="form-text">Optional numeric Telegram user ID for direct notifications.</div>
+                </div>
+                @if (_editingUserId.HasValue)
+                {
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="userActive" @bind="_editIsActive" />
+                            <label class="form-check-label" for="userActive">Active</label>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="users-form-divider mt-4 pt-3">
+                <span class="filter-section-label">Developer profile</span>
+                <p class="text-muted small mb-3 mt-1">
+                    Link this user to a developer record for leave and attendance. Pick an existing developer or create a new one when adding a user.
+                </p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="developerLink">Link to developer</label>
+                        <div class="users-search-wrap mb-2">
+                            <span class="bi-search users-search-icon" aria-hidden="true"></span>
+                            <input id="developerSearch"
+                                   class="form-control form-control-sm users-search-input"
+                                   placeholder="Filter by name or email..."
+                                   @bind="_developerSearch"
+                                   @bind:event="oninput"
+                                   disabled="@(_createDeveloper && !_editingUserId.HasValue)" />
+                        </div>
+                        <select id="developerLink"
+                                class="form-select"
+                                @bind="_selectedDeveloperId"
+                                disabled="@(_createDeveloper && !_editingUserId.HasValue)">
+                            <option value="">No link (match by email only)</option>
+                            @foreach (var developer in FilteredDevelopers)
                             {
-                                <option value="@role">@role</option>
+                                <option value="@developer.Id">
+                                    @developer.Name@(string.IsNullOrWhiteSpace(developer.Email) ? "" : $" ({developer.Email})")
+                                </option>
                             }
                         </select>
                     </div>
-                    @if (_editingUserId.HasValue)
+                    @if (!_editingUserId.HasValue)
                     {
-                        <div class="col-md-4 d-flex align-items-end">
+                        <div class="col-md-6 d-flex align-items-end">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="userActive" @bind="_editIsActive" />
-                                <label class="form-check-label" for="userActive">Active</label>
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       id="createDeveloper"
+                                       @bind="_createDeveloper"
+                                       @bind:after="OnCreateDeveloperChanged" />
+                                <label class="form-check-label" for="createDeveloper">
+                                    Also create a new developer profile
+                                </label>
+                                <div class="form-text">
+                                    Creates a developer with the same email and display name. Cannot be combined with linking an existing developer.
+                                </div>
                             </div>
                         </div>
                     }
                 </div>
-
-                <div class="users-form-divider mt-4 pt-3">
-                    <span class="filter-section-label">Developer profile</span>
-                    <p class="text-muted small mb-3 mt-1">
-                        Link this user to a developer record for leave and attendance. Pick an existing developer or create a new one when adding a user.
-                    </p>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label" for="developerLink">Link to developer</label>
-                            <div class="users-search-wrap mb-2">
-                                <span class="bi-search users-search-icon" aria-hidden="true"></span>
-                                <input id="developerSearch"
-                                       class="form-control form-control-sm users-search-input"
-                                       placeholder="Filter by name or email..."
-                                       @bind="_developerSearch"
-                                       @bind:event="oninput"
-                                       disabled="@(_createDeveloper && !_editingUserId.HasValue)" />
-                            </div>
-                            <select id="developerLink"
-                                    class="form-select"
-                                    @bind="_selectedDeveloperId"
-                                    disabled="@(_createDeveloper && !_editingUserId.HasValue)">
-                                <option value="">No link (match by email only)</option>
-                                @foreach (var developer in FilteredDevelopers)
-                                {
-                                    <option value="@developer.Id">
-                                        @developer.Name@(string.IsNullOrWhiteSpace(developer.Email) ? "" : $" ({developer.Email})")
-                                    </option>
-                                }
-                            </select>
-                        </div>
-                        @if (!_editingUserId.HasValue)
-                        {
-                            <div class="col-md-6 d-flex align-items-end">
-                                <div class="form-check">
-                                    <input class="form-check-input"
-                                           type="checkbox"
-                                           id="createDeveloper"
-                                           @bind="_createDeveloper"
-                                           @bind:after="OnCreateDeveloperChanged" />
-                                    <label class="form-check-label" for="createDeveloper">
-                                        Also create a new developer profile
-                                    </label>
-                                    <div class="form-text">
-                                        Creates a developer with the same email and display name. Cannot be combined with linking an existing developer.
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <div class="filter-actions mt-3">
-                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
-                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveUserAsync">
-                        @(_editingUserId.HasValue ? "Update User" : "Create User")
-                    </BusyButton>
-                </div>
             </div>
-        </div>
+        </ChildContent>
+        <FooterContent>
+            <button type="button" class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
+            <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveUserAsync">
+                @(_editingUserId.HasValue ? "Update User" : "Create User")
+            </BusyButton>
+        </FooterContent>
+    </ModalDialog>
+
+    @if (_deleteTarget is not null)
+    {
+        <DeleteConfirmation IsVisible="_showDeleteConfirm"
+                            IsVisibleChanged="OnDeleteConfirmVisibilityChanged"
+                            Title="@($"Delete \"{_deleteTarget.DisplayName}\"?")"
+                            Message="@GetDeleteConfirmMessage(_deleteTarget)"
+                            IsBusy="_isBusy"
+                            OnConfirm="ConfirmDeleteAsync" />
     }
 
     @if (_isLoading)
@@ -330,7 +360,7 @@
                                                     <span class="bi-key" aria-hidden="true"></span>
                                                     Reset
                                                 </button>
-                                                <button class="btn btn-sm btn-outline-danger" disabled="@_isBusy" @onclick="() => DeleteUserAsync(user.Id)" title="Delete user">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_isBusy" @onclick="() => ShowDeleteConfirmation(user)" title="Delete user">
                                                     <span class="bi-trash" aria-hidden="true"></span>
                                                     Delete
                                                 </button>
@@ -357,18 +387,20 @@
     private bool _showAddForm;
     private bool _isLoading = true;
     private bool _isBusy;
-    private bool _isError;
     private bool _editIsActive = true;
     private bool _createDeveloper;
     private Guid? _editingUserId;
     private Guid? _resetPasswordUserId;
+    private UserDto? _deleteTarget;
+    private bool _showDeleteConfirm;
     private string _resetPasswordDisplayName = string.Empty;
     private string _resetPasswordEmail = string.Empty;
     private string _resetPassword = string.Empty;
     private string _resetPasswordConfirm = string.Empty;
     private string _developerSearch = string.Empty;
     private string _selectedDeveloperId = string.Empty;
-    private string? _message;
+    private string? _formError;
+    private string? _resetPasswordError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -427,8 +459,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -446,8 +477,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
     }
 
@@ -460,7 +490,7 @@
                 .Select(u => u.DeveloperId!.Value)
                 .ToHashSet();
 
-            IEnumerable<DeveloperDto> available = _developers.Where(d => !linkedIds.Contains(d.Id));
+            IEnumerable<DeveloperDto> available = _developers.Where(d => !linkedIds.Contains(d.Id) && d.IsOwnTeam);
 
             if (!string.IsNullOrWhiteSpace(_developerSearch))
             {
@@ -482,12 +512,13 @@
         _newUser.Password = string.Empty;
         _newUser.DisplayName = string.Empty;
         _newUser.Role = AppRoles.User;
+        _newUser.TelegramId = string.Empty;
         _editIsActive = true;
         _createDeveloper = false;
         _selectedDeveloperId = string.Empty;
         _developerSearch = string.Empty;
         _showAddForm = true;
-        _message = null;
+        _formError = null;
     }
 
     private void EditUser(UserDto user)
@@ -497,18 +528,22 @@
         _newUser.Email = user.Email;
         _newUser.DisplayName = user.DisplayName;
         _newUser.Role = user.Role;
+        _newUser.TelegramId = user.TelegramId ?? string.Empty;
         _editIsActive = user.IsActive;
         _createDeveloper = false;
         _selectedDeveloperId = user.DeveloperId?.ToString() ?? string.Empty;
         _developerSearch = string.Empty;
         _showAddForm = true;
-        _message = null;
+        _formError = null;
     }
 
     private void HideForm()
     {
         _showAddForm = false;
         _editingUserId = null;
+        _formError = null;
+        _newUser.Password = string.Empty;
+        _developerSearch = string.Empty;
     }
 
     private void OnCreateDeveloperChanged()
@@ -527,7 +562,7 @@
         _resetPasswordEmail = user.Email;
         _resetPassword = string.Empty;
         _resetPasswordConfirm = string.Empty;
-        _message = null;
+        _resetPasswordError = null;
     }
 
     private void HideResetPasswordForm()
@@ -537,6 +572,7 @@
         _resetPasswordEmail = string.Empty;
         _resetPassword = string.Empty;
         _resetPasswordConfirm = string.Empty;
+        _resetPasswordError = null;
     }
 
     private async Task ResetPasswordAsync()
@@ -546,34 +582,31 @@
             return;
         }
 
+        _resetPasswordError = null;
+
         if (string.IsNullOrWhiteSpace(_resetPassword))
         {
-            _isError = true;
-            _message = "New password is required.";
+            _resetPasswordError = "New password is required.";
             return;
         }
 
         if (_resetPassword != _resetPasswordConfirm)
         {
-            _isError = true;
-            _message = "Passwords do not match.";
+            _resetPasswordError = "Passwords do not match.";
             return;
         }
 
         _isBusy = true;
-        _message = null;
 
         try
         {
             await UserApi.ChangePasswordAsync(_resetPasswordUserId.Value, new ChangePasswordRequest(_resetPassword));
-            _isError = false;
-            _message = $"Password reset for {_resetPasswordDisplayName}.";
+            Toast.Success($"Password reset for {_resetPasswordDisplayName}.");
             HideResetPasswordForm();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            _resetPasswordError = ex.Message;
         }
         finally
         {
@@ -585,13 +618,12 @@
     {
         if (_createDeveloper && !string.IsNullOrWhiteSpace(_selectedDeveloperId))
         {
-            _isError = true;
-            _message = "Choose either an existing developer or creating a new one, not both.";
+            _formError = "Choose either an existing developer or creating a new one, not both.";
             return;
         }
 
         _isBusy = true;
-        _message = null;
+        _formError = null;
 
         try
         {
@@ -603,9 +635,9 @@
                     _newUser.DisplayName,
                     _newUser.Role,
                     _editIsActive,
-                    developerId));
-                _isError = false;
-                _message = "User updated.";
+                    developerId,
+                    _newUser.TelegramId));
+                Toast.Success("User updated.");
             }
             else
             {
@@ -615,13 +647,13 @@
                     _newUser.DisplayName,
                     _newUser.Role,
                     developerId,
-                    _createDeveloper));
-                _isError = false;
-                _message = _createDeveloper
+                    _createDeveloper,
+                    _newUser.TelegramId));
+                Toast.Success(_createDeveloper
                     ? "User and developer profile created."
                     : developerId.HasValue
                         ? "User created and linked to developer."
-                        : "User created.";
+                        : "User created.");
             }
 
             HideForm();
@@ -629,8 +661,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            _formError = ex.Message;
         }
         finally
         {
@@ -638,22 +669,57 @@
         }
     }
 
+    private void ShowDeleteConfirmation(UserDto user)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        _deleteTarget = user;
+        _showDeleteConfirm = true;
+    }
+
+    private Task OnDeleteConfirmVisibilityChanged(bool isVisible)
+    {
+        _showDeleteConfirm = isVisible;
+
+        if (!isVisible && !_isBusy)
+        {
+            _deleteTarget = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleteTarget is null)
+        {
+            return;
+        }
+
+        await DeleteUserAsync(_deleteTarget.Id);
+        _showDeleteConfirm = false;
+        _deleteTarget = null;
+    }
+
+    private static string GetDeleteConfirmMessage(UserDto user) =>
+        $"Are you sure you want to delete \"{user.DisplayName}\" ({user.Email})? This action cannot be undone.";
+
     private async Task DeleteUserAsync(Guid id)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             await UserApi.DeleteUserAsync(id);
-            _isError = false;
-            _message = "User deleted.";
+            Toast.Success("User deleted.");
             await LoadUsersAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -699,5 +765,7 @@
         public string DisplayName { get; set; } = string.Empty;
 
         public string Role { get; set; } = AppRoles.User;
+
+        public string TelegramId { get; set; } = string.Empty;
     }
 }
