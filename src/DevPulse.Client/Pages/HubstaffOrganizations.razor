@@ -1,6 +1,7 @@
 @page "/hubstaff-organizations"
 @attribute [Authorize(Roles = AppRoles.Admin)]
 @inject IHubstaffOrganizationApiClient HubstaffApi
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("Hubstaff Organizations")</PageTitle>
 
@@ -20,11 +21,6 @@
             </button>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_showAddForm)
     {
@@ -125,8 +121,6 @@
     private bool _showAddForm;
     private bool _isLoading = true;
     private bool _isBusy;
-    private bool _isError;
-    private string? _message;
 
     protected override async Task OnInitializedAsync() => await LoadOrganizationsAsync();
 
@@ -141,8 +135,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -155,7 +148,6 @@
         _showAddForm = true;
         _form = new CreateHubstaffOrganizationFormModel();
         _discoveredOrganizations.Clear();
-        _message = null;
     }
 
     private void HideAddForm() => _showAddForm = false;
@@ -164,13 +156,11 @@
     {
         if (string.IsNullOrWhiteSpace(_form.PersonalAccessToken))
         {
-            _isError = true;
-            _message = "Enter a PAT before detecting organizations.";
+            Toast.Warning("Enter a PAT before detecting organizations.");
             return;
         }
 
         _isBusy = true;
-        _message = null;
         try
         {
             var items = await HubstaffApi.DiscoverOrganizationsAsync(new DiscoverHubstaffOrganizationsRequest(_form.PersonalAccessToken));
@@ -181,13 +171,11 @@
                 _form.SelectedOrganizationId = items[0].OrganizationId.ToString();
             }
 
-            _isError = false;
-            _message = $"Found {items.Count} organization(s).";
+            Toast.Success($"Found {items.Count} organization(s).");
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -198,19 +186,16 @@
     private async Task CreateOrganizationAsync()
     {
         _isBusy = true;
-        _message = null;
         try
         {
             await HubstaffApi.CreateOrganizationAsync(_form.ToRequest());
             _showAddForm = false;
-            _isError = false;
-            _message = "Hubstaff organization saved. PAT encrypted in database.";
+            Toast.Success("Hubstaff organization saved. PAT encrypted in database.");
             await LoadOrganizationsAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -224,14 +209,19 @@
         try
         {
             var result = await HubstaffApi.TestConnectionAsync(id);
-            _isError = result?.IsConnected != true;
-            _message = result?.Message ?? "Connection test completed.";
+            if (result?.IsConnected == true)
+            {
+                Toast.Success(result.Message ?? "Connection test completed.");
+            }
+            else
+            {
+                Toast.Error(result?.Message ?? "Connection test failed.");
+            }
             await LoadOrganizationsAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -249,8 +239,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -265,13 +254,11 @@
         {
             await HubstaffApi.DeleteOrganizationAsync(id);
             await LoadOrganizationsAsync();
-            _message = "Organization removed.";
-            _isError = false;
+            Toast.Success("Organization removed.");
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {

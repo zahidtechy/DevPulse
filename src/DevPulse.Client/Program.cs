@@ -1,4 +1,5 @@
 using DevPulse.Client;
+using DevPulse.Client.Services.Notifications;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
@@ -23,6 +24,7 @@ builder.Services.AddScoped(sp => new HttpClient
     BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)
 });
 
+builder.Services.AddSingleton<ToastService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IViewportService, ViewportService>();
 builder.Services.AddScoped<IClickUpAccountApiClient, ClickUpAccountApiClient>();

@@ -11,6 +11,9 @@
             @onpointerdown="StartPress"
             @onpointerup="CancelPress"
             @onpointercancel="CancelPress">
+
+
+
         <svg class="fingerprint-progress" viewBox="0 0 120 120" aria-hidden="true">
             <circle class="fingerprint-progress-track" cx="60" cy="60" r="54" />
             <circle class="fingerprint-progress-ring" cx="60" cy="60" r="54" />
@@ -94,12 +97,12 @@
 
     private string GetLabel() => NextAction switch
     {
-        AttendanceNextActionDto.PunchIn when IsLocked => "Punch In Locked",
-        AttendanceNextActionDto.PunchIn => "Hold to Punch In",
-        AttendanceNextActionDto.PunchOut when IsLocked => "Punch Out Locked",
-        AttendanceNextActionDto.PunchOut => "Hold to Punch Out",
+        AttendanceNextActionDto.PunchIn when IsLocked => "Check-In Locked",
+        AttendanceNextActionDto.PunchIn => "Hold to Check In",
+        AttendanceNextActionDto.PunchOut when IsLocked => "Check-Out Locked",
+        AttendanceNextActionDto.PunchOut => "Hold to Check Out",
         AttendanceNextActionDto.Complete => "Day Complete",
-        _ => "Hold to Punch"
+        _ => "Hold to Check"
     };
 
     private void StartPress(PointerEventArgs args)

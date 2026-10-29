@@ -3,6 +3,7 @@
 @implements IAsyncDisposable
 @inject ILeaveApiClient LeaveApi
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("Leave Analytics")</PageTitle>
 
@@ -16,11 +17,6 @@
             </p>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="alert alert-danger leave-alert" role="alert">@_error</div>
-    }
 
     <div class="leave-analytics-workspace">
         <div class="filter-card card leave-analytics-toolbar">
@@ -461,7 +457,6 @@
     private int _selectedYear = DateTime.Today.Year;
     private Guid? _selectedLeaveTypeId;
     private bool _isLoading = true;
-    private string? _error;
     private bool _chartsPending;
     private IJSObjectReference? _chartsModule;
 
@@ -484,7 +479,6 @@
     private async Task LoadAnalyticsAsync()
     {
         _isLoading = true;
-        _error = null;
 
         try
         {
@@ -494,7 +488,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            Toast.Error(ex.Message);
             _summary = null;
         }
         finally

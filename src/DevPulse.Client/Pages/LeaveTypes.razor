@@ -1,6 +1,7 @@
 @page "/leave-types"
 @attribute [Authorize(Policy = "AdminOnly")]
 @inject ILeaveApiClient LeaveApi
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("Leave Types")</PageTitle>
 
@@ -23,11 +24,6 @@
             </div>
         }
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_showForm)
     {
@@ -254,8 +250,6 @@
     private bool _isLoading = true;
     private bool _isBusy;
     private bool _showForm;
-    private bool _isError;
-    private string? _message;
     private Guid? _editingId;
     private string _name = string.Empty;
     private int _daysPerYear = 14;
@@ -312,7 +306,6 @@
         _policyNotes = null;
         _isActive = true;
         _showForm = true;
-        _message = null;
     }
 
     private void Edit(LeaveTypeDto type)
@@ -324,7 +317,6 @@
         _policyNotes = type.PolicyNotes;
         _isActive = type.IsActive;
         _showForm = true;
-        _message = null;
     }
 
     private void HideForm() => _showForm = false;
@@ -373,7 +365,6 @@
     private async Task SaveAsync()
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -412,7 +403,6 @@
 
         _deleteTarget = type;
         _showDeleteConfirm = true;
-        _message = null;
     }
 
     private Task OnDeleteConfirmVisibilityChanged(bool isVisible)
@@ -448,7 +438,6 @@
     private async Task<bool> DeleteAsync(Guid id)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -470,7 +459,13 @@
 
     private void ShowMessage(string message, bool isError)
     {
-        _message = message;
-        _isError = isError;
+        if (isError)
+        {
+            Toast.Error(message);
+        }
+        else
+        {
+            Toast.Success(message);
+        }
     }
 }

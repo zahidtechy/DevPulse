@@ -3,6 +3,7 @@
 @implements IAsyncDisposable
 @inject IClickUpAccountApiClient AccountApi
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("ClickUp Accounts")</PageTitle>
 
@@ -22,11 +23,6 @@
             </button>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_isBusy && !_isLoading && _preview is null)
     {
@@ -437,9 +433,7 @@
     private bool _showAddForm;
     private bool _isLoading = true;
     private bool _isBusy;
-    private bool _isError;
     private bool _previewFocusPending;
-    private string? _message;
 
     protected override async Task OnInitializedAsync()
     {
@@ -522,7 +516,6 @@
     private async Task LoadAccountsAsync()
     {
         _isLoading = true;
-        _message = null;
 
         try
         {
@@ -532,8 +525,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = $"Failed to load accounts: {ex.Message}";
+            Toast.Error($"Failed to load accounts: {ex.Message}");
         }
         finally
         {
@@ -545,7 +537,6 @@
     {
         _showAddForm = true;
         _newAccount = new CreateClickUpAccountFormModel();
-        _message = null;
     }
 
     private void HideAddForm()
@@ -563,7 +554,6 @@
     private async Task PreviewWorkspaceAsync()
     {
         _isBusy = true;
-        _message = null;
         _previewError = null;
 
         try
@@ -571,8 +561,7 @@
             var preview = await AccountApi.PreviewWorkspaceAsync(_newAccount.ToPreviewRequest());
             if (preview is null)
             {
-                _isError = true;
-                _message = "Workspace preview returned no details.";
+                Toast.Error("Workspace preview returned no details.");
                 return;
             }
 
@@ -580,12 +569,10 @@
             _ownTeamIds.Clear();
             _memberSearch = string.Empty;
             _previewFocusPending = true;
-            _isError = false;
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -609,13 +596,19 @@
             _showAddForm = false;
             _preview = null;
             _ownTeamIds.Clear();
-            _isError = !string.IsNullOrWhiteSpace(result?.ImportWarning);
-            _message = BuildSaveMessage(result);
+            var saveMessage = BuildSaveMessage(result);
+            if (!string.IsNullOrWhiteSpace(result?.ImportWarning))
+            {
+                Toast.Warning(saveMessage);
+            }
+            else
+            {
+                Toast.Success(saveMessage);
+            }
             await LoadAccountsAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
             _previewError = ex.Message;
         }
         finally
@@ -708,19 +701,23 @@
     private async Task TestAccountAsync(Guid accountId)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             var result = await AccountApi.TestConnectionAsync(accountId);
-            _isError = result is null || !result.IsConnected;
-            _message = result?.Message ?? "Connection test failed.";
+            if (result is not null && result.IsConnected)
+            {
+                Toast.Success(result.Message);
+            }
+            else
+            {
+                Toast.Error(result?.Message ?? "Connection test failed.");
+            }
             await LoadAccountsAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -737,7 +734,6 @@
         }
 
         _isBusy = true;
-        _message = null;
 
         try
         {
@@ -746,13 +742,11 @@
             _members.AddRange(members.OrderBy(m => m.Username));
             _membersAccountId = account.Id;
             _membersAccountName = account.Name;
-            _isError = false;
-            _message = $"Loaded {members.Count} workspace members for {account.Name}.";
+            Toast.Success($"Loaded {members.Count} workspace members for {account.Name}.");
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -763,21 +757,18 @@
     private async Task SetAccountActiveAsync(ClickUpAccountDto account, bool isActive)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             await AccountApi.UpdateAccountStatusAsync(account.Id, isActive);
-            _isError = false;
-            _message = isActive
+            Toast.Success(isActive
                 ? $"{account.Name} marked active."
-                : $"{account.Name} marked inactive. Reports and analytics are unchanged.";
+                : $"{account.Name} marked inactive. Reports and analytics are unchanged.");
             await LoadAccountsAsync();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -788,13 +779,11 @@
     private async Task DeleteAccountAsync(Guid accountId)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             await AccountApi.DeleteAccountAsync(accountId);
-            _isError = false;
-            _message = "Account deleted.";
+            Toast.Success("Account deleted.");
             if (_membersAccountId == accountId)
             {
                 ClearMembers();
@@ -804,8 +793,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {

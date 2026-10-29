@@ -1,5 +1,6 @@
 @page "/attendance"
 @attribute [Authorize]
+@inject ToastService Toast
 @inject IAttendanceApiClient AttendanceApi
 @inject IDeveloperApiClient DeveloperApi
 @inject AuthenticationStateProvider AuthStateProvider
@@ -17,11 +18,6 @@
             </p>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_isLoading)
     {
@@ -104,11 +100,13 @@
                                 }
                                 else if (_me.NextAction == AttendanceNextActionDto.PunchOut)
                                 {
-                                    <span class="attendance-badge punched">Punched</span>
+                                    <span class="attendance-badge punched">Checked</span>
                                 }
                                 else
                                 {
-                                    <span class="attendance-toolbar-stat-muted">Not punched</span>
+                                    <span class="attendance-toolbar-stat-muted">
+                                        Awaiting Check-In
+                                    </span>
                                 }
                             </span>
                         </div>
@@ -358,8 +356,6 @@
     private bool _isLoadingHistory;
     private bool _isSubmittingCorrection;
     private bool _isAdminLoading;
-    private bool _isError;
-    private string? _message;
 
     private DateOnly _historyFrom;
     private DateOnly _historyTo;
@@ -378,6 +374,7 @@
     private Timer? _meRefreshTimer;
     private bool _isRefreshingMe;
     private int _meVersion;
+    private string? _refreshError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -533,7 +530,7 @@
                 _myCorrections = await correctionsTask;
             }
         }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { Toast.Error(ex.Message); }
         finally { _isLoading = false; }
     }
 
@@ -544,22 +541,29 @@
         _maxCorrectionDate = GetOfficeToday().ToString("yyyy-MM-dd");
     }
 
-    private void ClearFeedback()
-    {
-        _isError = false;
-        _message = null;
-    }
-
     private void SetActionMessage(string successMessage)
     {
-        if (!_isError)
+        if (string.IsNullOrWhiteSpace(_refreshError))
         {
-            _message = successMessage;
+            Toast.Success(successMessage);
             return;
         }
 
-        var detail = string.IsNullOrWhiteSpace(_message) ? string.Empty : $" {_message}";
-        _message = $"{successMessage} Some attendance lists could not be refreshed.{detail}";
+        // The action itself succeeded, but one or more lists failed to refresh. Keep the
+        // original combined message so the user knows the views may be stale, and show it
+        // as an error (sticky) since they may need to reload.
+        Toast.Error($"{successMessage} Some attendance lists could not be refreshed. {_refreshError}");
+        _refreshError = null;
+    }
+
+    private void NoteRefreshError(Exception ex, bool notify)
+    {
+        _refreshError = ex.Message;
+
+        if (notify)
+        {
+            Toast.Error(ex.Message);
+        }
     }
 
     private async Task RefreshMeAsync()
@@ -607,20 +611,20 @@
     private async Task PunchAsync()
     {
         _isPunching = true;
+        _refreshError = null;
         try
         {
             var result = await AttendanceApi.PunchAsync();
             if (result is not null)
             {
-                ClearFeedback();
                 await RefreshMeBestEffortAsync();
                 // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
-                await LoadHistoryAsync();
+                await LoadHistoryAsync(notifyOnError: false);
                 var authState = await AuthStateProvider.GetAuthenticationStateAsync();
                 if (authState.User.IsInRole(AppRoles.Admin))
                 {
-                    await LoadAdminRecordsAsync();
-                    await LoadAnalyticsAsync();
+                    await LoadAdminRecordsAsync(notifyOnError: false);
+                    await LoadAnalyticsAsync(notifyOnError: false);
                 }
 
                 var successMessage = result.NextAction == AttendanceNextActionDto.PunchOut ? "Punch in recorded." :
@@ -628,24 +632,26 @@
                 SetActionMessage(successMessage);
             }
         }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { Toast.Error(ex.Message); }
         finally { _isPunching = false; }
     }
 
-    private async Task LoadHistoryAsync()
+    private Task LoadHistoryAsync() => LoadHistoryAsync(notifyOnError: true);
+
+    private async Task LoadHistoryAsync(bool notifyOnError)
     {
         _isLoadingHistory = true;
         try { _myHistory = await AttendanceApi.GetMyHistoryAsync(_historyFrom, _historyTo); }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { NoteRefreshError(ex, notifyOnError); }
         finally { _isLoadingHistory = false; }
     }
 
     private async Task SubmitCorrectionAsync()
     {
         _isSubmittingCorrection = true;
+        _refreshError = null;
         try
         {
-            ClearFeedback();
             await AttendanceApi.SubmitCorrectionRequestAsync(new CreateAttendanceCorrectionRequest(
                 _correctionDate,
                 _requestPunchIn ? ToUtc(_correctionDate, _correctionPunchInTime) : null,
@@ -662,19 +668,21 @@
             {
                 _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
             }
-            await LoadHistoryAsync();
+            await LoadHistoryAsync(notifyOnError: false);
             if (isAdmin)
             {
-                await LoadAdminRecordsAsync();
+                await LoadAdminRecordsAsync(notifyOnError: false);
             }
             _correctionReason = string.Empty;
             SetActionMessage("Correction request submitted.");
         }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { Toast.Error(ex.Message); }
         finally { _isSubmittingCorrection = false; }
     }
 
-    private async Task LoadAdminRecordsAsync()
+    private Task LoadAdminRecordsAsync() => LoadAdminRecordsAsync(notifyOnError: true);
+
+    private async Task LoadAdminRecordsAsync(bool notifyOnError)
     {
         _isAdminLoading = true;
         try
@@ -682,7 +690,7 @@
             Guid? developerId = Guid.TryParse(_adminDeveloperId, out var id) ? id : null;
             _adminRecords = await AttendanceApi.GetRecordsAsync(_adminFrom, _adminTo, developerId);
         }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { NoteRefreshError(ex, notifyOnError); }
         finally { _isAdminLoading = false; }
     }
 
@@ -699,53 +707,55 @@
         await loadAction();
     }
 
-    private async Task LoadAnalyticsAsync()
+    private Task LoadAnalyticsAsync() => LoadAnalyticsAsync(notifyOnError: true);
+
+    private async Task LoadAnalyticsAsync(bool notifyOnError)
     {
         _isAdminLoading = true;
         try { _analytics = await AttendanceApi.GetAnalyticsAsync(_adminFrom, _adminTo); }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { NoteRefreshError(ex, notifyOnError); }
         finally { _isAdminLoading = false; }
     }
 
     private async Task ApproveCorrectionAsync(Guid id)
     {
+        _refreshError = null;
         try
         {
-            ClearFeedback();
             await AttendanceApi.ApproveCorrectionRequestAsync(id, new ReviewAttendanceCorrectionRequest(null, null, null));
             // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
             await RefreshMeBestEffortAsync();
             _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
             _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
-            await LoadHistoryAsync();
-            await LoadAdminRecordsAsync();
-            await LoadAnalyticsAsync();
+            await LoadHistoryAsync(notifyOnError: false);
+            await LoadAdminRecordsAsync(notifyOnError: false);
+            await LoadAnalyticsAsync(notifyOnError: false);
             SetActionMessage("Correction request approved.");
         }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { Toast.Error(ex.Message); }
     }
 
     private async Task RejectCorrectionAsync(Guid id)
     {
+        _refreshError = null;
         try
         {
-            ClearFeedback();
             await AttendanceApi.RejectCorrectionRequestAsync(id, new RejectAttendanceCorrectionRequest(null));
             // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
             _pendingCorrections = await AttendanceApi.GetPendingCorrectionRequestsAsync();
             _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
-            await LoadHistoryAsync();
-            await LoadAdminRecordsAsync();
+            await LoadHistoryAsync(notifyOnError: false);
+            await LoadAdminRecordsAsync(notifyOnError: false);
             SetActionMessage("Correction request rejected.");
         }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { Toast.Error(ex.Message); }
     }
 
     private async Task CancelCorrectionAsync(Guid id)
     {
+        _refreshError = null;
         try
         {
-            ClearFeedback();
             await AttendanceApi.CancelCorrectionRequestAsync(id);
             _myCorrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -755,25 +765,25 @@
             }
             SetActionMessage("Correction request cancelled.");
         }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { Toast.Error(ex.Message); }
     }
 
     private async Task AdminQuickFixAsync(AttendanceRecordDto record)
     {
+        _refreshError = null;
         try
         {
-            ClearFeedback();
             await AttendanceApi.AdminUpsertRecordAsync(record.DeveloperId, record.WorkDate,
                 new AdminUpsertAttendanceRecordRequest(
                     record.PunchInUtc ?? ToUtc(record.WorkDate, new TimeOnly(9, 0)),
                     record.PunchOutUtc ?? ToUtc(record.WorkDate, new TimeOnly(18, 0))));
             await RefreshMeBestEffortAsync();
-            await LoadAdminRecordsAsync();
-            await LoadHistoryAsync();
-            await LoadAnalyticsAsync();
+            await LoadAdminRecordsAsync(notifyOnError: false);
+            await LoadHistoryAsync(notifyOnError: false);
+            await LoadAnalyticsAsync(notifyOnError: false);
             SetActionMessage("Attendance record updated.");
         }
-        catch (Exception ex) { _isError = true; _message = ex.Message; }
+        catch (Exception ex) { Toast.Error(ex.Message); }
     }
 
     private void SetTab(AttendanceTab tab)
