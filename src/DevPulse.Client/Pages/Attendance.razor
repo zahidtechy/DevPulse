@@ -601,7 +601,6 @@
     private string? _correctionDeveloperId;
     private AttendanceCorrectionStatusDto? _correctionStatusFilter;
     private string? _appliedCorrectionDeveloperId;
-    private AttendanceCorrectionStatusDto? _appliedCorrectionStatusFilter;
     private string _maxCorrectionDate = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
     private string _minCorrectionDate = DateOnly.FromDateTime(DateTime.Today).AddDays(-30).ToString("yyyy-MM-dd");
     private bool _showCorrectionModal;
@@ -1049,7 +1048,6 @@
         var from = _correctionFrom;
         var to = _correctionTo;
         var developerId = _correctionDeveloperId;
-        var status = _correctionStatusFilter;
 
         _isLoadingCorrections = true;
         try
@@ -1058,7 +1056,6 @@
             _appliedCorrectionFrom = from;
             _appliedCorrectionTo = to;
             _appliedCorrectionDeveloperId = developerId;
-            _appliedCorrectionStatusFilter = status;
         }
         catch (Exception ex)
         {
@@ -1306,9 +1303,9 @@
 
         if (_isAdmin)
         {
-            if (_appliedCorrectionStatusFilter is not null)
+            if (_correctionStatusFilter is not null)
             {
-                query = query.Where(r => r.Status == _appliedCorrectionStatusFilter.Value);
+                query = query.Where(r => r.Status == _correctionStatusFilter.Value);
             }
 
             if (Guid.TryParse(_appliedCorrectionDeveloperId, out var developerId))
