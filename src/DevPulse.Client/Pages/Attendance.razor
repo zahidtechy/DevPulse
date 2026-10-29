@@ -33,6 +33,15 @@
         </div>
         <LoadingIndicator Text="Loading attendance..." />
     }
+    else if (!_me.IsOwnTeam)
+    {
+        <div class="leave-notice leave-notice-warning">
+            <strong>Attendance is restricted</strong>
+            <p class="mb-0">
+                Attendance is only available to own-team developers. Contact an administrator if you believe you should have access.
+            </p>
+        </div>
+    }
     else if (!_me.CanPunch && _me.DeveloperId is null)
     {
         <div class="leave-notice leave-notice-warning">

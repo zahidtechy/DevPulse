@@ -22,7 +22,8 @@ public interface IAttendanceRepository
         DateOnly fromDate,
         DateOnly toDate,
         Guid? developerId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool ownTeamOnly = false);
 
     Task AddRecordAsync(AttendanceRecord record, CancellationToken cancellationToken = default);
 
@@ -40,7 +41,8 @@ public interface IAttendanceRepository
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AttendanceCorrectionRequest>> GetCorrectionRequestsAsync(
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool ownTeamOnly = false);
 
     Task AddCorrectionRequestAsync(AttendanceCorrectionRequest request, CancellationToken cancellationToken = default);
 
