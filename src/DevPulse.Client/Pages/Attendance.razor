@@ -784,7 +784,8 @@
                 var developersTask = DeveloperApi.GetDevelopersAsync();
                 var correctionsTask = AttendanceApi.GetCorrectionRequestsAsync();
                 await Task.WhenAll(developersTask, correctionsTask);
-                _developers = await developersTask;
+                // Only expose developers flagged as part of the own team in the admin filters.
+                _developers = (await developersTask).Where(dev => dev.IsOwnTeam).ToList();
                 _corrections = await correctionsTask;
             }
             else
@@ -1183,28 +1184,23 @@
         try
         {
             // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
+            var successMessage = "Correction request rejected.";
             if (_reviewIsApprove)
             {
                 await AttendanceApi.ApproveCorrectionRequestAsync(
                     _reviewCorrectionId.Value,
                     new ReviewAttendanceCorrectionRequest(null, null, comment));
-                await RefreshMeBestEffortAsync();
-                await LoadCorrectionsAsync();
-                await LoadHistoryAsync(notifyOnError: false);
-                await LoadAdminRecordsAsync(notifyOnError: false);
-                await LoadAnalyticsAsync(notifyOnError: false);
-                SetActionMessage("Correction request approved.");
+                successMessage = "Correction request approved.";
             }
             else
             {
                 await AttendanceApi.RejectCorrectionRequestAsync(
                     _reviewCorrectionId.Value,
                     new RejectAttendanceCorrectionRequest(comment));
-                await LoadCorrectionsAsync();
-                await LoadHistoryAsync(notifyOnError: false);
-                await LoadAdminRecordsAsync(notifyOnError: false);
-                SetActionMessage("Correction request rejected.");
             }
+
+            await RefreshAfterCorrectionReviewAsync(_reviewIsApprove);
+            SetActionMessage(successMessage);
 
             _showReviewModal = false;
             _reviewCorrectionId = null;
@@ -1217,6 +1213,21 @@
         finally
         {
             _isReviewingCorrection = false;
+        }
+    }
+
+    private async Task RefreshAfterCorrectionReviewAsync(bool wasApproved)
+    {
+        // Refresh the connected grid first and independently of the other views. A failure
+        // to reload correction requests must not prevent attendance records from updating.
+        await LoadAdminRecordsAsync(notifyOnError: false);
+        await RefreshCorrectionsAsync();
+        await LoadHistoryAsync(notifyOnError: false);
+
+        if (wasApproved)
+        {
+            await RefreshMeBestEffortAsync();
+            await LoadAnalyticsAsync(notifyOnError: false);
         }
     }
 
