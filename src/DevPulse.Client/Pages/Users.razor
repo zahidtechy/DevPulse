@@ -134,50 +134,46 @@
                 <p class="text-muted small mb-3 mt-1">
                     Link this user to a developer record for leave and attendance. Pick an existing developer or create a new one when adding a user.
                 </p>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label" for="developerLink">Link to developer</label>
-                        <div class="users-search-wrap mb-2">
-                            <span class="bi-search users-search-icon" aria-hidden="true"></span>
-                            <input id="developerSearch"
-                                   class="form-control form-control-sm users-search-input"
-                                   placeholder="Filter by name or email..."
-                                   @bind="_developerSearch"
-                                   @bind:event="oninput"
-                                   disabled="@(_createDeveloper && !_editingUserId.HasValue)" />
-                        </div>
-                        <select id="developerLink"
-                                class="form-select"
-                                @bind="_selectedDeveloperId"
-                                disabled="@(_createDeveloper && !_editingUserId.HasValue)">
-                            <option value="">No link (match by email only)</option>
-                            @foreach (var developer in FilteredDevelopers)
-                            {
-                                <option value="@developer.Id">
-                                    @developer.Name@(string.IsNullOrWhiteSpace(developer.Email) ? "" : $" ({developer.Email})")
-                                </option>
-                            }
-                        </select>
+                
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="developerSearch">
+                        Search developer
+                    </label>
+
+                    <div class="users-search-wrap">
+                        <span class="bi-search users-search-icon" aria-hidden="true"></span>
+                        <input id="developerSearch"
+                               class="form-control users-search-input"
+                               placeholder="Filter by name or email..."
+                               @bind="_developerSearch"
+                               @bind:event="oninput"
+                               disabled="@(_createDeveloper && !_editingUserId.HasValue)" />
                     </div>
-                    @if (!_editingUserId.HasValue)
-                    {
-                        <div class="col-md-6 d-flex align-items-end">
-                            <div class="form-check">
-                                <input class="form-check-input"
-                                       type="checkbox"
-                                       id="createDeveloper"
-                                       @bind="_createDeveloper"
-                                       @bind:after="OnCreateDeveloperChanged" />
-                                <label class="form-check-label" for="createDeveloper">
-                                    Also create a new developer profile
-                                </label>
-                                <div class="form-text">
-                                    Creates a developer with the same email and display name. Cannot be combined with linking an existing developer.
-                                </div>
-                            </div>
-                        </div>
-                    }
                 </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" for="developerLink">
+                        Link to developer
+                    </label>
+
+                    <select id="developerLink"
+                            class="form-select"
+                            @bind="_selectedDeveloperId"
+                            disabled="@(_createDeveloper && !_editingUserId.HasValue)">
+                        <option value="">No link (match by email only)</option>
+                        @foreach (var developer in FilteredDevelopers)
+                        {
+                            <option value="@developer.Id">
+                                @developer.Name@(string.IsNullOrWhiteSpace(developer.Email)
+                                    ? ""
+                                    : $" ({developer.Email})")
+                            </option>
+                        }
+                    </select>
+                </div>
+            </div>
+
             </div>
         </ChildContent>
         <FooterContent>
@@ -544,14 +540,6 @@
         _formError = null;
         _newUser.Password = string.Empty;
         _developerSearch = string.Empty;
-    }
-
-    private void OnCreateDeveloperChanged()
-    {
-        if (_createDeveloper)
-        {
-            _selectedDeveloperId = string.Empty;
-        }
     }
 
     private void ShowResetPasswordForm(UserDto user)
