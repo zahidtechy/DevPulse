@@ -4,6 +4,7 @@
 @inject IHubstaffSyncApiClient HubstaffSyncApi
 @inject IHubstaffAnalyticsApiClient HubstaffAnalyticsApi
 @inject IDeveloperApiClient DeveloperApi
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("Time Tracking Analytics")</PageTitle>
 
@@ -16,22 +17,12 @@
         </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="alert @(_isInfoMessage ? "alert-info" : "alert-danger") leave-alert" role="alert">@_error</div>
-    }
-
     @if (ShowSetupHint())
     {
         <div class="alert alert-info leave-alert" role="status">
             Hubstaff is connected. To see analytics: (1) go to <a href="/developers">Developers</a> and click <strong>Sync from Hubstaff</strong> to map team members,
             (2) click <strong>Sync now</strong> below to pull tracked hours, then (3) click <strong>Generate</strong>.
         </div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(_syncMessage))
-    {
-        <div class="alert alert-success leave-alert" role="status">@_syncMessage</div>
     }
 
     @if (_syncStatus?.LatestRun is not null)
@@ -152,9 +143,6 @@
     private DateTime _toDate = DateTime.Today;
     private bool _isLoading;
     private bool _isSyncing;
-    private string? _error;
-    private bool _isInfoMessage;
-    private string? _syncMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -182,7 +170,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            Toast.Error(ex.Message);
         }
     }
 
@@ -202,13 +190,11 @@
     {
         if (!Guid.TryParse(_selectedOrgId, out var orgId))
         {
-            _error = "Select a Hubstaff organization.";
+            Toast.Warning("Select a Hubstaff organization.");
             return;
         }
 
         _isLoading = true;
-        _error = null;
-        _isInfoMessage = false;
         try
         {
             var request = new HubstaffAnalyticsRequest(
@@ -222,8 +208,14 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
-            _isInfoMessage = IsAnalyticsInfoMessage(ex.Message);
+            if (IsAnalyticsInfoMessage(ex.Message))
+            {
+                Toast.Info(ex.Message);
+            }
+            else
+            {
+                Toast.Error(ex.Message);
+            }
             _analytics = null;
         }
         finally
@@ -236,14 +228,11 @@
     {
         if (!Guid.TryParse(_selectedOrgId, out var orgId))
         {
-            _error = "Select a Hubstaff organization before syncing.";
+            Toast.Warning("Select a Hubstaff organization before syncing.");
             return;
         }
 
         _isSyncing = true;
-        _syncMessage = null;
-        _error = null;
-        _isInfoMessage = false;
         try
         {
             var request = new HubstaffSyncTriggerRequest(
@@ -252,14 +241,14 @@
                 DateOnly.FromDateTime(_toDate));
 
             var result = await HubstaffSyncApi.TriggerSyncAsync(request);
-            _syncMessage = result?.Message ?? "Sync completed.";
+            Toast.Success(result?.Message ?? "Sync completed.");
             await LoadSyncStatusAsync();
             await LoadOrganizationsAsync();
             await LoadAnalyticsAsync();
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {

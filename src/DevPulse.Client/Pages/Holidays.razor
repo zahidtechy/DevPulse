@@ -3,6 +3,7 @@
 @inject IHolidayApiClient HolidayApi
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 <PageTitle>@AppBranding.PageTitle("Holiday Calendar")</PageTitle>
 
@@ -29,11 +30,6 @@
             </Authorized>
         </AuthorizeView>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_showForm)
     {
@@ -241,8 +237,6 @@
     private bool _isBusy;
     private bool _isAdmin;
     private bool _showForm;
-    private bool _isError;
-    private string? _message;
     private Guid? _editingHolidayId;
     private Guid? _highlightedHolidayId;
 
@@ -263,7 +257,6 @@
     private async Task LoadHolidaysAsync()
     {
         _isLoading = true;
-        _message = null;
 
         try
         {
@@ -274,8 +267,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = $"Failed to load holidays: {ex.Message}";
+            Toast.Error($"Failed to load holidays: {ex.Message}");
         }
         finally
         {
@@ -309,7 +301,6 @@
         _name = string.Empty;
         _reason = null;
         _showForm = true;
-        _message = null;
     }
 
     private async Task SelectHolidayAsync(HolidayDto holiday)
@@ -367,7 +358,6 @@
         _name = holiday.Name;
         _reason = holiday.Reason;
         _showForm = true;
-        _message = null;
     }
 
     private void HideForm()
@@ -379,21 +369,18 @@
     private async Task SaveHolidayAsync()
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             if (_fromDate.Date > _toDate.Date)
             {
-                _isError = true;
-                _message = "To date must be on or after from date.";
+                Toast.Warning("To date must be on or after from date.");
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(_name))
             {
-                _isError = true;
-                _message = "Holiday name is required.";
+                Toast.Warning("Holiday name is required.");
                 return;
             }
 
@@ -405,15 +392,13 @@
                 await HolidayApi.UpdateAsync(
                     _editingHolidayId.Value,
                     new UpdateHolidayRequest(fromDate, toDate, _name.Trim(), string.IsNullOrWhiteSpace(_reason) ? null : _reason.Trim()));
-                _isError = false;
-                _message = "Holiday updated successfully.";
+                Toast.Success("Holiday updated successfully.");
             }
             else
             {
                 await HolidayApi.CreateAsync(
                     new CreateHolidayRequest(fromDate, toDate, _name.Trim(), string.IsNullOrWhiteSpace(_reason) ? null : _reason.Trim()));
-                _isError = false;
-                _message = "Holiday created successfully.";
+                Toast.Success("Holiday created successfully.");
             }
 
             HideForm();
@@ -421,8 +406,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ExtractErrorMessage(ex.Message);
+            Toast.Error(ExtractErrorMessage(ex.Message));
         }
         finally
         {
@@ -433,13 +417,11 @@
     private async Task DeleteHolidayAsync(HolidayDto holiday)
     {
         _isBusy = true;
-        _message = null;
 
         try
         {
             await HolidayApi.DeleteAsync(holiday.Id);
-            _isError = false;
-            _message = $"Deleted \"{holiday.Name}\".";
+            Toast.Success($"Deleted \"{holiday.Name}\".");
 
             if (_editingHolidayId == holiday.Id)
             {
@@ -450,8 +432,7 @@
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ExtractErrorMessage(ex.Message);
+            Toast.Error(ExtractErrorMessage(ex.Message));
         }
         finally
         {

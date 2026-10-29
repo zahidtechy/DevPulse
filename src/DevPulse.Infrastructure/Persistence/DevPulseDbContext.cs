@@ -51,6 +51,8 @@ public sealed class DevPulseDbContext : IdentityDbContext<ApplicationUser, Ident
         modelBuilder.Entity<ApplicationUser>(entity =>
         {
             entity.Property(x => x.DisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.TelegramId).HasMaxLength(32);
+
             entity.HasIndex(x => x.DeveloperId)
                 .IsUnique()
                 .HasFilter("[DeveloperId] IS NOT NULL");
@@ -59,6 +61,10 @@ public sealed class DevPulseDbContext : IdentityDbContext<ApplicationUser, Ident
                 .WithMany()
                 .HasForeignKey(x => x.DeveloperId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.TelegramId)
+                .IsUnique()
+                .HasFilter("[TelegramId] IS NOT NULL");
         });
 
         modelBuilder.Entity<ClickUpAccount>(entity =>

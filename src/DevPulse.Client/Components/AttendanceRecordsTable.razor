@@ -50,7 +50,16 @@ else
                                 <span class="attendance-badge corrected">Corrected</span>
                             }
                         </td>
-                        <td class="attendance-hours-cell">@(record.WorkHours?.ToString("0.##") ?? "—")</td>
+                        <td class="attendance-hours-cell">
+                            @if (record.PunchInUtc is not null && record.PunchOutUtc is null && IsToday(record.WorkDate))
+                            {
+                                <LiveWorkDuration PunchInUtc="record.PunchInUtc" PunchOutUtc="record.PunchOutUtc" />
+                            }
+                            else
+                            {
+                                @FormatDuration(record)
+                            }
+                        </td>
                         <td><span class="attendance-badge @GetStatusClass(record.Status)">@FormatStatus(record.Status)</span></td>
                         @if (ShowAdminEdit)
                         {
@@ -80,6 +89,31 @@ else
 
     [Parameter]
     public EventCallback<AttendanceRecordDto> OnAdminEdit { get; set; }
+
+    private static string FormatDuration(AttendanceRecordDto record)
+    {
+        if (!record.PunchInUtc.HasValue || !record.PunchOutUtc.HasValue)
+        {
+            return "—";
+        }
+
+        var duration = record.PunchOutUtc.Value - record.PunchInUtc.Value;
+        return duration > TimeSpan.Zero ? WorkDurationFormatter.Format(duration) : "—";
+    }
+
+    private bool IsToday(DateOnly workDate)
+    {
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(OfficeTimeZoneId);
+            var localToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+            return workDate == localToday;
+        }
+        catch
+        {
+            return workDate == DateOnly.FromDateTime(DateTime.Now);
+        }
+    }
 
     private string FormatUtc(DateTime? utc)
     {

@@ -1,6 +1,7 @@
 @page "/attendance-settings"
 @attribute [Authorize(Policy = "AdminOnly")]
 @inject IAttendanceApiClient AttendanceApi
+@inject ToastService Toast
 @implements IDisposable
 
 <PageTitle>@AppBranding.PageTitle("Attendance Settings")</PageTitle>
@@ -15,11 +16,6 @@
             </p>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(_message))
-    {
-        <div class="alert @(_isError ? "alert-danger" : "alert-success") leave-alert" role="alert">@_message</div>
-    }
 
     @if (_isLoading)
     {
@@ -61,7 +57,7 @@
                             <div>
                                 <span class="attendance-settings-summary-label">Check windows</span>
                                 <strong class="attendance-settings-summary-value">@FormatTime(GetPunchInEarliest()) · @FormatTime(GetPunchOutLatest())</strong>
-                                <span class="attendance-settings-summary-meta">Earliest punch in · Latest punch out</span>
+                                <span class="attendance-settings-summary-meta">@GetPunchWindowSummary()</span>
                             </div>
                         </div>
 
@@ -93,7 +89,7 @@
                                     <div>
                                         <h5 class="card-title mb-1">Work schedule</h5>
                                         <p class="attendance-section-desc mb-0">
-                                            Official hours and grace buffers that drive on-time status and hours worked.
+                                            Official hours and grace buffers that drive on-time status.
                                         </p>
                                     </div>
                                 </div>
@@ -115,15 +111,15 @@
                                 <div class="attendance-settings-timeline" aria-hidden="true">
                                     <div class="attendance-settings-timeline-track">
                                         <div class="attendance-settings-timeline-zone punch-in"
-                                             style="left:@GetTimelineLeft(GetPunchInEarliest())%; width:@GetTimelineWidth(GetPunchInEarliest(), _workStart)%"></div>
+                                             style="left:@GetTimelineLeft(GetPunchInEarliest())%; width:@GetTimelineWidth(GetPunchInEarliest(), GetPunchInLatest())%"></div>
                                         <div class="attendance-settings-timeline-zone work"
                                              style="left:@GetTimelineLeft(_workStart)%; width:@GetTimelineWidth(_workStart, _workEnd)%"></div>
                                         <div class="attendance-settings-timeline-zone punch-out"
-                                             style="left:@GetTimelineLeft(_workEnd)%; width:@GetTimelineWidth(_workEnd, GetPunchOutLatest())%"></div>
+                                             style="left:@GetTimelineLeft(GetPunchOutTimelineStart())%; width:@GetTimelineWidth(GetPunchOutTimelineStart(), GetPunchOutLatest())%"></div>
                                         @RenderTimelineMarker(GetPunchInEarliest(), "Punch in", "punch-in")
                                         @RenderTimelineMarker(_workStart, "Start", "start")
-                                        @RenderTimelineMarker(_bufferStart, "On-time", "buffer")
-                                        @RenderTimelineMarker(_bufferEnd, "Full day", "buffer")
+                                        @RenderTimelineMarker(_bufferStart, _strictPunchIn ? "On-time · In close" : "On-time", "buffer")
+                                        @RenderTimelineMarker(_bufferEnd, _strictPunchOut ? "Full day · Out open" : "Full day", "buffer")
                                         @RenderTimelineMarker(_workEnd, "End", "end")
                                         @RenderTimelineMarker(GetPunchOutLatest(), "Punch out", "punch-out")
                                     </div>
@@ -136,7 +132,7 @@
                                 <div class="attendance-settings-subsection">
                                     <h6 class="attendance-settings-subtitle">Grace buffers</h6>
                                     <p class="attendance-settings-subtitle-desc">
-                                        Arrivals before buffer start and departures after buffer end still count as on-time for status and hours.
+                                        Arrivals before buffer start and departures after buffer end still count as on-time. Worked hours always use the actual punch times.
                                     </p>
                                     <div class="attendance-settings-form-grid">
                                         <div class="attendance-settings-field">
@@ -173,8 +169,8 @@
                                         <div class="attendance-settings-rule-header">
                                             <span class="attendance-settings-rule-icon bi-box-arrow-in-right" aria-hidden="true"></span>
                                             <div>
-                                                <span class="attendance-settings-rule-title">Check-in window</span>
-                                                <span class="attendance-settings-rule-desc">Opens before work start</span>
+                                                <span class="attendance-settings-rule-title">Punch in window</span>
+                                                <span class="attendance-settings-rule-desc">Opens before work start, closes at work end or buffer start</span>
                                             </div>
                                         </div>
                                         <div class="attendance-settings-rule-input">
@@ -185,9 +181,16 @@
                                                    @bind="_punchInAllowMinutesBefore" />
                                             <span class="attendance-settings-rule-unit">min before start</span>
                                         </div>
+                                        <label class="attendance-settings-strict">
+                                            <input type="checkbox" class="form-check-input" @bind="_strictPunchIn" />
+                                            <span class="attendance-settings-strict-copy">
+                                                <span class="attendance-settings-strict-title">Strict punch in</span>
+                                                <span class="attendance-settings-strict-desc">Reject punch in after the grace buffer start (@FormatTime(_bufferStart)).</span>
+                                            </span>
+                                        </label>
                                         <div class="attendance-settings-preview-pill punch-in">
                                             <span class="bi-clock" aria-hidden="true"></span>
-                                            Opens at <strong>@FormatTime(GetPunchInEarliest())</strong>
+                                            <span>Open <strong>@FormatTime(GetPunchInEarliest())</strong> – <strong>@FormatTime(GetPunchInLatest())</strong></span>
                                         </div>
                                     </div>
 
@@ -195,8 +198,8 @@
                                         <div class="attendance-settings-rule-header">
                                             <span class="attendance-settings-rule-icon bi-box-arrow-right" aria-hidden="true"></span>
                                             <div>
-                                                <span class="attendance-settings-rule-title">Check-out window</span>
-                                                <span class="attendance-settings-rule-desc">Opens at work end, closes after this allowance</span>
+                                                <span class="attendance-settings-rule-title">Punch out window</span>
+                                                <span class="attendance-settings-rule-desc">Opens after punch in or at buffer end, closes after this allowance</span>
                                             </div>
                                         </div>
                                         <div class="attendance-settings-rule-input">
@@ -207,9 +210,23 @@
                                                    @bind="_punchOutAllowMinutesAfter" />
                                             <span class="attendance-settings-rule-unit">min after end</span>
                                         </div>
+                                        <label class="attendance-settings-strict">
+                                            <input type="checkbox" class="form-check-input" @bind="_strictPunchOut" />
+                                            <span class="attendance-settings-strict-copy">
+                                                <span class="attendance-settings-strict-title">Strict punch out</span>
+                                                <span class="attendance-settings-strict-desc">Open punch out at the grace buffer end (@FormatTime(_bufferEnd)).</span>
+                                            </span>
+                                        </label>
                                         <div class="attendance-settings-preview-pill punch-out">
                                             <span class="bi-clock" aria-hidden="true"></span>
-                                            Open <strong>@FormatTime(_workEnd)</strong> – <strong>@FormatTime(GetPunchOutLatest())</strong>
+                                            @if (_strictPunchOut)
+                                            {
+                                                <span>Open <strong>@FormatTime(_bufferEnd)</strong> – <strong>@FormatTime(GetPunchOutLatest())</strong></span>
+                                            }
+                                            else
+                                            {
+                                                <span>Opens after punch in · closes <strong>@FormatTime(GetPunchOutLatest())</strong></span>
+                                            }
                                         </div>
                                     </div>
                                 </div>
@@ -253,14 +270,14 @@
 @code {
     private bool _isLoading = true;
     private bool _isBusy;
-    private bool _isError;
-    private string? _message;
     private TimeOnly _workStart = new(9, 0);
     private TimeOnly _workEnd = new(18, 0);
     private TimeOnly _bufferStart = new(9, 15);
     private TimeOnly _bufferEnd = new(17, 45);
     private int _punchInAllowMinutesBefore = 60;
     private int _punchOutAllowMinutesAfter = 120;
+    private bool _strictPunchIn;
+    private bool _strictPunchOut;
     private string _timeZoneId = "Asia/Dhaka";
     private string _liveOfficeClock = "—";
     private Timer? _clockTimer;
@@ -301,13 +318,14 @@
             _bufferEnd = settings.BufferEndTime;
             _punchInAllowMinutesBefore = settings.PunchInAllowMinutesBeforeWorkStart;
             _punchOutAllowMinutesAfter = settings.PunchOutAllowMinutesAfterWorkEnd;
+            _strictPunchIn = settings.StrictPunchIn;
+            _strictPunchOut = settings.StrictPunchOut;
             _timeZoneId = settings.OfficeTimeZoneId;
             UpdateLiveClock();
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -318,7 +336,6 @@
     private async Task SaveAsync()
     {
         _isBusy = true;
-        _message = null;
         try
         {
             await AttendanceApi.UpdateSettingsAsync(new UpdateAttendanceSettingsRequest(
@@ -328,14 +345,14 @@
                 _bufferEnd,
                 _punchInAllowMinutesBefore,
                 _punchOutAllowMinutesAfter,
-                _timeZoneId));
-            _isError = false;
-            _message = "Attendance settings saved.";
+                _timeZoneId,
+                _strictPunchIn,
+                _strictPunchOut));
+            Toast.Success("Attendance settings saved.");
         }
         catch (Exception ex)
         {
-            _isError = true;
-            _message = ex.Message;
+            Toast.Error(ex.Message);
         }
         finally
         {
@@ -385,7 +402,20 @@
 
     private TimeOnly GetPunchInEarliest() => SubtractMinutes(_workStart, _punchInAllowMinutesBefore);
 
+    private TimeOnly GetPunchInLatest() => _strictPunchIn ? _bufferStart : _workEnd;
+
+    private TimeOnly GetPunchOutTimelineStart() => _strictPunchOut ? _bufferEnd : _workEnd;
+
     private TimeOnly GetPunchOutLatest() => AddMinutes(_workEnd, _punchOutAllowMinutesAfter);
+
+    private string GetPunchWindowSummary()
+    {
+        var punchIn = $"In closes {FormatTime(GetPunchInLatest())}";
+        var punchOut = _strictPunchOut
+            ? $"Out opens {FormatTime(_bufferEnd)}"
+            : "Out opens after punch in";
+        return $"{punchIn} · {punchOut}";
+    }
 
     private static TimeOnly AddMinutes(TimeOnly time, int minutes)
     {
