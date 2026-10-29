@@ -152,6 +152,7 @@ public sealed class UserManagementService : IUserManagementService
             }
         }
 
+        var activeStatusChanged = user.IsActive != request.IsActive;
         user.DisplayName = request.DisplayName.Trim();
         user.IsActive = request.IsActive;
         user.DeveloperId = request.DeveloperId;
@@ -164,7 +165,8 @@ public sealed class UserManagementService : IUserManagementService
         }
 
         var currentRoles = await _userManager.GetRolesAsync(user);
-        if (!currentRoles.Contains(request.Role))
+        var roleChanged = !currentRoles.Contains(request.Role);
+        if (roleChanged)
         {
             if (currentRoles.Count > 0)
             {
@@ -179,6 +181,15 @@ public sealed class UserManagementService : IUserManagementService
             if (!addResult.Succeeded)
             {
                 return Result<UserDto>.Failure(addResult.Errors.Select(e => e.Description));
+            }
+        }
+
+        if (activeStatusChanged || roleChanged)
+        {
+            var stampResult = await _userManager.UpdateSecurityStampAsync(user);
+            if (!stampResult.Succeeded)
+            {
+                return Result<UserDto>.Failure(stampResult.Errors.Select(e => e.Description));
             }
         }
 

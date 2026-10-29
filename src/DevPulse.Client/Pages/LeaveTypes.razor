@@ -461,11 +461,11 @@
     {
         if (isError)
         {
-            Toast.Error(message);
+            Toast.Error(message, key: ToastKeys.LeaveTypes);
         }
         else
         {
-            Toast.Success(message);
+            Toast.Success(message, key: ToastKeys.LeaveTypes);
         }
     }
 }

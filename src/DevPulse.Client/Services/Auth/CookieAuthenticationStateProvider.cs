@@ -6,13 +6,18 @@ public sealed class CookieAuthenticationStateProvider : AuthenticationStateProvi
 {
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly SessionState _session;
     private UserDto? _cachedUser;
     private bool _cacheValid;
 
-    public CookieAuthenticationStateProvider(HttpClient httpClient, JsonSerializerOptions jsonOptions)
+    public CookieAuthenticationStateProvider(
+        HttpClient httpClient,
+        JsonSerializerOptions jsonOptions,
+        SessionState session)
     {
         _httpClient = httpClient;
         _jsonOptions = jsonOptions;
+        _session = session;
     }
 
     public override async Task<AuthenticationState> GetAuthenticationStateAsync()
@@ -27,35 +32,47 @@ public sealed class CookieAuthenticationStateProvider : AuthenticationStateProvi
             var response = await _httpClient.GetAsync("api/auth/me");
             if (!response.IsSuccessStatusCode)
             {
-                _cachedUser = null;
-                _cacheValid = true;
-                return Anonymous();
+                return MarkAnonymous();
             }
 
             var user = await response.Content.ReadFromJsonAsync<UserDto>(_jsonOptions);
+            if (user is null)
+            {
+                return MarkAnonymous();
+            }
+
             _cachedUser = user;
             _cacheValid = true;
-            return user is null ? Anonymous() : CreateAuthenticatedState(user);
+            _session.MarkAuthenticated();
+            return CreateAuthenticatedState(user);
         }
         catch (HttpRequestException)
         {
-            _cachedUser = null;
-            _cacheValid = true;
-            return Anonymous();
+            return MarkAnonymous();
         }
         catch (JsonException)
         {
-            _cachedUser = null;
-            _cacheValid = true;
-            return Anonymous();
+            return MarkAnonymous();
         }
     }
 
-    public void NotifyAuthenticationStateChanged()
+    /// <summary>
+    /// Clears the cached principal after a sign-out. Unlike notifying the provider with a
+    /// fresh <c>api/auth/me</c> call, this does not send another request with the cookie that
+    /// has just been deleted.
+    /// </summary>
+    public void NotifySignedOut()
     {
-        _cacheValid = false;
+        var alreadyAnonymous = _cacheValid && _cachedUser is null;
+
         _cachedUser = null;
-        NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+        _cacheValid = true;
+        _session.MarkAnonymous();
+
+        if (!alreadyAnonymous)
+        {
+            NotifyAuthenticationStateChanged(Task.FromResult(Anonymous()));
+        }
     }
 
     public async Task RefreshAuthenticationStateAsync()
@@ -64,6 +81,14 @@ public sealed class CookieAuthenticationStateProvider : AuthenticationStateProvi
         _cachedUser = null;
         var state = await GetAuthenticationStateAsync();
         NotifyAuthenticationStateChanged(Task.FromResult(state));
+    }
+
+    private AuthenticationState MarkAnonymous()
+    {
+        _cachedUser = null;
+        _cacheValid = true;
+        _session.MarkAnonymous();
+        return Anonymous();
     }
 
     private static AuthenticationState CreateAuthenticatedState(UserDto user)

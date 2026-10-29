@@ -267,7 +267,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load holidays: {ex.Message}");
+            Toast.Error($"Failed to load holidays: {ex.Message}", key: ToastKeys.Holidays);
         }
         finally
         {
@@ -374,13 +374,13 @@
         {
             if (_fromDate.Date > _toDate.Date)
             {
-                Toast.Warning("To date must be on or after from date.");
+                Toast.Warning("To date must be on or after from date.", key: ToastKeys.Holidays);
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(_name))
             {
-                Toast.Warning("Holiday name is required.");
+                Toast.Warning("Holiday name is required.", key: ToastKeys.Holidays);
                 return;
             }
 
@@ -392,13 +392,13 @@
                 await HolidayApi.UpdateAsync(
                     _editingHolidayId.Value,
                     new UpdateHolidayRequest(fromDate, toDate, _name.Trim(), string.IsNullOrWhiteSpace(_reason) ? null : _reason.Trim()));
-                Toast.Success("Holiday updated successfully.");
+                Toast.Success("Holiday updated successfully.", key: ToastKeys.Holidays);
             }
             else
             {
                 await HolidayApi.CreateAsync(
                     new CreateHolidayRequest(fromDate, toDate, _name.Trim(), string.IsNullOrWhiteSpace(_reason) ? null : _reason.Trim()));
-                Toast.Success("Holiday created successfully.");
+                Toast.Success("Holiday created successfully.", key: ToastKeys.Holidays);
             }
 
             HideForm();
@@ -406,7 +406,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ExtractErrorMessage(ex.Message));
+            Toast.Error(ExtractErrorMessage(ex.Message), key: ToastKeys.Holidays);
         }
         finally
         {
@@ -421,7 +421,7 @@
         try
         {
             await HolidayApi.DeleteAsync(holiday.Id);
-            Toast.Success($"Deleted \"{holiday.Name}\".");
+            Toast.Success($"Deleted \"{holiday.Name}\".", key: ToastKeys.Holidays);
 
             if (_editingHolidayId == holiday.Id)
             {
@@ -432,7 +432,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ExtractErrorMessage(ex.Message));
+            Toast.Error(ExtractErrorMessage(ex.Message), key: ToastKeys.Holidays);
         }
         finally
         {

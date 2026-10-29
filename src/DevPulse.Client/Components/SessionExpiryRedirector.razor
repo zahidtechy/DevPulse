@@ -1,0 +1,61 @@
+@implements IDisposable
+@inject SessionState Session
+@inject IAuthService AuthService
+@inject CookieAuthenticationStateProvider AuthStateProvider
+@inject ToastService Toast
+
+@code {
+    private bool _handling;
+
+    protected override void OnInitialized()
+    {
+        Session.Expired += HandleExpired;
+    }
+
+    private void HandleExpired()
+    {
+        _ = InvokeAsync(SignOutAsync);
+    }
+
+    private async Task SignOutAsync()
+    {
+        if (_handling)
+        {
+            return;
+        }
+
+        _handling = true;
+
+        try
+        {
+            // Failing requests on the current page will keep surfacing 401s for a moment.
+            // Drop those toasts and suppress new ones until the user signs in again.
+            Toast.SuppressErrors = true;
+            Toast.Clear();
+
+            // Ask the server to delete a still-valid auth cookie. If the cookie is already
+            // invalid or the server is unavailable, AuthService still signs out locally.
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                await AuthService.LogoutAsync(timeout.Token);
+            }
+            catch
+            {
+                // The local session is already signed out; deleting the cookie is best effort.
+            }
+
+            AuthStateProvider.NotifySignedOut();
+            Toast.Info("Your session expired. Please sign in again.", key: ToastKeys.Session);
+        }
+        finally
+        {
+            _handling = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Session.Expired -= HandleExpired;
+    }
+}

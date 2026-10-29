@@ -525,7 +525,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load accounts: {ex.Message}");
+            Toast.Error($"Failed to load accounts: {ex.Message}", key: ToastKeys.ClickUpAccounts);
         }
         finally
         {
@@ -561,7 +561,7 @@
             var preview = await AccountApi.PreviewWorkspaceAsync(_newAccount.ToPreviewRequest());
             if (preview is null)
             {
-                Toast.Error("Workspace preview returned no details.");
+                Toast.Error("Workspace preview returned no details.", key: ToastKeys.ClickUpAccounts);
                 return;
             }
 
@@ -572,7 +572,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.ClickUpAccounts);
         }
         finally
         {
@@ -599,11 +599,11 @@
             var saveMessage = BuildSaveMessage(result);
             if (!string.IsNullOrWhiteSpace(result?.ImportWarning))
             {
-                Toast.Warning(saveMessage);
+                Toast.Warning(saveMessage, key: ToastKeys.ClickUpAccounts);
             }
             else
             {
-                Toast.Success(saveMessage);
+                Toast.Success(saveMessage, key: ToastKeys.ClickUpAccounts);
             }
             await LoadAccountsAsync();
         }
@@ -707,17 +707,17 @@
             var result = await AccountApi.TestConnectionAsync(accountId);
             if (result is not null && result.IsConnected)
             {
-                Toast.Success(result.Message);
+                Toast.Success(result.Message, key: ToastKeys.ClickUpAccounts);
             }
             else
             {
-                Toast.Error(result?.Message ?? "Connection test failed.");
+                Toast.Error(result?.Message ?? "Connection test failed.", key: ToastKeys.ClickUpAccounts);
             }
             await LoadAccountsAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.ClickUpAccounts);
         }
         finally
         {
@@ -742,11 +742,11 @@
             _members.AddRange(members.OrderBy(m => m.Username));
             _membersAccountId = account.Id;
             _membersAccountName = account.Name;
-            Toast.Success($"Loaded {members.Count} workspace members for {account.Name}.");
+            Toast.Success($"Loaded {members.Count} workspace members for {account.Name}.", key: ToastKeys.ClickUpAccounts);
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.ClickUpAccounts);
         }
         finally
         {
@@ -763,12 +763,12 @@
             await AccountApi.UpdateAccountStatusAsync(account.Id, isActive);
             Toast.Success(isActive
                 ? $"{account.Name} marked active."
-                : $"{account.Name} marked inactive. Reports and analytics are unchanged.");
+                : $"{account.Name} marked inactive. Reports and analytics are unchanged.", key: ToastKeys.ClickUpAccounts);
             await LoadAccountsAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.ClickUpAccounts);
         }
         finally
         {
@@ -783,7 +783,7 @@
         try
         {
             await AccountApi.DeleteAccountAsync(accountId);
-            Toast.Success("Account deleted.");
+            Toast.Success("Account deleted.", key: ToastKeys.ClickUpAccounts);
             if (_membersAccountId == accountId)
             {
                 ClearMembers();
@@ -793,7 +793,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.ClickUpAccounts);
         }
         finally
         {

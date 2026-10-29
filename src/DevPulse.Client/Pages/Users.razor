@@ -511,7 +511,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Users);
         }
         finally
         {
@@ -529,7 +529,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Users);
         }
     }
 
@@ -720,7 +720,7 @@
         try
         {
             await UserApi.ChangePasswordAsync(_resetPasswordUserId.Value, new ChangePasswordRequest(_resetPassword));
-            Toast.Success($"Password reset for {_resetPasswordDisplayName}.");
+            Toast.Success($"Password reset for {_resetPasswordDisplayName}.", key: ToastKeys.Users);
             HideResetPasswordForm();
         }
         catch (Exception ex)
@@ -756,7 +756,7 @@
                     _editIsActive,
                     developerId,
                     _newUser.TelegramId));
-                Toast.Success("User updated.");
+                Toast.Success("User updated.", key: ToastKeys.Users);
             }
             else
             {
@@ -772,7 +772,7 @@
                     ? "User and developer profile created."
                     : developerId.HasValue
                         ? "User created and linked to developer."
-                        : "User created.");
+                        : "User created.", key: ToastKeys.Users);
             }
 
             HideForm();
@@ -915,12 +915,12 @@
         try
         {
             await UserApi.DeleteUserAsync(id);
-            Toast.Success("User deleted.");
+            Toast.Success("User deleted.", key: ToastKeys.Users);
             await LoadUsersAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Users);
         }
         finally
         {

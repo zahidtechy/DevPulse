@@ -774,12 +774,12 @@
         try
         {
             var result = await AnalyticsApi.RunSyncAsync();
-            Toast.Success(result?.Message ?? "Report data synced.");
+            Toast.Success(result?.Message ?? "Report data synced.", key: ToastKeys.KpiSync);
             await LoadSyncStatusAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.KpiSync);
         }
         finally
         {
@@ -806,7 +806,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load accounts: {ex.Message}");
+            Toast.Error($"Failed to load accounts: {ex.Message}", key: ToastKeys.Reports);
         }
         finally
         {
@@ -826,7 +826,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load developers: {ex.Message}");
+            Toast.Error($"Failed to load developers: {ex.Message}", key: ToastKeys.Reports);
         }
         finally
         {
@@ -913,7 +913,7 @@
     {
         if (_selectedDeveloperIds.Count == 0)
         {
-            Toast.Warning("Select at least one developer.");
+            Toast.Warning("Select at least one developer.", key: ToastKeys.Reports);
             return;
         }
 
@@ -922,7 +922,7 @@
 
         if (fromDate > toDate)
         {
-            Toast.Warning("From date must be on or before to date.");
+            Toast.Warning("From date must be on or before to date.", key: ToastKeys.Reports);
             return;
         }
 
@@ -944,11 +944,11 @@
                 accountIds);
 
             _report = await ReportApi.GenerateDeveloperReportAsync(request);
-            Toast.Success($"Report generated for {FormatPeriod(fromDate, toDate)}.");
+            Toast.Success($"Report generated for {FormatPeriod(fromDate, toDate)}.", key: ToastKeys.Reports);
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Reports);
         }
         finally
         {
@@ -973,11 +973,11 @@
             var base64 = Convert.ToBase64String(fileBytes);
             var module = await GetFileDownloadModuleAsync();
             await module.InvokeVoidAsync("downloadFromBytes", fileName, contentType, base64);
-            Toast.Success("Report exported to Excel.");
+            Toast.Success("Report exported to Excel.", key: ToastKeys.Reports);
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Reports);
         }
         finally
         {

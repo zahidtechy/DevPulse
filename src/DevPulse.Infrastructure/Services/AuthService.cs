@@ -5,38 +5,47 @@ namespace DevPulse.Infrastructure.Services;
 public sealed class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IUserClaimsPrincipalFactory<ApplicationUser> _principalFactory;
     private readonly JwtTokenGenerator _tokenGenerator;
 
-    public AuthService(UserManager<ApplicationUser> userManager, JwtTokenGenerator tokenGenerator)
+    public AuthService(
+        UserManager<ApplicationUser> userManager,
+        IUserClaimsPrincipalFactory<ApplicationUser> principalFactory,
+        JwtTokenGenerator tokenGenerator)
     {
         _userManager = userManager;
+        _principalFactory = principalFactory;
         _tokenGenerator = tokenGenerator;
     }
 
-    public async Task<Result<LoginResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<AuthenticatedLogin>> LoginAsync(
+        LoginRequest request,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
         {
-            return Result<LoginResponse>.Failure("Email and password are required.");
+            return Result<AuthenticatedLogin>.Failure("Email and password are required.");
         }
 
         var user = await _userManager.FindByEmailAsync(request.Email.Trim());
         if (user is null || !user.IsActive)
         {
-            return Result<LoginResponse>.Failure("Invalid email or password.");
+            return Result<AuthenticatedLogin>.Failure("Invalid email or password.");
         }
 
         if (!await _userManager.CheckPasswordAsync(user, request.Password))
         {
-            return Result<LoginResponse>.Failure("Invalid email or password.");
+            return Result<AuthenticatedLogin>.Failure("Invalid email or password.");
         }
 
         var roles = await _userManager.GetRolesAsync(user);
         var (token, expiresAtUtc) = _tokenGenerator.GenerateToken(user, roles.ToList());
         var role = roles.FirstOrDefault() ?? AppRoles.User;
         var userDto = MapToDto(user, role);
+        var principal = await _principalFactory.CreateAsync(user);
+        var response = new LoginResponse(token, expiresAtUtc, userDto);
 
-        return Result<LoginResponse>.Success(new LoginResponse(token, expiresAtUtc, userDto));
+        return Result<AuthenticatedLogin>.Success(new AuthenticatedLogin(response, principal));
     }
 
     public async Task<Result> ChangeOwnPasswordAsync(Guid userId, SelfChangePasswordRequest request, CancellationToken cancellationToken = default)
