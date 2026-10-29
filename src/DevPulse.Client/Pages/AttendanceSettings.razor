@@ -12,7 +12,7 @@
             <p class="analytics-eyebrow">Admin · Configuration</p>
             <h1>Attendance Settings</h1>
             <p class="analytics-lead">
-                Define the official work day, grace buffers, punch windows, and office time zone used for attendance.
+                Define the official work day, grace buffers, check windows, and office time zone used for attendance.
             </p>
         </div>
     </div>
@@ -55,7 +55,7 @@
                         <div class="attendance-settings-summary-block">
                             <span class="attendance-settings-summary-icon bi-fingerprint" aria-hidden="true"></span>
                             <div>
-                                <span class="attendance-settings-summary-label">Punch windows</span>
+                                <span class="attendance-settings-summary-label">Check windows</span>
                                 <strong class="attendance-settings-summary-value">@FormatTime(GetPunchInEarliest()) · @FormatTime(GetPunchOutLatest())</strong>
                                 <span class="attendance-settings-summary-meta">@GetPunchWindowSummary()</span>
                             </div>
@@ -157,7 +157,7 @@
                                 <div class="attendance-section-header">
                                     <span class="attendance-section-icon bi-fingerprint" aria-hidden="true"></span>
                                     <div>
-                                        <h5 class="card-title mb-1">Punch rules</h5>
+                                        <h5 class="card-title mb-1">Checks rules</h5>
                                         <p class="attendance-section-desc mb-0">
                                             Control when the fingerprint button unlocks for punch in and punch out.
                                         </p>
@@ -240,7 +240,7 @@
                                     <div>
                                         <h5 class="card-title mb-1">Office time zone</h5>
                                         <p class="attendance-section-desc mb-0">
-                                            IANA time zone ID used for punch dates, windows, and on-time calculations.
+                                            IANA time zone ID used for check dates, windows, and on-time calculations.
                                         </p>
                                     </div>
                                 </div>
