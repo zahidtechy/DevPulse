@@ -136,11 +136,11 @@
                                     </div>
                                     <div class="leave-field">
                                         <label class="form-label">From</label>
-                                        <DateInput @bind-Value="_fromDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" />
+                                        <DateInput @bind-Value="_fromDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" DefaultValue="@DefaultFromDate" />
                                     </div>
                                     <div class="leave-field">
                                         <label class="form-label">To</label>
-                                        <DateInput @bind-Value="_toDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" />
+                                        <DateInput @bind-Value="_toDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" DefaultValue="@DefaultToDate" />
                                     </div>
                                     <div class="leave-field">
                                         <label class="form-label">Working days</label>
@@ -298,14 +298,22 @@
     private int _pendingCount;
     private Guid _selectedLeaveTypeId;
     private Guid _approverDeveloperId;
-    private DateOnly _fromDate = DateOnly.FromDateTime(DateTime.Today);
-    private DateOnly _toDate = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly _fromDate;
+    private DateOnly _toDate;
+
+    // Single definition of the range default: used on first open and when a date
+    // field is cleared, so the two can never drift apart.
+    private DateOnly DefaultFromDate => DateOnly.FromDateTime(DateTime.Today);
+
+    private DateOnly DefaultToDate => DateOnly.FromDateTime(DateTime.Today);
     private decimal? _calculatedDays;
     private string _reason = string.Empty;
     private string? _reviewComment;
 
     protected override async Task OnInitializedAsync()
     {
+        _fromDate = DefaultFromDate;
+        _toDate = DefaultToDate;
         await LoadAsync();
     }
 

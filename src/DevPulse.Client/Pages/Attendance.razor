@@ -185,11 +185,11 @@
                             <div class="attendance-filter-row">
                                 <div class="attendance-filter-field">
                                     <label class="form-label">From</label>
-                                    <DateInput @bind-Value="_historyFrom" />
+                                    <DateInput @bind-Value="_historyFrom" DefaultValue="@DefaultFromDate" />
                                 </div>
                                 <div class="attendance-filter-field">
                                     <label class="form-label">To</label>
-                                    <DateInput @bind-Value="_historyTo" />
+                                    <DateInput @bind-Value="_historyTo" DefaultValue="@DefaultToDate" />
                                 </div>
                                 <div class="attendance-filter-action">
                                     <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingHistory" BusyText="Loading..." OnClick="LoadHistoryAsync">Load history</BusyButton>
@@ -248,11 +248,11 @@
                                     <div class="attendance-filter-row attendance-corrections-filter-row @(_isAdmin ? null : "attendance-corrections-filter-row-user")">
                                         <div class="attendance-filter-field">
                                             <label class="form-label">From</label>
-                                            <DateInput @bind-Value="_correctionFrom" />
+                                            <DateInput @bind-Value="_correctionFrom" DefaultValue="@DefaultFromDate" />
                                         </div>
                                         <div class="attendance-filter-field">
                                             <label class="form-label">To</label>
-                                            <DateInput @bind-Value="_correctionTo" />
+                                            <DateInput @bind-Value="_correctionTo" DefaultValue="@DefaultToDate" />
                                         </div>
                                         @if (_isAdmin)
                                         {
@@ -400,6 +400,7 @@
                     <DateInput Min="@_minCorrectionDate"
                                Max="@_maxCorrectionDate"
                                Disabled="@(_isSubmittingCorrection || _isCheckingCorrectionPunches)"
+                               DefaultValue="@DefaultToDate"
                                @bind-Value="_correctionDate"
                                @bind-Value:after="CheckCorrectionPunchesAsync" />
                 </div>
@@ -602,6 +603,12 @@
     private string? _appliedCorrectionDeveloperId;
     private string _maxCorrectionDate = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
     private string _minCorrectionDate = DateOnly.FromDateTime(DateTime.Today).AddDays(-30).ToString("yyyy-MM-dd");
+
+    // Values applied when a date field is cleared (office today / last 30 days).
+    private DateOnly DefaultFromDate => GetOfficeToday().AddDays(-30);
+
+    private DateOnly DefaultToDate => GetOfficeToday();
+
     private bool _showCorrectionModal;
     private bool _showDetailsModal;
     private Guid? _detailsCorrectionId;
@@ -632,18 +639,26 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        _historyFrom = today.AddDays(-30);
-        _historyTo = today;
-        _adminFrom = today.AddDays(-30);
-        _adminTo = today;
-        _correctionFrom = today.AddDays(-30);
-        _correctionTo = today;
-        _appliedCorrectionFrom = _correctionFrom;
-        _appliedCorrectionTo = _correctionTo;
         _punchWindowTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
         _meRefreshTimer = new Timer(_ => _ = InvokeAsync(RefreshMeAsync), null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+
+        // Load first so the office time zone is known: range defaults must be "today"
+        // in the office's time zone, not the viewer's machine time zone.
         await LoadAsync();
+        ApplyDefaultDateRanges();
+    }
+
+    private void ApplyDefaultDateRanges()
+    {
+        _historyFrom = DefaultFromDate;
+        _historyTo = DefaultToDate;
+        _adminFrom = DefaultFromDate;
+        _adminTo = DefaultToDate;
+        _correctionFrom = DefaultFromDate;
+        _correctionTo = DefaultToDate;
+        _appliedCorrectionFrom = _correctionFrom;
+        _appliedCorrectionTo = _correctionTo;
+        _correctionDate = DefaultToDate;
     }
 
     private bool CanUsePunchButton()
@@ -746,11 +761,11 @@
         <div class="attendance-filter-row attendance-filter-row-admin">
             <div class="attendance-filter-field">
                 <label class="form-label">From</label>
-                <DateInput @bind-Value="_adminFrom" />
+                <DateInput @bind-Value="_adminFrom" DefaultValue="@DefaultFromDate" />
             </div>
             <div class="attendance-filter-field">
                 <label class="form-label">To</label>
-                <DateInput @bind-Value="_adminTo" />
+                <DateInput @bind-Value="_adminTo" DefaultValue="@DefaultToDate" />
             </div>
             <div class="attendance-filter-field attendance-filter-field-wide">
                 <label class="form-label">Developer</label>

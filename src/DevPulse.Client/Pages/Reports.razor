@@ -39,9 +39,9 @@
                         <div class="reports-filter-group reports-filter-group-dates">
                             <span class="reports-filter-label">Date range</span>
                             <div class="reports-date-range">
-                                <DateInput Id="reportFromDate" @bind-Value="_fromDate" @bind-Value:after="OnCustomDateChanged" AriaLabel="From date" />
+                                <DateInput Id="reportFromDate" @bind-Value="_fromDate" @bind-Value:after="OnCustomDateChanged" DefaultValue="@DefaultFromDate" AriaLabel="From date" />
                                 <span class="reports-date-separator">to</span>
-                                <DateInput Id="reportToDate" @bind-Value="_toDate" @bind-Value:after="OnCustomDateChanged" AriaLabel="To date" />
+                                <DateInput Id="reportToDate" @bind-Value="_toDate" @bind-Value:after="OnCustomDateChanged" DefaultValue="@DefaultToDate" AriaLabel="To date" />
                             </div>
                         </div>
 
@@ -617,6 +617,13 @@
     private KpiSyncStatusResponse? _syncStatus;
     private DateTime _fromDate = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime _toDate = DateTime.Today;
+
+    // Reset target when a date field is cleared, matching the "Last 30 days" preset.
+    // Kept as an expression instead of reusing _fromDate/_toDate, because those hold
+    // the user's current selection; the reset target must stay relative to today.
+    private DateTime DefaultFromDate => DateTime.Today.AddDays(-29);
+
+    private DateTime DefaultToDate => DateTime.Today;
     private bool _includeClosed = true;
     private bool _selectAllAccounts;
     private bool _selectAll;

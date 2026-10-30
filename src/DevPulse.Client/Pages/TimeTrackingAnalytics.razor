@@ -53,11 +53,11 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">From</label>
-                    <DateInput @bind-Value="_fromDate" />
+                    <DateInput @bind-Value="_fromDate" DefaultValue="@DefaultFromDate" />
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">To</label>
-                    <DateInput @bind-Value="_toDate" />
+                    <DateInput @bind-Value="_toDate" DefaultValue="@DefaultToDate" />
                 </div>
                 <div class="col-md-5 d-flex gap-2">
                     <BusyButton CssClass="btn btn-primary" IsBusy="_isLoading" BusyText="Loading..." OnClick="LoadAnalyticsAsync">
@@ -139,13 +139,21 @@
     private HubstaffAnalyticsResponse? _analytics;
     private HubstaffSyncStatusDto? _syncStatus;
     private string _selectedOrgId = string.Empty;
-    private DateTime _fromDate = DateTime.Today.AddDays(-29);
-    private DateTime _toDate = DateTime.Today;
+    private DateTime _fromDate;
+    private DateTime _toDate;
+
+    // Single definition of the range default: used on first open and when a date
+    // field is cleared, so the two can never drift apart.
+    private DateTime DefaultFromDate => DateTime.Today.AddDays(-29);
+
+    private DateTime DefaultToDate => DateTime.Today;
     private bool _isLoading;
     private bool _isSyncing;
 
     protected override async Task OnInitializedAsync()
     {
+        _fromDate = DefaultFromDate;
+        _toDate = DefaultToDate;
         await Task.WhenAll(LoadOrganizationsAsync(), LoadSyncStatusAsync());
         ApplyThisMonthPreset();
     }

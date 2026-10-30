@@ -43,11 +43,11 @@
                         <div class="row g-3">
                             <div class="col-md-3">
                                 <label class="form-label">From date</label>
-                                <DateInput @bind-Value="_fromDate" />
+                                <DateInput @bind-Value="_fromDate" DefaultValue="@DefaultFromDate" />
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">To date</label>
-                                <DateInput @bind-Value="_toDate" />
+                                <DateInput @bind-Value="_toDate" DefaultValue="@DefaultToDate" />
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label">Name</label>
@@ -240,8 +240,14 @@
     private Guid? _editingHolidayId;
     private Guid? _highlightedHolidayId;
 
-    private DateTime _fromDate = DateTime.Today;
-    private DateTime _toDate = DateTime.Today;
+    private DateTime _fromDate;
+    private DateTime _toDate;
+
+    // Single definition of the range default: used on first open and when a date
+    // field is cleared, so the two can never drift apart.
+    private DateTime DefaultFromDate => DateTime.Today;
+
+    private DateTime DefaultToDate => DateTime.Today;
     private string _name = string.Empty;
     private string? _reason;
 
@@ -249,6 +255,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _fromDate = DefaultFromDate;
+        _toDate = DefaultToDate;
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _isAdmin = authState.User.IsInRole(AppRoles.Admin);
         await LoadHolidaysAsync();
@@ -296,8 +304,8 @@
     private void ShowAddForm()
     {
         _editingHolidayId = null;
-        _fromDate = DateTime.Today;
-        _toDate = DateTime.Today;
+        _fromDate = DefaultFromDate;
+        _toDate = DefaultToDate;
         _name = string.Empty;
         _reason = null;
         _showForm = true;

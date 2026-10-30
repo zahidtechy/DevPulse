@@ -7,8 +7,12 @@
     The native date picker's "Clear" button empties the control. Blazor's default
     @bind conversion maps that empty value to default(TValue), which is
     0001-01-01 for both DateOnly and DateTime - so clearing made the page jump to
-    year 0001. This component ignores empty, invalid and out-of-range input and
-    restores the last valid value instead.
+    year 0001. This component ignores empty, invalid and out-of-range input.
+
+    On clear it applies DefaultValue when one is supplied (e.g. "to" = today,
+    "from" = today - 30 days) and otherwise restores the last valid value. Invalid
+    or out-of-range input never reaches the bound field; the control is re-rendered
+    from the current value instead.
 
     Min defaults to 2026-01-01 (DevPulse has no data before 2026) and can be
     overridden or disabled with Min="@null" where a wider range is needed.
@@ -32,6 +36,12 @@
     [Parameter] public TValue Value { get; set; } = default!;
 
     [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+
+    /// <summary>
+    /// Value applied when the control is cleared. When null (the default) the last
+    /// valid value is restored instead.
+    /// </summary>
+    [Parameter] public TValue? DefaultValue { get; set; }
 
     /// <summary>Minimum selectable date (yyyy-MM-dd). Defaults to 2026-01-01.</summary>
     [Parameter] public string? Min { get; set; } = DefaultMin;
@@ -62,19 +72,56 @@
     {
         var raw = args.Value as string;
 
-        if (string.IsNullOrWhiteSpace(raw)
-            || !TryParse(raw, out var parsed)
-            || IsOutOfRange(parsed))
+        if (string.IsNullOrWhiteSpace(raw))
         {
-            // Force the element to be recreated from the last valid bound value so the
-            // control cannot stay empty (or display 0001) after a clear.
-            _resetKey++;
-            StateHasChanged();
+            // Clearing resets to the configured default (e.g. today / last 30 days).
+            // Without a default the previous value is kept.
+            if (TryGetDefault(out var fallback)
+                && !EqualityComparer<TValue>.Default.Equals(fallback, Value))
+            {
+                await ValueChanged.InvokeAsync(fallback);
+            }
+
+            RestoreInput();
+            return;
+        }
+
+        if (!TryParse(raw, out var parsed) || IsOutOfRange(parsed))
+        {
+            RestoreInput();
             return;
         }
 
         await ValueChanged.InvokeAsync(parsed);
     }
+
+    private void RestoreInput()
+    {
+        // Force the element to be recreated from the current bound value so the
+        // control cannot stay empty (or display 0001) after a clear.
+        _resetKey++;
+        StateHasChanged();
+    }
+
+    private bool TryGetDefault(out TValue value)
+    {
+        value = default!;
+
+        if (DefaultValue is null || IsUnset(DefaultValue) || IsOutOfRange(DefaultValue))
+        {
+            return false;
+        }
+
+        value = DefaultValue;
+        return true;
+    }
+
+    private static bool IsUnset(TValue value) => value switch
+    {
+        DateOnly date => date == default,
+        DateTime dateTime => dateTime == default,
+        _ => false
+    };
 
     private static bool TryParse(string raw, out TValue value)
     {
