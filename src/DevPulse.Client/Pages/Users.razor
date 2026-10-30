@@ -502,7 +502,7 @@
         }
     }
 
-    private IEnumerable<DeveloperDto> FilteredDevelopers
+    private IQueryable<DeveloperDto> FilteredDevelopers
     {
         get
         {
@@ -511,14 +511,17 @@
                 .Select(u => u.DeveloperId!.Value)
                 .ToHashSet();
 
-            IEnumerable<DeveloperDto> available = _developers.Where(d => !linkedIds.Contains(d.Id));
+            IQueryable<DeveloperDto> available = _developers
+                .AsQueryable()
+                .Where(d => !linkedIds.Contains(d.Id) && d.IsOwnTeam);
 
             if (!string.IsNullOrWhiteSpace(_developerSearch))
             {
                 var term = _developerSearch.Trim();
-                available = available.Where(d =>
-                    d.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
-                    || (d.Email?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
+
+              available = available.Where(d =>
+              d.Name.Contains(term, StringComparison.OrdinalIgnoreCase)|| 
+              (d.Email != null && d.Email.Contains(term, StringComparison.OrdinalIgnoreCase)));
             }
 
             return available;
