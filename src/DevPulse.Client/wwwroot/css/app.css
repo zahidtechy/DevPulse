@@ -5429,6 +5429,11 @@ button.holiday-day:hover {
     overflow: hidden;
 }
 
+.attendance-records-card:has(.searchable-select-open) {
+    overflow: visible;
+    z-index: 10;
+}
+
 .attendance-records-controls {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

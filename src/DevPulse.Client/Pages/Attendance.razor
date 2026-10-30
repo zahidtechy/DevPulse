@@ -208,27 +208,24 @@
                                 {
                                     <div class="attendance-filter-field attendance-filter-field-wide">
                                         <label class="form-label">Developer</label>
-                                        <select class="form-select" @bind="_recordsDeveloperId">
-                                            <option value="">All developers</option>
-                                            @foreach (var developer in _developers)
-                                            {
-                                                <option value="@developer.Id">@developer.Name</option>
-                                            }
-                                        </select>
+                                        <SearchableSelect Options="_developerFilterOptions"
+                                                          @bind-SelectedValue="_recordsDeveloperId"
+                                                          Placeholder="All developers"
+                                                          SearchPlaceholder="Search by name or email..."
+                                                          EmptyText="No developers match"
+                                                          AriaLabel="Filter attendance by developer"
+                                                          CssClass="searchable-select-stretch" />
                                     </div>
                                 }
                                 <div class="attendance-filter-field">
                                     <label class="form-label">Status</label>
-                                    <select class="form-select" @bind="_recordsStatusFilter">
-                                        <option value="@AttendanceRowStatusFilter.All">All statuses</option>
-                                        <option value="@AttendanceRowStatusFilter.Pending">Pending</option>
-                                        <option value="@AttendanceRowStatusFilter.OnTime">On time</option>
-                                        <option value="@AttendanceRowStatusFilter.Late">Late</option>
-                                        <option value="@AttendanceRowStatusFilter.EarlyLeave">Early leave</option>
-                                        <option value="@AttendanceRowStatusFilter.Incomplete">Incomplete</option>
-                                        <option value="@AttendanceRowStatusFilter.Absent">Absent</option>
-                                        <option value="@AttendanceRowStatusFilter.NoRecord">No record</option>
-                                    </select>
+                                    <SearchableSelect Options="RecordsStatusFilterOptions"
+                                                      @bind-SelectedValue="RecordsStatusFilterValue"
+                                                      Placeholder="All statuses"
+                                                      SearchPlaceholder="Search statuses..."
+                                                      EmptyText="No statuses match"
+                                                      AriaLabel="Filter attendance by status"
+                                                      CssClass="searchable-select-stretch" />
                                 </div>
                                 <div class="attendance-filter-action">
                                     <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingRecords" BusyText="Loading..." OnClick="LoadAttendanceDaysAsync">Load</BusyButton>
@@ -555,6 +552,22 @@
     private AttendancePendingCorrectionCountsDto _pendingCorrectionCounts = new(0, 0);
     private IReadOnlyList<AttendanceDayRowDto> _attendanceDays = [];
     private IReadOnlyList<DeveloperDto> _developers = [];
+    private IReadOnlyList<SearchableSelectOption> _developerFilterOptions =
+    [
+        new(string.Empty, "All developers")
+    ];
+
+    private static readonly IReadOnlyList<SearchableSelectOption> RecordsStatusFilterOptions =
+    [
+        new(nameof(AttendanceRowStatusFilter.All), "All statuses"),
+        new(nameof(AttendanceRowStatusFilter.Pending), "Pending"),
+        new(nameof(AttendanceRowStatusFilter.OnTime), "On time"),
+        new(nameof(AttendanceRowStatusFilter.Late), "Late"),
+        new(nameof(AttendanceRowStatusFilter.EarlyLeave), "Early leave"),
+        new(nameof(AttendanceRowStatusFilter.Incomplete), "Incomplete"),
+        new(nameof(AttendanceRowStatusFilter.Absent), "Absent"),
+        new(nameof(AttendanceRowStatusFilter.NoRecord), "No record")
+    ];
 
     private bool _isAdmin;
     private bool _isLoading = true;
@@ -572,6 +585,14 @@
     private DateOnly _recordsTo;
     private string? _recordsDeveloperId;
     private AttendanceRowStatusFilter _recordsStatusFilter;
+    private string? RecordsStatusFilterValue
+    {
+        get => _recordsStatusFilter.ToString();
+        set => _recordsStatusFilter = Enum.TryParse<AttendanceRowStatusFilter>(value, out var status)
+            ? status
+            : AttendanceRowStatusFilter.All;
+    }
+
     private DateOnly _appliedRecordsFrom;
     private DateOnly _appliedRecordsTo;
     private Guid? _appliedRecordsDeveloperId;
@@ -766,6 +787,14 @@
             if (_isAdmin)
             {
                 _developers = await DeveloperApi.GetDevelopersAsync();
+                _developerFilterOptions =
+                [
+                    new(string.Empty, "All developers"),
+                    .. _developers.Select(developer => new SearchableSelectOption(
+                        developer.Id.ToString(),
+                        developer.Name,
+                        developer.Email))
+                ];
             }
         }
         catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
