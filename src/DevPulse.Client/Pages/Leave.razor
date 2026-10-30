@@ -33,71 +33,100 @@
     {
         <div class="leave-workspace">
             <div class="filter-card card leave-toolbar">
-                <div class="card-body">
-                    <div class="period-chips leave-tabs" role="tablist" aria-label="Leave sections">
-                        <button type="button"
-                                role="tab"
-                                aria-selected="@(_tab == LeaveTab.Apply)"
-                                class="period-chip @(_tab == LeaveTab.Apply ? "active" : null)"
-                                @onclick="() => SetTab(LeaveTab.Apply)">
-                            <span class="bi-calendar-plus leave-tab-icon" aria-hidden="true"></span>
-                            Apply
-                        </button>
-                        <button type="button"
-                                role="tab"
-                                aria-selected="@(_tab == LeaveTab.MyApplications)"
-                                class="period-chip @(_tab == LeaveTab.MyApplications ? "active" : null)"
-                                @onclick="() => SetTab(LeaveTab.MyApplications)">
-                            <span class="bi-journal-text leave-tab-icon" aria-hidden="true"></span>
-                            My applications
-                            @if (_myApplications.Count > 0)
-                            {
-                                <span class="leave-tab-count">@_myApplications.Count</span>
-                            }
-                        </button>
-                        <button type="button"
-                                role="tab"
-                                aria-selected="@(_tab == LeaveTab.ToApprove)"
-                                class="period-chip @(_tab == LeaveTab.ToApprove ? "active" : null)"
-                                @onclick="() => SetTab(LeaveTab.ToApprove)">
-                            <span class="bi-clipboard-check leave-tab-icon" aria-hidden="true"></span>
-                            To approve
-                            @if (_pendingCount > 0)
-                            {
-                                <span class="leave-tab-count leave-tab-count-alert">@_pendingCount</span>
-                            }
-                        </button>
-                    </div>
-
-                    @if (_me.CanApply && _balances.Count > 0)
-                    {
-                        <div class="leave-toolbar-stats" aria-label="Leave summary">
-                            <div class="leave-toolbar-stat">
-                                <span class="leave-toolbar-stat-label">Remaining</span>
-                                <span class="leave-toolbar-stat-value">@GetTotalRemaining().ToString("0.#") <span>days</span></span>
-                            </div>
-                            <div class="leave-toolbar-stat">
-                                <span class="leave-toolbar-stat-label">My pending</span>
-                                <span class="leave-toolbar-stat-value">@GetMyPendingCount()</span>
-                            </div>
-                            <div class="leave-toolbar-stat">
-                                <span class="leave-toolbar-stat-label">Awaiting you</span>
-                                <span class="leave-toolbar-stat-value @(_pendingCount > 0 ? "leave-toolbar-stat-alert" : null)">
-                                    @(_pendingCount > 0 ? _pendingCount.ToString() : "None")
-                                </span>
-                            </div>
-                        </div>
-                    }
+                <div class="card-body d-flex justify-content-end">
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="OpenApplyModal">
+                        <span class="bi-calendar-plus me-1" aria-hidden="true"></span>
+                        Apply for leave
+                    </button>
                 </div>
             </div>
 
-            @if (_tab == LeaveTab.Apply)
-            {
+            <div class="leave-review-layout @(_reviewingApplication is not null ? "has-review" : null)">
+                @if (_reviewingApplication is not null)
+                {
+                    <div class="filter-card card leave-review-card">
+                        <div class="card-body">
+                            <div class="leave-review-header">
+                                <div>
+                                    <span class="filter-section-label">Review request</span>
+                                    <h2 class="leave-review-title">
+                                        @_reviewingApplication.ApplicantName
+                                    </h2>
+                                    <p class="leave-review-subtitle mb-0">
+                                        @_reviewingApplication.LeaveTypeName ·
+                                        @FormatRange(_reviewingApplication.FromDate, _reviewingApplication.ToDate)
+                                        · @_reviewingApplication.RequestedDays.ToString("0.#")
+                                        @(_reviewingApplication.RequestedDays == 1 ? "day" : "days")
+                                    </p>
+                                </div>
+
+                                <span class="leave-status-badge leave-status-pending">
+                                    Pending
+                                </span>
+                            </div>
+
+                            <div class="leave-review-reason">
+                                <span class="leave-review-reason-label">Reason</span>
+                                <p>@_reviewingApplication.Reason</p>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    Comment <span class="text-muted fw-normal">(optional)</span>
+                                </label>
+                                <textarea class="form-control"
+                                          rows="2"
+                                          @bind="_reviewComment"
+                                          placeholder="Add a note for the applicant or team"></textarea>
+                            </div>
+
+                            <div class="leave-review-actions">
+                                <BusyButton CssClass="btn btn-success"
+                                            IsBusy="_isBusy"
+                                            BusyText="Approving..."
+                                            OnClick="ApproveAsync">
+                                    Approve
+                                </BusyButton>
+
+                                <BusyButton CssClass="btn btn-outline-danger"
+                                            IsBusy="_isBusy"
+                                            BusyText="Rejecting..."
+                                            OnClick="RejectAsync">
+                                    Reject
+                                </BusyButton>
+
+                                <button type="button"
+                                        class="btn btn-link leave-review-cancel"
+                                        @onclick="CancelReview">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @RenderAllApplications()
+            </div>
+        </div>
+        <ModalDialog IsVisible="_showApplyModal"
+                     Title="New leave application"
+                     IsBusy="_isBusy"
+                     OnClose="CloseApplyModal">
+
+            <ChildContent>
+                <p class="text-muted small mb-3">
+                    Working days are counted from your leave policy.
+                </p>
+
                 @if (!_me.CanApply)
                 {
                     <div class="leave-notice leave-notice-warning">
                         <strong>Account inactive</strong>
-                        <p class="mb-0">Your developer record is inactive. Contact an administrator.</p>
+                        <p class="mb-0">
+                            Your developer record is inactive. Contact an administrator.
+                        </p>
                     </div>
                 }
                 else if (_me.ReportingManagerDeveloperId is null)
@@ -105,204 +134,175 @@
                     <div class="leave-notice leave-notice-warning">
                         <strong>Reporting manager required</strong>
                         <p class="mb-0">
-                            No reporting manager is assigned to your developer profile. Ask an administrator to assign one on the Developers page before applying for leave.
+                            No reporting manager is assigned to your developer profile.
+                            Ask an administrator to assign one on the Developers page before applying for leave.
                         </p>
                     </div>
                 }
                 else
                 {
-                    <div class="leave-apply-layout">
-                        <div class="filter-card card leave-form-card">
-                            <div class="card-body">
-                                <div class="filter-section-header leave-form-header">
-                                    <span class="filter-section-label">New application</span>
-                                    <span class="leave-form-hint">Working days are counted from your leave policy.</span>
-                                </div>
+                    <div class="row g-3">
 
-                                <div class="leave-form-grid">
-                                    <div class="leave-field leave-field-type">
-                                        <label class="form-label">Leave type</label>
-                                        <select class="form-select" @bind="_selectedLeaveTypeId" @bind:after="OnLeaveTypeOrDatesChanged">
-                                            <option value="@Guid.Empty">Select type...</option>
-                                            @foreach (var type in _activeLeaveTypes)
-                                            {
-                                                <option value="@type.Id">@type.Name (@type.DaysPerYear days/year)</option>
-                                            }
-                                        </select>
-                                        @if (_selectedLeaveType is not null && !string.IsNullOrWhiteSpace(_selectedLeaveType.PolicyNotes))
-                                        {
-                                            <div class="form-text leave-policy-note">@_selectedLeaveType.PolicyNotes</div>
-                                        }
-                                    </div>
-                                    <div class="leave-field">
-                                        <label class="form-label">From</label>
-                                        <input type="date" class="form-control" @bind="_fromDate" @bind:format="yyyy-MM-dd" @bind:after="OnLeaveTypeOrDatesChanged" />
-                                    </div>
-                                    <div class="leave-field">
-                                        <label class="form-label">To</label>
-                                        <input type="date" class="form-control" @bind="_toDate" @bind:format="yyyy-MM-dd" @bind:after="OnLeaveTypeOrDatesChanged" />
-                                    </div>
-                                    <div class="leave-field">
-                                        <label class="form-label">Working days</label>
-                                        <div class="leave-days-display">
-                                            @if (_calculatedDays.HasValue)
-                                            {
-                                                <span class="leave-days-value">@_calculatedDays.Value.ToString("0.#")</span>
-                                                <span class="leave-days-label">@(_calculatedDays.Value == 1 ? "day" : "days")</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="leave-days-placeholder">Select dates</span>
-                                            }
-                                        </div>
-                                    </div>
-                                    <div class="leave-field leave-field-approver">
-                                        <label class="form-label">Reporting manager</label>
-                                        <div class="leave-approver-chip">
-                                            <span class="leave-approver-name">@_me.ReportingManagerName</span>
-                                            <span class="leave-approver-note">Requests go to your assigned manager.</span>
-                                        </div>
-                                    </div>
-                                    <div class="leave-field leave-field-reason">
-                                        <label class="form-label">Reason</label>
-                                        <textarea class="form-control leave-reason-input" rows="3" @bind="_reason" placeholder="Brief reason for your leave request"></textarea>
-                                    </div>
-                                </div>
+                        <div class="col-md-12">
+                            <label class="form-label" for="leaveType">Leave type</label>
 
-                                <div class="filter-actions leave-form-actions">
-                                    <BusyButton CssClass="btn btn-primary leave-submit-btn" IsBusy="_isBusy" BusyText="Submitting..." OnClick="SubmitAsync">
-                                        Submit application
-                                    </BusyButton>
+                            <select id="leaveType"
+                                    class="form-select"
+                                    @bind="_selectedLeaveTypeId"
+                                    @bind:after="OnLeaveTypeOrDatesChanged">
+                                <option value="@Guid.Empty">Select type...</option>
+
+                                @foreach (var type in _activeLeaveTypes)
+                                {
+                                    <option value="@type.Id">
+                                        @type.Name (@type.DaysPerYear days/year)
+                                    </option>
+                                }
+                            </select>
+
+                            @if (_selectedLeaveType is not null &&
+                                 !string.IsNullOrWhiteSpace(_selectedLeaveType.PolicyNotes))
+                            {
+                                <div class="form-text leave-policy-note">
+                                    @_selectedLeaveType.PolicyNotes
                                 </div>
-                            </div>
+                            }
                         </div>
 
-                        <aside class="leave-apply-side">
-                            <div class="leave-side-card">
-                                <div class="leave-side-header">
-                                    <span class="leave-side-title">Balances</span>
-                                    <span class="leave-side-year">@DateTime.Today.Year</span>
-                                </div>
-                                @if (_balances.Count == 0)
+                        <div class="col-md-6">
+                            <label class="form-label" for="fromDate">From</label>
+
+                            <input id="fromDate"
+                                   type="date"
+                                   class="form-control"
+                                   @bind="_fromDate"
+                                   @bind:format="yyyy-MM-dd"
+                                   @bind:after="OnLeaveTypeOrDatesChanged" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="toDate">To</label>
+
+                            <input id="toDate"
+                                   type="date"
+                                   class="form-control"
+                                   @bind="_toDate"
+                                   @bind:format="yyyy-MM-dd"
+                                   @bind:after="OnLeaveTypeOrDatesChanged" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Working days</label>
+
+                            <div class="leave-days-display">
+                                @if (_calculatedDays.HasValue)
                                 {
-                                    <p class="leave-side-empty mb-0">No leave types are assigned yet.</p>
+                                    <span class="leave-days-value">
+                                        @_calculatedDays.Value.ToString("0.#")
+                                    </span>
+
+                                    <span class="leave-days-label">
+                                        @(_calculatedDays.Value == 1 ? "day" : "days")
+                                    </span>
                                 }
                                 else
                                 {
-                                    <div class="leave-balance-stack">
-                                        @foreach (var balance in _balances)
-                                        {
-                                            var usedPercent = balance.DaysPerYear > 0
-                                                ? Math.Min(100, (double)((balance.UsedDays + balance.PendingDays) / balance.DaysPerYear * 100m))
-                                                : 0;
-
-                                            <div class="leave-balance-card">
-                                                <div class="leave-balance-header">
-                                                    <span class="leave-balance-name">@balance.LeaveTypeName</span>
-                                                    <span class="leave-balance-remaining">@balance.RemainingDays.ToString("0.#") left</span>
-                                                </div>
-                                                <div class="leave-balance-bar" aria-hidden="true">
-                                                    <div class="leave-balance-bar-used" style="width: @(usedPercent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div>
-                                                </div>
-                                                <div class="leave-balance-meta">
-                                                    Used @balance.UsedDays.ToString("0.#") · Pending @balance.PendingDays.ToString("0.#") · @balance.DaysPerYear / year
-                                                </div>
-                                            </div>
-                                        }
-                                    </div>
+                                    <span class="leave-days-placeholder">
+                                        Select dates
+                                    </span>
                                 }
                             </div>
-                        </aside>
-                    </div>
-                }
-            }
-            else if (_tab == LeaveTab.MyApplications)
-            {
-                @RenderApplicationsList(
-                    _myApplications,
-                    title: "My applications",
-                    emptyTitle: "No applications yet",
-                    emptyDescription: "When you submit leave, your requests will appear here.",
-                    showCancel: true)
-            }
-            else
-            {
-                <div class="leave-review-layout @(_reviewingApplication is not null ? "has-review" : null)">
-                    @if (_reviewingApplication is not null)
-                    {
-                        <div class="filter-card card leave-review-card">
-                            <div class="card-body">
-                                <div class="leave-review-header">
-                                    <div>
-                                        <span class="filter-section-label">Review request</span>
-                                        <h2 class="leave-review-title">@_reviewingApplication.ApplicantName</h2>
-                                        <p class="leave-review-subtitle mb-0">
-                                            @_reviewingApplication.LeaveTypeName ·
-                                            @FormatRange(_reviewingApplication.FromDate, _reviewingApplication.ToDate)
-                                            · @_reviewingApplication.RequestedDays.ToString("0.#") @(_reviewingApplication.RequestedDays == 1 ? "day" : "days")
-                                        </p>
-                                    </div>
-                                    <span class="leave-status-badge leave-status-pending">Pending</span>
-                                </div>
+                        </div>
 
-                                <div class="leave-review-reason">
-                                    <span class="leave-review-reason-label">Reason</span>
-                                    <p>@_reviewingApplication.Reason</p>
-                                </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Reporting manager</label>
 
-                                <div class="mb-3">
-                                    <label class="form-label">Comment <span class="text-muted fw-normal">(optional)</span></label>
-                                    <textarea class="form-control" rows="2" @bind="_reviewComment" placeholder="Add a note for the applicant or team"></textarea>
-                                </div>
+                            <div class="leave-approver-chip">
+                                <span class="leave-approver-name">
+                                    @_me.ReportingManagerName
+                                </span>
 
-                                <div class="leave-review-actions">
-                                    <BusyButton CssClass="btn btn-success" IsBusy="_isBusy" BusyText="Approving..." OnClick="ApproveAsync">Approve</BusyButton>
-                                    <BusyButton CssClass="btn btn-outline-danger" IsBusy="_isBusy" BusyText="Rejecting..." OnClick="RejectAsync">Reject</BusyButton>
-                                    <button type="button" class="btn btn-link leave-review-cancel" @onclick="CancelReview">Cancel</button>
-                                </div>
+                                <span class="leave-approver-note">
+                                    Requests go to your assigned manager.
+                                </span>
                             </div>
                         </div>
-                    }
 
-                    @RenderApplicationsList(
-                        _pendingApplications,
-                        title: "Pending approval",
-                        emptyTitle: "Nothing to review",
-                        emptyDescription: "Leave requests assigned to you as approver will show up here.",
-                        showReview: true)
-                </div>
-            }
-        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="leaveReason">Reason</label>
+
+                            <textarea id="leaveReason"
+                                      class="form-control leave-reason-input"
+                                      rows="3"
+                                      @bind="_reason"
+                                      placeholder="Brief reason for your leave request">
+                    </textarea>
+                        </div>
+
+                    </div>
+                }
+            </ChildContent>
+
+            <FooterContent>
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        disabled="@_isBusy"
+                        @onclick="CloseApplyModal">
+                    Cancel
+                </button>
+
+                @if (_me.CanApply && _me.ReportingManagerDeveloperId is not null)
+                {
+                    <BusyButton CssClass="btn btn-primary leave-submit-btn"
+                                IsBusy="_isBusy"
+                                BusyText="Submitting..."
+                                OnClick="SubmitAsync">
+                        Submit application
+                    </BusyButton>
+                }
+            </FooterContent>
+
+        </ModalDialog>
+        
     }
 </div>
 
 @code {
-    private enum LeaveTab
-    {
-        Apply,
-        MyApplications,
-        ToApprove
-    }
-
-    private LeaveTab _tab = LeaveTab.Apply;
     private LeaveMeDto _me = new(null, null, false);
+
     private List<LeaveTypeDto> _activeLeaveTypes = [];
-    private List<LeaveColleagueDto> _colleagues = [];
-    private List<LeaveBalanceDto> _balances = [];
     private List<LeaveApplicationDto> _myApplications = [];
     private List<LeaveApplicationDto> _pendingApplications = [];
+
     private LeaveApplicationDto? _reviewingApplication;
     private LeaveTypeDto? _selectedLeaveType;
+
     private bool _isLoading = true;
     private bool _isBusy;
-    private int _pendingCount;
+
     private Guid _selectedLeaveTypeId;
-    private Guid _approverDeveloperId;
+
     private DateOnly _fromDate = DateOnly.FromDateTime(DateTime.Today);
     private DateOnly _toDate = DateOnly.FromDateTime(DateTime.Today);
+
     private decimal? _calculatedDays;
+
     private string _reason = string.Empty;
     private string? _reviewComment;
+    private bool _showApplyModal;
+
+    private void OpenApplyModal()
+    {
+        _showApplyModal = true;
+    }
+
+    private void CloseApplyModal()
+    {
+        if (!_isBusy)
+        {
+            _showApplyModal = false;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -312,22 +312,17 @@
     private async Task LoadAsync()
     {
         _isLoading = true;
+
         try
         {
             _me = await LeaveApi.GetMeAsync();
-            _approverDeveloperId = _me.ReportingManagerDeveloperId ?? Guid.Empty;
-            _activeLeaveTypes = (await LeaveApi.GetLeaveTypesAsync(activeOnly: true)).ToList();
-            _colleagues = (await LeaveApi.GetColleaguesAsync()).ToList();
 
-            if (_me.CanApply)
-            {
-                _balances = (await LeaveApi.GetBalancesAsync(DateTime.Today.Year)).ToList();
-            }
+            _activeLeaveTypes = (await LeaveApi.GetLeaveTypesAsync(activeOnly: true)).ToList();
 
             _myApplications = (await LeaveApi.GetMyApplicationsAsync()).ToList();
+
             _pendingApplications = (await LeaveApi.GetPendingForApprovalAsync()).ToList();
-            _pendingCount = _pendingApplications.Count;
-            _approverDeveloperId = _me.ReportingManagerDeveloperId ?? Guid.Empty;
+
         }
         catch (Exception ex)
         {
@@ -339,23 +334,11 @@
         }
     }
 
-    private void SetTab(LeaveTab tab)
-    {
-        _tab = tab;
-        if (tab != LeaveTab.ToApprove)
-        {
-            _reviewingApplication = null;
-        }
-    }
-
-    private decimal GetTotalRemaining() => _balances.Sum(b => b.RemainingDays);
-
-    private int GetMyPendingCount() =>
-        _myApplications.Count(a => a.Status == LeaveApplicationStatusDto.Pending);
-
     private async Task OnLeaveTypeOrDatesChanged()
     {
-        _selectedLeaveType = _activeLeaveTypes.FirstOrDefault(t => t.Id == _selectedLeaveTypeId);
+        _selectedLeaveType = _activeLeaveTypes.FirstOrDefault(
+            t => t.Id == _selectedLeaveTypeId);
+
         _calculatedDays = null;
 
         if (_selectedLeaveTypeId == Guid.Empty || _toDate < _fromDate)
@@ -365,8 +348,12 @@
 
         try
         {
-            var result = await LeaveApi.CalculateDaysAsync(new LeaveDayCountRequest(
-                _selectedLeaveTypeId, _fromDate, _toDate));
+            var result = await LeaveApi.CalculateDaysAsync(
+                new LeaveDayCountRequest(
+                    _selectedLeaveTypeId,
+                    _fromDate,
+                    _toDate));
+
             _calculatedDays = result?.Days;
         }
         catch
@@ -377,31 +364,40 @@
 
     private async Task SubmitAsync()
     {
-        if (_selectedLeaveTypeId == Guid.Empty || _me.ReportingManagerDeveloperId is null)
+        if (_selectedLeaveTypeId == Guid.Empty ||
+            _me.ReportingManagerDeveloperId is null)
         {
-            ShowMessage("Select a leave type. A reporting manager must be assigned before you can apply.", true);
+            ShowMessage(
+                "Select a leave type. A reporting manager must be assigned before you can apply.",
+                true);
+
             return;
         }
-
-        _approverDeveloperId = _me.ReportingManagerDeveloperId.Value;
 
         _isBusy = true;
 
         try
         {
-            await LeaveApi.SubmitApplicationAsync(new CreateLeaveApplicationRequest(
-                _selectedLeaveTypeId,
-                _fromDate,
-                _toDate,
-                _reason,
-                _approverDeveloperId));
+            await LeaveApi.SubmitApplicationAsync(
+                new CreateLeaveApplicationRequest(
+                    _selectedLeaveTypeId,
+                    _fromDate,
+                    _toDate,
+                    _reason,
+                    _me.ReportingManagerDeveloperId.Value));
 
-            ShowMessage("Leave application submitted. Your team will be notified on Telegram.", false);
+            ShowMessage(
+                "Leave application submitted. Your team will be notified on Telegram.",
+                false);
+
             _reason = string.Empty;
-            _approverDeveloperId = Guid.Empty;
             _calculatedDays = null;
+            _selectedLeaveTypeId = Guid.Empty;
+            _selectedLeaveType = null;
+            _showApplyModal = false;
+
             await LoadAsync();
-            _tab = LeaveTab.MyApplications;
+
         }
         catch (Exception ex)
         {
@@ -419,7 +415,10 @@
         _reviewComment = null;
     }
 
-    private void CancelReview() => _reviewingApplication = null;
+    private void CancelReview()
+    {
+        _reviewingApplication = null;
+    }
 
     private async Task ApproveAsync()
     {
@@ -429,11 +428,17 @@
         }
 
         _isBusy = true;
+
         try
         {
-            await LeaveApi.ApproveAsync(_reviewingApplication.Id, new ReviewLeaveApplicationRequest(_reviewComment));
+            await LeaveApi.ApproveAsync(
+                _reviewingApplication.Id,
+                new ReviewLeaveApplicationRequest(_reviewComment));
+
             ShowMessage("Leave approved. Team notified on Telegram.", false);
+
             _reviewingApplication = null;
+
             await LoadAsync();
         }
         catch (Exception ex)
@@ -454,11 +459,17 @@
         }
 
         _isBusy = true;
+
         try
         {
-            await LeaveApi.RejectAsync(_reviewingApplication.Id, new ReviewLeaveApplicationRequest(_reviewComment));
+            await LeaveApi.RejectAsync(
+                _reviewingApplication.Id,
+                new ReviewLeaveApplicationRequest(_reviewComment));
+
             ShowMessage("Leave rejected. Team notified on Telegram.", false);
+
             _reviewingApplication = null;
+
             await LoadAsync();
         }
         catch (Exception ex)
@@ -474,10 +485,13 @@
     private async Task CancelApplicationAsync(Guid id)
     {
         _isBusy = true;
+
         try
         {
             await LeaveApi.CancelAsync(id);
+
             ShowMessage("Application cancelled.", false);
+
             await LoadAsync();
         }
         catch (Exception ex)
@@ -490,152 +504,122 @@
         }
     }
 
-    private RenderFragment RenderApplicationsList(
-        IReadOnlyList<LeaveApplicationDto> applications,
-        string title,
-        string emptyTitle,
-        string emptyDescription,
-        bool showCancel = false,
-        bool showReview = false) => __builder =>
-    {
-        if (applications.Count == 0)
-        {
-            __builder.OpenElement(0, "div");
-            __builder.AddAttribute(1, "class", "leave-empty-state");
-            __builder.OpenElement(2, "div");
-            __builder.AddAttribute(3, "class", "leave-empty-icon");
-            __builder.CloseElement();
-            __builder.OpenElement(4, "h3");
-            __builder.AddContent(5, emptyTitle);
-            __builder.CloseElement();
-            __builder.OpenElement(6, "p");
-            __builder.AddContent(7, emptyDescription);
-            __builder.CloseElement();
-            __builder.CloseElement();
-            return;
-        }
+    private sealed record LeaveApplicationRow(
+        LeaveApplicationDto Application,
+        bool IsMine,
+        bool CanReview);
 
-        __builder.OpenElement(10, "div");
-        __builder.AddAttribute(11, "class", "data-card card leave-applications-card");
-        __builder.OpenElement(12, "div");
-        __builder.AddAttribute(13, "class", "card-title-bar d-flex align-items-center justify-content-between gap-2");
-        __builder.OpenElement(14, "h2");
-        __builder.AddAttribute(15, "class", "leave-list-title mb-0");
-        __builder.AddContent(16, title);
-        __builder.CloseElement();
-        __builder.OpenElement(17, "span");
-        __builder.AddAttribute(18, "class", "filter-count-badge");
-        __builder.AddContent(19, applications.Count);
-        __builder.CloseElement();
-        __builder.CloseElement();
+    private IReadOnlyList<LeaveApplicationRow> AllApplications =>
+        _myApplications
+            .Select(app => new LeaveApplicationRow(
+                app,
+                IsMine: true,
+                CanReview: _pendingApplications.Any(p => p.Id == app.Id)))
+            .Concat(
+                _pendingApplications
+                    .Where(pending => !_myApplications.Any(mine => mine.Id == pending.Id))
+                    .Select(app => new LeaveApplicationRow(
+                        app,
+                        IsMine: false,
+                        CanReview: true)))
+            .OrderByDescending(row => row.Application.FromDate)
+            .ToList();
 
-        __builder.OpenElement(20, "div");
-        __builder.AddAttribute(21, "class", "card-body p-0");
-        __builder.OpenElement(22, "div");
-        __builder.AddAttribute(23, "class", "table-responsive leave-table-scroll");
-        __builder.OpenElement(24, "table");
-        __builder.AddAttribute(25, "class", "table table-hover align-middle mb-0 leave-table");
+    private RenderFragment RenderAllApplications() => @<div class="data-card card leave-applications-card">
+        <div class="card-title-bar d-flex align-items-center justify-content-between gap-2">
+            <h2 class="leave-list-title mb-0">Leave applications</h2>
+            <span class="filter-count-badge">@AllApplications.Count</span>
+        </div>
 
-        __builder.OpenElement(26, "thead");
-        __builder.OpenElement(27, "tr");
-        if (showReview)
-        {
-            __builder.OpenElement(28, "th");
-            __builder.AddContent(29, "Employee");
-            __builder.CloseElement();
-        }
-        __builder.OpenElement(30, "th"); __builder.AddContent(31, "Type"); __builder.CloseElement();
-        __builder.OpenElement(32, "th"); __builder.AddContent(33, "Dates"); __builder.CloseElement();
-        __builder.OpenElement(34, "th"); __builder.AddContent(35, "Days"); __builder.CloseElement();
-        if (!showReview)
-        {
-            __builder.OpenElement(36, "th"); __builder.AddContent(37, "Approver"); __builder.CloseElement();
-        }
-        __builder.OpenElement(38, "th"); __builder.AddContent(39, "Status"); __builder.CloseElement();
-        __builder.OpenElement(40, "th");
-        __builder.AddAttribute(41, "class", "text-end");
-        __builder.AddContent(42, "Actions");
-        __builder.CloseElement();
-        __builder.CloseElement();
-        __builder.CloseElement();
+        <div class="card-body p-0">
+            @if (AllApplications.Count == 0)
+            {
+                <div class="leave-empty-state">
+                    <div class="leave-empty-icon"></div>
+                    <h3>No leave applications</h3>
+                    <p>Submitted applications and requests assigned to you for approval will appear here.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive leave-table-scroll">
+                    <table class="table table-hover align-middle mb-0 leave-table">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Type</th>
+                                <th>Dates</th>
+                                <th>Days</th>
+                                <th>Approver</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in AllApplications)
+                            {
+                                var app = row.Application;
+                                <tr class="@(row.CanReview && _reviewingApplication?.Id == app.Id ? "leave-row-reviewing" : null)">
+                                    <td class="leave-table-primary">@app.ApplicantName</td>
+                                    <td>@app.LeaveTypeName</td>
+                                    <td class="leave-table-dates">@FormatRange(app.FromDate, app.ToDate)</td>
+                                    <td>@app.RequestedDays.ToString("0.#")</td>
+                                    <td>@app.ApproverName</td>
+                                    <td>
+                                        <span class="leave-status-badge @GetStatusBadgeClass(app.Status)">
+                                            @GetStatusLabel(app.Status)
+                                        </span>
+                                    </td>
+                                    <td class="text-end leave-table-actions">
+                                        @if (row.CanReview && app.Status == LeaveApplicationStatusDto.Pending)
+                                        {
+                                            <button type="button"
+                                                    class="btn btn-sm btn-primary"
+                                                    @onclick="() => StartReview(app)">
+                                                Review
+                                            </button>
+                                        }
 
-        __builder.OpenElement(50, "tbody");
-        var seq = 100;
-        foreach (var app in applications)
-        {
-            __builder.OpenElement(seq++, "tr");
-            __builder.AddAttribute(seq++, "class", showReview && _reviewingApplication?.Id == app.Id ? "leave-row-reviewing" : null);
-            if (showReview)
-            {
-                __builder.OpenElement(seq++, "td");
-                __builder.AddAttribute(seq++, "class", "leave-table-primary");
-                __builder.AddContent(seq++, app.ApplicantName);
-                __builder.CloseElement();
+                                        @if (row.IsMine && app.Status == LeaveApplicationStatusDto.Pending)
+                                        {
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary"
+                                                    @onclick="() => CancelApplicationAsync(app.Id)">
+                                                Cancel
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
             }
-            __builder.OpenElement(seq++, "td"); __builder.AddContent(seq++, app.LeaveTypeName); __builder.CloseElement();
-            __builder.OpenElement(seq++, "td");
-            __builder.AddAttribute(seq++, "class", "leave-table-dates");
-            __builder.AddContent(seq++, FormatRange(app.FromDate, app.ToDate));
-            __builder.CloseElement();
-            __builder.OpenElement(seq++, "td"); __builder.AddContent(seq++, app.RequestedDays.ToString("0.#")); __builder.CloseElement();
-            if (!showReview)
-            {
-                __builder.OpenElement(seq++, "td"); __builder.AddContent(seq++, app.ApproverName); __builder.CloseElement();
-            }
-            __builder.OpenElement(seq++, "td");
-            __builder.OpenElement(seq++, "span");
-            __builder.AddAttribute(seq++, "class", $"leave-status-badge {GetStatusBadgeClass(app.Status)}");
-            __builder.AddContent(seq++, GetStatusLabel(app.Status));
-            __builder.CloseElement();
-            __builder.CloseElement();
-            __builder.OpenElement(seq++, "td");
-            __builder.AddAttribute(seq++, "class", "text-end leave-table-actions");
-            if (showReview && app.Status == LeaveApplicationStatusDto.Pending)
-            {
-                __builder.OpenElement(seq++, "button");
-                __builder.AddAttribute(seq++, "type", "button");
-                __builder.AddAttribute(seq++, "class", "btn btn-sm btn-primary");
-                __builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => StartReview(app)));
-                __builder.AddContent(seq++, "Review");
-                __builder.CloseElement();
-            }
-            if (showCancel && app.Status == LeaveApplicationStatusDto.Pending)
-            {
-                __builder.OpenElement(seq++, "button");
-                __builder.AddAttribute(seq++, "type", "button");
-                __builder.AddAttribute(seq++, "class", "btn btn-sm btn-outline-secondary");
-                __builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => CancelApplicationAsync(app.Id)));
-                __builder.AddContent(seq++, "Cancel");
-                __builder.CloseElement();
-            }
-            __builder.CloseElement();
-            __builder.CloseElement();
-        }
-        __builder.CloseElement();
-        __builder.CloseElement();
-        __builder.CloseElement();
-        __builder.CloseElement();
-        __builder.CloseElement();
-    };
+        </div>
+    </div>;
 
     private static string FormatRange(DateOnly from, DateOnly to) =>
-        from == to ? from.ToString("dd MMM yyyy") : $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
+        from == to
+            ? from.ToString("dd MMM yyyy")
+            : $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
 
-    private static string GetStatusBadgeClass(LeaveApplicationStatusDto status) => status switch
-    {
-        LeaveApplicationStatusDto.Approved => "leave-status-approved",
-        LeaveApplicationStatusDto.Rejected => "leave-status-rejected",
-        LeaveApplicationStatusDto.Cancelled => "leave-status-cancelled",
-        _ => "leave-status-pending"
-    };
+    private static string GetStatusBadgeClass(LeaveApplicationStatusDto status) =>
+        status switch
+        {
+            LeaveApplicationStatusDto.Approved => "leave-status-approved",
+            LeaveApplicationStatusDto.Rejected => "leave-status-rejected",
+            LeaveApplicationStatusDto.Cancelled => "leave-status-cancelled",
+            _ => "leave-status-pending"
+        };
 
-    private static string GetStatusLabel(LeaveApplicationStatusDto status) => status switch
-    {
-        LeaveApplicationStatusDto.Approved => "Approved",
-        LeaveApplicationStatusDto.Rejected => "Rejected",
-        LeaveApplicationStatusDto.Cancelled => "Cancelled",
-        _ => "Pending"
-    };
+    private static string GetStatusLabel(LeaveApplicationStatusDto status) =>
+        status switch
+        {
+            LeaveApplicationStatusDto.Approved => "Approved",
+            LeaveApplicationStatusDto.Rejected => "Rejected",
+            LeaveApplicationStatusDto.Cancelled => "Cancelled",
+            _ => "Pending"
+        };
 
     private void ShowMessage(string message, bool isError)
     {
