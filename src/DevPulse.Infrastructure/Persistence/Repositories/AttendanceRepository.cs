@@ -69,8 +69,7 @@ public sealed class AttendanceRepository : IAttendanceRepository
         DateOnly fromDate,
         DateOnly toDate,
         Guid? developerId,
-        CancellationToken cancellationToken = default,
-        bool ownTeamOnly = false)
+        CancellationToken cancellationToken = default)
     {
         var query = QueryRecords()
             .Where(x => x.WorkDate >= fromDate && x.WorkDate <= toDate);
@@ -78,11 +77,6 @@ public sealed class AttendanceRepository : IAttendanceRepository
         if (developerId.HasValue)
         {
             query = query.Where(x => x.DeveloperId == developerId.Value);
-        }
-
-        if (ownTeamOnly)
-        {
-            query = query.Where(x => x.Developer!.IsOwnTeam);
         }
 
         return await query
@@ -132,10 +126,8 @@ public sealed class AttendanceRepository : IAttendanceRepository
             .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<AttendanceCorrectionRequest>> GetCorrectionRequestsAsync(
-        CancellationToken cancellationToken = default,
-        bool ownTeamOnly = false) =>
+        CancellationToken cancellationToken = default) =>
         await QueryCorrectionRequests()
-            .Where(x => !ownTeamOnly || x.Developer!.IsOwnTeam)
             .OrderBy(x => x.Status == AttendanceCorrectionStatus.Pending ? 0 : 1)
             .ThenByDescending(x => x.CreatedAtUtc)
             .AsNoTracking()

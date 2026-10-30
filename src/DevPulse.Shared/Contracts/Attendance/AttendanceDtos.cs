@@ -35,8 +35,7 @@ public record AttendanceMeDto(
     TimeOnly? PunchInEarliestTime = null,
     TimeOnly? PunchOutEarliestTime = null,
     TimeOnly? PunchOutLatestTime = null,
-    TimeOnly? PunchInLatestTime = null,
-    bool IsOwnTeam = true);
+    TimeOnly? PunchInLatestTime = null);
 
 public record AttendanceSettingsDto(
     TimeOnly WorkStartTime,

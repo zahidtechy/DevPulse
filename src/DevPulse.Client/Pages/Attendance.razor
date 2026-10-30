@@ -33,15 +33,6 @@
         </div>
         <LoadingIndicator Text="Loading attendance..." />
     }
-    else if (!_me.IsOwnTeam)
-    {
-        <div class="leave-notice leave-notice-warning">
-            <strong>Attendance is restricted</strong>
-            <p class="mb-0">
-                Attendance is only available to own-team developers. Contact an administrator if you believe you should have access.
-            </p>
-        </div>
-    }
     else if (!_me.CanPunch && _me.DeveloperId is null)
     {
         <div class="leave-notice leave-notice-warning">
@@ -806,8 +797,7 @@
                 var developersTask = DeveloperApi.GetDevelopersAsync();
                 var correctionsTask = AttendanceApi.GetCorrectionRequestsAsync();
                 await Task.WhenAll(developersTask, correctionsTask);
-                // Only expose developers flagged as part of the own team in the admin filters.
-                _developers = (await developersTask).Where(dev => dev.IsOwnTeam).ToList();
+                _developers = await developersTask;
                 _corrections = await correctionsTask;
             }
             else
