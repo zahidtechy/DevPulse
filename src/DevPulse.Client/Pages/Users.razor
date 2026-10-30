@@ -161,64 +161,33 @@
                         </div>
                     </div>
                 }
-            </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="developerSearch">
+                        Link to developer
+                    </label>
 
-            <div class="users-form-divider mt-4 pt-3">
-                <span class="filter-section-label">Developer profile</span>
-                <p class="text-muted small mb-3 mt-1">
-                    Link this user to a developer record for leave and attendance. Pick an existing developer or create a new one when adding a user.
-                </p>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label" for="developerLink">Link to developer</label>
-                        <div class="users-search-wrap mb-2">
-                            <span class="bi-search users-search-icon" aria-hidden="true"></span>
-                            <input id="developerSearch"
-                                   class="form-control form-control-sm users-search-input"
-                                   placeholder="Filter by name or email..."
-                                   @bind="_developerSearch"
-                                   @bind:event="oninput"
-                                   disabled="@(_createDeveloper && !_editingUserId.HasValue)" />
-                        </div>
-                        <select id="developerLink"
-                                class="form-select"
-                                @bind="_selectedDeveloperId"
-                                @bind:after="ValidateDeveloperLinkField"
-                                aria-describedby="developerLinkError"
-                                disabled="@(_createDeveloper && !_editingUserId.HasValue)">
-                            <option value="">No link (match by email only)</option>
+                    <div class="position-relative">
+                        <input id="developerSearch"
+                               class="form-control"
+                               placeholder="Search developer by name or email..."
+                               list="developerOptions"
+                               @bind="_developerSearch"
+                               @bind:event="oninput"
+                               disabled="@(_createDeveloper && !_editingUserId.HasValue)" />
+
+                        <datalist id="developerOptions">
                             @foreach (var developer in FilteredDevelopers)
                             {
-                                <option value="@developer.Id">
-                                    @developer.Name@(string.IsNullOrWhiteSpace(developer.Email) ? "" : $" ({developer.Email})")
-                                </option>
+                                <option value="@developer.Name (@developer.Email)"></option>
                             }
-                        </select>
-                        @if (!string.IsNullOrWhiteSpace(_developerLinkError))
-                        {
-                            <div id="developerLinkError" class="text-danger small mt-1" role="alert">@_developerLinkError</div>
-                        }
+                        </datalist>
                     </div>
-                    @if (!_editingUserId.HasValue)
-                    {
-                        <div class="col-md-6 d-flex align-items-end">
-                            <div class="form-check">
-                                <input class="form-check-input"
-                                       type="checkbox"
-                                       id="createDeveloper"
-                                       @bind="_createDeveloper"
-                                       @bind:after="OnCreateDeveloperChanged" />
-                                <label class="form-check-label" for="createDeveloper">
-                                    Also create a new developer profile
-                                </label>
-                                @if (!string.IsNullOrWhiteSpace(_createDeveloperError))
-                                {
-                                    <div class="text-danger small mt-1" role="alert">@_createDeveloperError</div>
-                                }
-                            </div>
-                        </div>
-                    }
+
+                    <div class="form-text">
+                        Search and select an existing developer.
+                    </div>
                 </div>
+
             </div>
         </ChildContent>
         <FooterContent>
@@ -598,75 +567,6 @@
         _formError = null;
         _newUser.Password = string.Empty;
         _developerSearch = string.Empty;
-    }
-
-    private void OnCreateDeveloperChanged()
-    {
-        if (_createDeveloper)
-        {
-            _selectedDeveloperId = string.Empty;
-        }
-
-        ValidateDeveloperLinkField();
-    }
-
-    private void ValidateEmailField()
-    {
-        _emailError = null;
-
-        if (!_editingUserId.HasValue)
-        {
-            if (string.IsNullOrWhiteSpace(_newUser.Email))
-                _emailError = "Email is required.";
-            else if (!System.Net.Mail.MailAddress.TryCreate(_newUser.Email.Trim(), out _))
-                _emailError = "Enter a valid email address.";
-        }
-    }
-
-    private void ValidateNewPasswordField() =>
-        _newPasswordError = !_editingUserId.HasValue ? ValidatePassword(_newUser.Password) : null;
-
-    private void ValidateDisplayNameField() =>
-        _displayNameError = string.IsNullOrWhiteSpace(_newUser.DisplayName)
-            ? "Display name is required."
-            : null;
-
-    private void ValidateRoleField() =>
-        _roleError = string.IsNullOrWhiteSpace(_newUser.Role) || !AppRoles.All.Contains(_newUser.Role)
-            ? "Please select a valid role."
-            : null;
-
-    private void ValidateTelegramIdField() =>
-        _telegramIdError = !string.IsNullOrWhiteSpace(_newUser.TelegramId) && !_newUser.TelegramId.All(char.IsDigit)
-            ? "Telegram ID must contain numbers only."
-            : null;
-
-    private void ValidateDeveloperLinkField()
-    {
-        _developerLinkError = null;
-        _createDeveloperError = null;
-
-        if (_createDeveloper && !string.IsNullOrWhiteSpace(_selectedDeveloperId))
-        {
-            _developerLinkError = "Clear the developer selection when creating a new developer profile.";
-            _createDeveloperError = "Choose either an existing developer or create a new profile, not both.";
-        }
-        else if (!string.IsNullOrWhiteSpace(_selectedDeveloperId) && !Guid.TryParse(_selectedDeveloperId, out _))
-        {
-            _developerLinkError = "Select a valid developer profile.";
-        }
-    }
-
-    private void ValidateResetPasswordField() =>
-        _resetPasswordFieldError = ValidatePassword(_resetPassword);
-
-    private void ValidateResetPasswordConfirmField()
-    {
-        _resetPasswordConfirmError = string.IsNullOrWhiteSpace(_resetPasswordConfirm)
-            ? "Please confirm the new password."
-            : _resetPassword != _resetPasswordConfirm
-                ? "Passwords do not match."
-                : null;
     }
 
     private void ShowResetPasswordForm(UserDto user)
