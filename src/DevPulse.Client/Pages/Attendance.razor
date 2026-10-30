@@ -185,11 +185,11 @@
                             <div class="attendance-filter-row">
                                 <div class="attendance-filter-field">
                                     <label class="form-label">From</label>
-                                    <input type="date" class="form-control" @bind="_historyFrom" />
+                                    <DateInput @bind-Value="_historyFrom" />
                                 </div>
                                 <div class="attendance-filter-field">
                                     <label class="form-label">To</label>
-                                    <input type="date" class="form-control" @bind="_historyTo" />
+                                    <DateInput @bind-Value="_historyTo" />
                                 </div>
                                 <div class="attendance-filter-action">
                                     <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingHistory" BusyText="Loading..." OnClick="LoadHistoryAsync">Load history</BusyButton>
@@ -248,11 +248,11 @@
                                     <div class="attendance-filter-row attendance-corrections-filter-row @(_isAdmin ? null : "attendance-corrections-filter-row-user")">
                                         <div class="attendance-filter-field">
                                             <label class="form-label">From</label>
-                                            <input type="date" class="form-control" @bind="_correctionFrom" />
+                                            <DateInput @bind-Value="_correctionFrom" />
                                         </div>
                                         <div class="attendance-filter-field">
                                             <label class="form-label">To</label>
-                                            <input type="date" class="form-control" @bind="_correctionTo" />
+                                            <DateInput @bind-Value="_correctionTo" />
                                         </div>
                                         @if (_isAdmin)
                                         {
@@ -397,14 +397,11 @@
             <div class="attendance-correction-grid">
                 <div class="attendance-correction-field">
                     <label class="form-label">Date</label>
-                    <input type="date"
-                           class="form-control"
-                           min="@_minCorrectionDate"
-                           max="@_maxCorrectionDate"
-                           disabled="@(_isSubmittingCorrection || _isCheckingCorrectionPunches)"
-                           @bind="_correctionDate"
-                           @bind:format="yyyy-MM-dd"
-                           @bind:after="CheckCorrectionPunchesAsync" />
+                    <DateInput Min="@_minCorrectionDate"
+                               Max="@_maxCorrectionDate"
+                               Disabled="@(_isSubmittingCorrection || _isCheckingCorrectionPunches)"
+                               @bind-Value="_correctionDate"
+                               @bind-Value:after="CheckCorrectionPunchesAsync" />
                 </div>
                 <div class="attendance-correction-date-spacer" aria-hidden="true"></div>
 
@@ -749,11 +746,11 @@
         <div class="attendance-filter-row attendance-filter-row-admin">
             <div class="attendance-filter-field">
                 <label class="form-label">From</label>
-                <input type="date" class="form-control" @bind="_adminFrom" />
+                <DateInput @bind-Value="_adminFrom" />
             </div>
             <div class="attendance-filter-field">
                 <label class="form-label">To</label>
-                <input type="date" class="form-control" @bind="_adminTo" />
+                <DateInput @bind-Value="_adminTo" />
             </div>
             <div class="attendance-filter-field attendance-filter-field-wide">
                 <label class="form-label">Developer</label>

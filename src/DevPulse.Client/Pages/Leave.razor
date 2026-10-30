@@ -136,11 +136,11 @@
                                     </div>
                                     <div class="leave-field">
                                         <label class="form-label">From</label>
-                                        <input type="date" class="form-control" @bind="_fromDate" @bind:format="yyyy-MM-dd" @bind:after="OnLeaveTypeOrDatesChanged" />
+                                        <DateInput @bind-Value="_fromDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" />
                                     </div>
                                     <div class="leave-field">
                                         <label class="form-label">To</label>
-                                        <input type="date" class="form-control" @bind="_toDate" @bind:format="yyyy-MM-dd" @bind:after="OnLeaveTypeOrDatesChanged" />
+                                        <DateInput @bind-Value="_toDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" />
                                     </div>
                                     <div class="leave-field">
                                         <label class="form-label">Working days</label>

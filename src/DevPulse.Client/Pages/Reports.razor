@@ -39,9 +39,9 @@
                         <div class="reports-filter-group reports-filter-group-dates">
                             <span class="reports-filter-label">Date range</span>
                             <div class="reports-date-range">
-                                <input id="reportFromDate" type="date" class="form-control" @bind="_fromDate" @bind:format="yyyy-MM-dd" @bind:after="OnCustomDateChanged" aria-label="From date" />
+                                <DateInput Id="reportFromDate" @bind-Value="_fromDate" @bind-Value:after="OnCustomDateChanged" AriaLabel="From date" />
                                 <span class="reports-date-separator">to</span>
-                                <input id="reportToDate" type="date" class="form-control" @bind="_toDate" @bind:format="yyyy-MM-dd" @bind:after="OnCustomDateChanged" aria-label="To date" />
+                                <DateInput Id="reportToDate" @bind-Value="_toDate" @bind-Value:after="OnCustomDateChanged" AriaLabel="To date" />
                             </div>
                         </div>
 

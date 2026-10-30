@@ -53,11 +53,11 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">From</label>
-                    <input type="date" class="form-control" @bind="_fromDate" @bind:format="yyyy-MM-dd" />
+                    <DateInput @bind-Value="_fromDate" />
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">To</label>
-                    <input type="date" class="form-control" @bind="_toDate" @bind:format="yyyy-MM-dd" />
+                    <DateInput @bind-Value="_toDate" />
                 </div>
                 <div class="col-md-5 d-flex gap-2">
                     <BusyButton CssClass="btn btn-primary" IsBusy="_isLoading" BusyText="Loading..." OnClick="LoadAnalyticsAsync">

@@ -1,0 +1,122 @@
+@typeparam TValue
+@using System.Globalization
+
+@*
+    Shared date input used across the app.
+
+    The native date picker's "Clear" button empties the control. Blazor's default
+    @bind conversion maps that empty value to default(TValue), which is
+    0001-01-01 for both DateOnly and DateTime - so clearing made the page jump to
+    year 0001. This component ignores empty, invalid and out-of-range input and
+    restores the last valid value instead.
+
+    Min defaults to 2026-01-01 (DevPulse has no data before 2026) and can be
+    overridden or disabled with Min="@null" where a wider range is needed.
+*@
+
+<input type="date"
+       @key="_resetKey"
+       id="@Id"
+       class="@($"form-control {CssClass}".Trim())"
+       value="@FormatValue()"
+       min="@Min"
+       max="@Max"
+       disabled="@Disabled"
+       aria-label="@AriaLabel"
+       @onchange="HandleChangeAsync" />
+
+@code {
+    private const string DefaultMin = "2026-01-01";
+    private int _resetKey;
+
+    [Parameter] public TValue Value { get; set; } = default!;
+
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+
+    /// <summary>Minimum selectable date (yyyy-MM-dd). Defaults to 2026-01-01.</summary>
+    [Parameter] public string? Min { get; set; } = DefaultMin;
+
+    /// <summary>Maximum selectable date (yyyy-MM-dd). Unset by default.</summary>
+    [Parameter] public string? Max { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? Id { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    [Parameter] public string? AriaLabel { get; set; }
+
+    private string FormatValue() => Value switch
+    {
+        DateOnly date => date == default
+            ? string.Empty
+            : date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        DateTime dateTime => dateTime == default
+            ? string.Empty
+            : dateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        _ => string.Empty
+    };
+
+    private async Task HandleChangeAsync(ChangeEventArgs args)
+    {
+        var raw = args.Value as string;
+
+        if (string.IsNullOrWhiteSpace(raw)
+            || !TryParse(raw, out var parsed)
+            || IsOutOfRange(parsed))
+        {
+            // Force the element to be recreated from the last valid bound value so the
+            // control cannot stay empty (or display 0001) after a clear.
+            _resetKey++;
+            StateHasChanged();
+            return;
+        }
+
+        await ValueChanged.InvokeAsync(parsed);
+    }
+
+    private static bool TryParse(string raw, out TValue value)
+    {
+        if (BindConverter.TryConvertTo<TValue>(raw, CultureInfo.InvariantCulture, out var parsed)
+            && parsed is not null)
+        {
+            value = parsed;
+            return true;
+        }
+
+        value = default!;
+        return false;
+    }
+
+    private bool IsOutOfRange(TValue value)
+    {
+        if (Min is null && Max is null)
+        {
+            return false;
+        }
+
+        var date = ToDateOnly(value);
+        if (date is null)
+        {
+            return false;
+        }
+
+        if (TryParseBound(Min, out var min) && date < min)
+        {
+            return true;
+        }
+
+        return TryParseBound(Max, out var max) && date > max;
+    }
+
+    private static DateOnly? ToDateOnly(TValue value) => value switch
+    {
+        DateOnly date => date,
+        DateTime dateTime => DateOnly.FromDateTime(dateTime),
+        _ => null
+    };
+
+    private static bool TryParseBound(string? value, out DateOnly result) =>
+        DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out result);
+}
