@@ -6,11 +6,16 @@ public sealed class HolidayService : IHolidayService
     private const int MaxReasonLength = 500;
 
     private readonly IHolidayRepository _holidayRepository;
+    private readonly IGoogleHolidaySource _googleHolidaySource;
     private readonly ILogger<HolidayService> _logger;
 
-    public HolidayService(IHolidayRepository holidayRepository, ILogger<HolidayService> logger)
+    public HolidayService(
+        IHolidayRepository holidayRepository,
+        IGoogleHolidaySource googleHolidaySource,
+        ILogger<HolidayService> logger)
     {
         _holidayRepository = holidayRepository;
+        _googleHolidaySource = googleHolidaySource;
         _logger = logger;
     }
 
@@ -89,6 +94,122 @@ public sealed class HolidayService : IHolidayService
         return Result.Success();
     }
 
+    public async Task<Result<GoogleHolidayPreviewDto>> PreviewGoogleHolidaysAsync(
+        int year,
+        CancellationToken cancellationToken = default)
+    {
+        if (year < 1900 || year > 2100)
+        {
+            return Result<GoogleHolidayPreviewDto>.Failure("Year must be between 1900 and 2100.");
+        }
+
+        var sourceResult = await _googleHolidaySource.GetByYearAsync(year, cancellationToken);
+        if (sourceResult.IsFailure)
+        {
+            return Result<GoogleHolidayPreviewDto>.Failure(sourceResult.Error!);
+        }
+
+        var existing = await _holidayRepository.GetByYearAsync(year, cancellationToken);
+        return Result<GoogleHolidayPreviewDto>.Success(BuildGooglePreview(year, sourceResult.Value!, existing));
+    }
+
+    public async Task<Result<GoogleHolidayImportResultDto>> ImportGoogleHolidaysAsync(
+        ImportGoogleHolidaysRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.Year < 1900 || request.Year > 2100)
+        {
+            return Result<GoogleHolidayImportResultDto>.Failure("Year must be between 1900 and 2100.");
+        }
+
+        if (request.HolidayKeys is null || request.HolidayKeys.Count == 0 || request.HolidayKeys.Count > 366
+            || request.HolidayKeys.Any(key => string.IsNullOrWhiteSpace(key) || key.Length != 64))
+        {
+            return Result<GoogleHolidayImportResultDto>.Failure("Select between 1 and 366 holidays from the Google preview.");
+        }
+
+        var keys = request.HolidayKeys.ToHashSet(StringComparer.Ordinal);
+        if (keys.Count != request.HolidayKeys.Count)
+        {
+            return Result<GoogleHolidayImportResultDto>.Failure("Select each holiday only once.");
+        }
+
+        // Fetch again rather than trusting names/dates posted by the browser. Content-based
+        // keys also prevent importing a holiday whose Google data changed after the preview.
+        var sourceResult = await _googleHolidaySource.GetByYearAsync(request.Year, cancellationToken);
+        if (sourceResult.IsFailure)
+        {
+            return Result<GoogleHolidayImportResultDto>.Failure(sourceResult.Error!);
+        }
+
+        var selected = sourceResult.Value!.Where(holiday => keys.Contains(holiday.Key)).ToList();
+        if (selected.Count != keys.Count)
+        {
+            return Result<GoogleHolidayImportResultDto>.Failure("The selected Google holidays have changed or are no longer available. Fetch again before importing.");
+        }
+
+        foreach (var holiday in selected)
+        {
+            var validation = ValidateFields(holiday.FromDate, holiday.ToDate, holiday.Name, holiday.Reason);
+            if (validation.IsFailure)
+            {
+                return Result<GoogleHolidayImportResultDto>.Failure(validation.Error!);
+            }
+        }
+
+        var candidates = selected.Select(holiday => new CompanyHoliday
+        {
+            FromDate = holiday.FromDate,
+            ToDate = holiday.ToDate,
+            Name = holiday.Name.Trim(),
+            Reason = NormalizeOptionalText(holiday.Reason)
+        }).ToList();
+
+        // The repository rechecks current date ranges inside the import transaction.
+        // This is insert-only: existing holidays (including manual edits) are never changed.
+        var imported = await _holidayRepository.AddNonOverlappingAsync(candidates, cancellationToken);
+        var existing = await _holidayRepository.GetByYearAsync(request.Year, cancellationToken);
+        var skippedCount = selected.Count - imported.Count;
+
+        _logger.LogInformation("Imported {ImportedCount} Google holidays for {Year}; skipped {SkippedCount} overlapping entries",
+            imported.Count, request.Year, skippedCount);
+
+        return Result<GoogleHolidayImportResultDto>.Success(new GoogleHolidayImportResultDto(
+            imported.Count,
+            skippedCount,
+            BuildGooglePreview(request.Year, sourceResult.Value!, existing)));
+    }
+
+    private static GoogleHolidayPreviewDto BuildGooglePreview(
+        int year,
+        IReadOnlyList<GoogleHolidayDto> holidays,
+        IReadOnlyList<CompanyHoliday> existing)
+    {
+        var items = holidays.OrderBy(holiday => holiday.FromDate).ThenBy(holiday => holiday.Name)
+            .Select(holiday =>
+            {
+                var overlaps = existing
+                    .Where(item => item.FromDate <= holiday.ToDate && item.ToDate >= holiday.FromDate)
+                    .OrderBy(item => item.FromDate)
+                    .Select(MapToDto)
+                    .ToList();
+
+                var alreadyExists = overlaps.Any(item => item.FromDate == holiday.FromDate
+                    && item.ToDate == holiday.ToDate
+                    && string.Equals(item.Name.Trim(), holiday.Name.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                var status = overlaps.Count == 0
+                    ? GoogleHolidayImportStatusDto.New
+                    : alreadyExists
+                        ? GoogleHolidayImportStatusDto.AlreadyExists
+                        : GoogleHolidayImportStatusDto.Overlap;
+
+                return new GoogleHolidayPreviewItemDto(holiday, status, overlaps);
+            }).ToList();
+
+        return new GoogleHolidayPreviewDto(year, "Bangladesh", DateTime.UtcNow, items);
+    }
+
     private async Task<Result> ValidateRequestAsync(
         DateOnly fromDate,
         DateOnly toDate,
@@ -96,6 +217,22 @@ public sealed class HolidayService : IHolidayService
         string? reason,
         Guid? excludeId,
         CancellationToken cancellationToken)
+    {
+        var validation = ValidateFields(fromDate, toDate, name, reason);
+        if (validation.IsFailure)
+        {
+            return validation;
+        }
+
+        if (await _holidayRepository.HasOverlapAsync(fromDate, toDate, excludeId, cancellationToken))
+        {
+            return Result.Failure("This date range overlaps with an existing holiday.");
+        }
+
+        return Result.Success();
+    }
+
+    private static Result ValidateFields(DateOnly fromDate, DateOnly toDate, string name, string? reason)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -116,11 +253,6 @@ public sealed class HolidayService : IHolidayService
         if (normalizedReason is not null && normalizedReason.Length > MaxReasonLength)
         {
             return Result.Failure($"Reason cannot exceed {MaxReasonLength} characters.");
-        }
-
-        if (await _holidayRepository.HasOverlapAsync(fromDate, toDate, excludeId, cancellationToken))
-        {
-            return Result.Failure("This date range overlaps with an existing holiday.");
         }
 
         return Result.Success();

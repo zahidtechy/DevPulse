@@ -1,4 +1,6 @@
 using DevPulse.Infrastructure.ClickUp;
+using DevPulse.Application.Abstractions.Holidays;
+using DevPulse.Infrastructure.GoogleCalendar;
 using DevPulse.Infrastructure.Jobs;
 using DevPulse.Infrastructure.Persistence;
 using DevPulse.Infrastructure.Persistence.Repositories;
@@ -90,6 +92,14 @@ public static class DependencyInjection
         services.AddHostedService<KpiSyncBackgroundService>();
         services.AddHostedService<HubstaffSyncBackgroundService>();
         services.AddHostedService<LeaveTelegramNotificationBackgroundService>();
+
+        services.AddHttpClient<IGoogleHolidaySource, GoogleHolidayClient>(client =>
+        {
+            client.BaseAddress = new Uri("https://calendar.google.com/calendar/");
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/calendar");
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
+        });
 
         services.AddHttpClient<IClickUpApiClient, ClickUpApiClient>(client =>
         {

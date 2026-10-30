@@ -3127,6 +3127,126 @@ button.holiday-day:hover {
     content: none;
 }
 
+.google-holiday-preview-summary,
+.google-holiday-select-all {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.google-holiday-preview-summary {
+    margin-bottom: 1rem;
+}
+
+.google-holiday-preview-heading {
+    color: var(--dp-text);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.google-holiday-preview-counts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.4rem;
+}
+
+.google-holiday-import-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+}
+
+.google-holiday-import-note > [class^="bi-"] {
+    flex: 0 0 auto;
+    margin-top: 0.05rem;
+    font-size: 1rem;
+}
+
+.google-holiday-select-all {
+    padding: 0.7rem 0.85rem;
+    background: var(--dp-surface-subtle, #f8fafc);
+    border: 1px solid var(--dp-border);
+    border-bottom: 0;
+    border-radius: var(--dp-radius-md) var(--dp-radius-md) 0 0;
+}
+
+.google-holiday-select-all .form-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 0;
+    padding-left: 0;
+}
+
+.google-holiday-select-all .form-check-input {
+    float: none;
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.google-holiday-preview-table-wrap {
+    max-height: min(48vh, 30rem);
+    border: 1px solid var(--dp-border);
+    border-radius: 0 0 var(--dp-radius-md) var(--dp-radius-md);
+}
+
+.google-holiday-preview-table {
+    min-width: 40rem;
+    font-size: 0.875rem;
+}
+
+.google-holiday-preview-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    color: var(--dp-text-secondary);
+    background: var(--dp-surface-subtle, #f8fafc);
+    border-bottom-color: var(--dp-border);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.google-holiday-preview-table td {
+    color: var(--dp-text);
+    border-color: var(--dp-border);
+}
+
+.google-holiday-select-column {
+    width: 2.5rem;
+    text-align: center;
+}
+
+.google-holiday-date {
+    width: 9.5rem;
+    color: var(--dp-text-secondary) !important;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.google-holiday-conflict {
+    margin-top: 0.3rem;
+    color: #b45309;
+    line-height: 1.35;
+}
+
+.google-holiday-row-existing > * {
+    background: rgba(100, 116, 139, 0.06) !important;
+}
+
+.google-holiday-row-overlap > * {
+    background: rgba(245, 158, 11, 0.08) !important;
+}
+
+.google-holiday-empty {
+    padding-block: 2rem;
+}
+
 @media (max-width: 1199.98px) {
     .holiday-quarter-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3193,6 +3313,15 @@ button.holiday-day:hover {
     .holiday-list-actions {
         grid-column: 1 / -1;
         justify-content: flex-end;
+    }
+
+    .google-holiday-preview-summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .google-holiday-preview-counts {
+        justify-content: flex-start;
     }
 }
 

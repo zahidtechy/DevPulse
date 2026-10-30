@@ -21,6 +21,14 @@
                 @if (!_showForm)
                 {
                     <div class="analytics-hero-actions">
+                        <BusyButton CssClass="btn btn-outline-light btn-sm"
+                                    IsBusy="_isFetchingGoogleHolidays"
+                                    Disabled="_isImportingGoogleHolidays"
+                                    BusyText="Fetching..."
+                                    OnClick="FetchGoogleHolidaysAsync">
+                            <span class="bi-cloud-download holiday-btn-icon" aria-hidden="true"></span>
+                            Fetch from Google
+                        </BusyButton>
                         <button class="btn btn-outline-light btn-sm" @onclick="ShowAddForm">
                             <span class="bi-calendar-plus holiday-btn-icon" aria-hidden="true"></span>
                             Add Holiday
@@ -228,6 +236,130 @@
     }
 </div>
 
+<AuthorizeView Roles="@AppRoles.Admin">
+    <Authorized>
+        <ModalDialog IsVisible="@(_googleHolidayPreview is not null)"
+                     Title="Bangladesh holidays from Google"
+                     IsBusy="@IsGoogleHolidayBusy"
+                     CloseOnBackdropClick="true"
+                     OnClose="CloseGoogleHolidayPreview">
+            <ChildContent>
+                @if (_googleHolidayPreview is not null)
+                {
+                    <div class="google-holiday-preview-summary">
+                        <div>
+                            <div class="google-holiday-preview-heading">@_googleHolidayPreview.Year public holidays</div>
+                            <div class="text-muted small">
+                                Fetched from Google's official Bangladesh holiday calendar.
+                            </div>
+                        </div>
+                        <div class="google-holiday-preview-counts" aria-label="Import summary">
+                            <span class="badge text-bg-success">@GetGoogleHolidayCount(GoogleHolidayImportStatusDto.New) new</span>
+                            <span class="badge text-bg-secondary">@GetGoogleHolidayCount(GoogleHolidayImportStatusDto.AlreadyExists) existing</span>
+                            <span class="badge text-bg-warning">@GetGoogleHolidayCount(GoogleHolidayImportStatusDto.Overlap) overlapping</span>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info google-holiday-import-note" role="status">
+                        <span class="bi-shield-check" aria-hidden="true"></span>
+                        <span>
+                            Import is insert-only. Existing holidays are never overwritten. Entries that already exist or overlap an existing date cannot be selected.
+                        </span>
+                    </div>
+
+                    @if (_googleHolidayPreview.Holidays.Count == 0)
+                    {
+                        <div class="holiday-empty-state google-holiday-empty">
+                            <div class="holiday-empty-icon" aria-hidden="true">
+                                <span class="bi-cloud-slash"></span>
+                            </div>
+                            <p class="mb-0 fw-semibold">No Google holidays found</p>
+                            <p class="text-muted small mb-0 mt-1">Google did not return public holidays for @_googleHolidayPreview.Year.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="google-holiday-select-all">
+                            <label class="form-check mb-0">
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       checked="@AreAllGoogleHolidaysSelected()"
+                                       disabled="@(IsGoogleHolidayBusy || GetImportableGoogleHolidayCount() == 0)"
+                                       @onchange="ToggleAllGoogleHolidays" />
+                                <span class="form-check-label">Select all new holidays</span>
+                            </label>
+                            <span class="text-muted small">@GetSelectedGoogleHolidayCount() selected</span>
+                        </div>
+
+                        <div class="table-responsive google-holiday-preview-table-wrap">
+                            <table class="table table-hover align-middle mb-0 google-holiday-preview-table">
+                                <thead>
+                                    <tr>
+                                        <th class="google-holiday-select-column"><span class="visually-hidden">Select</span></th>
+                                        <th>Date</th>
+                                        <th>Holiday</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in _googleHolidayPreview.Holidays)
+                                    {
+                                        var canImport = item.Status == GoogleHolidayImportStatusDto.New;
+                                        <tr class="@GetGoogleHolidayRowClass(item.Status)">
+                                            <td class="google-holiday-select-column">
+                                                <input class="form-check-input"
+                                                       type="checkbox"
+                                                       aria-label="@($"Select {item.Holiday.Name}")"
+                                                       checked="@_selectedGoogleHolidayKeys.Contains(item.Holiday.Key)"
+                                                       disabled="@(!canImport || IsGoogleHolidayBusy)"
+                                                       @onchange="args => ToggleGoogleHoliday(item.Holiday.Key, args)" />
+                                            </td>
+                                            <td class="google-holiday-date">@FormatGoogleHolidayRange(item.Holiday)</td>
+                                            <td>
+                                                <div class="fw-semibold">@item.Holiday.Name</div>
+                                                @if (!string.IsNullOrWhiteSpace(item.Holiday.Reason))
+                                                {
+                                                    <div class="text-muted small">@item.Holiday.Reason</div>
+                                                }
+                                                @if (item.OverlappingHolidays.Count > 0)
+                                                {
+                                                    <div class="google-holiday-conflict small">
+                                                        Existing: @string.Join(", ", item.OverlappingHolidays.Select(FormatExistingHolidayConflict))
+                                                    </div>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetGoogleHolidayStatusClass(item.Status)">
+                                                    @GetGoogleHolidayStatusLabel(item.Status)
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+            </ChildContent>
+            <FooterContent>
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        disabled="@IsGoogleHolidayBusy"
+                        @onclick="CloseGoogleHolidayPreview">
+                    Close
+                </button>
+                <BusyButton CssClass="btn btn-primary"
+                            IsBusy="_isImportingGoogleHolidays"
+                            Disabled="@(GetSelectedGoogleHolidayCount() == 0 || _isFetchingGoogleHolidays)"
+                            BusyText="Importing..."
+                            OnClick="ImportGoogleHolidaysAsync">
+                    Import selected (@GetSelectedGoogleHolidayCount())
+                </BusyButton>
+            </FooterContent>
+        </ModalDialog>
+    </Authorized>
+</AuthorizeView>
+
 @code {
     private readonly List<HolidayDto> _holidays = [];
     private readonly DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
@@ -237,8 +369,12 @@
     private bool _isBusy;
     private bool _isAdmin;
     private bool _showForm;
+    private bool _isFetchingGoogleHolidays;
+    private bool _isImportingGoogleHolidays;
     private Guid? _editingHolidayId;
     private Guid? _highlightedHolidayId;
+    private GoogleHolidayPreviewDto? _googleHolidayPreview;
+    private readonly HashSet<string> _selectedGoogleHolidayKeys = new(StringComparer.Ordinal);
 
     private DateTime _fromDate;
     private DateTime _toDate;
@@ -252,6 +388,8 @@
     private string? _reason;
 
     private int SelectedYear => _selectedYear;
+
+    private bool IsGoogleHolidayBusy => _isFetchingGoogleHolidays || _isImportingGoogleHolidays;
 
     protected override async Task OnInitializedAsync()
     {
@@ -300,6 +438,173 @@
         _selectedYear = DateTime.Today.Year;
         await LoadHolidaysAsync();
     }
+
+    private async Task FetchGoogleHolidaysAsync()
+    {
+        if (!_isAdmin || IsGoogleHolidayBusy)
+        {
+            return;
+        }
+
+        _isFetchingGoogleHolidays = true;
+        try
+        {
+            _googleHolidayPreview = await HolidayApi.PreviewGoogleHolidaysAsync(_selectedYear);
+            SelectAllImportableGoogleHolidays();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error(ExtractErrorMessage(ex.Message), key: ToastKeys.Holidays);
+        }
+        finally
+        {
+            _isFetchingGoogleHolidays = false;
+        }
+    }
+
+    private async Task ImportGoogleHolidaysAsync()
+    {
+        if (!_isAdmin || _googleHolidayPreview is null || _selectedGoogleHolidayKeys.Count == 0 || IsGoogleHolidayBusy)
+        {
+            return;
+        }
+
+        _isImportingGoogleHolidays = true;
+        try
+        {
+            var request = new ImportGoogleHolidaysRequest(
+                _googleHolidayPreview.Year,
+                _selectedGoogleHolidayKeys.Order(StringComparer.Ordinal).ToList());
+            var result = await HolidayApi.ImportGoogleHolidaysAsync(request);
+
+            _googleHolidayPreview = result.Preview;
+            _selectedGoogleHolidayKeys.Clear();
+            await LoadHolidaysAsync();
+
+            if (result.SkippedCount > 0)
+            {
+                Toast.Warning($"Imported {result.ImportedCount} holiday(s); skipped {result.SkippedCount} because their dates now overlap existing holidays.", key: ToastKeys.Holidays);
+            }
+            else
+            {
+                Toast.Success($"Imported {result.ImportedCount} Bangladesh holiday(s) from Google.", key: ToastKeys.Holidays);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.Error(ExtractErrorMessage(ex.Message), key: ToastKeys.Holidays);
+        }
+        finally
+        {
+            _isImportingGoogleHolidays = false;
+        }
+    }
+
+    private void CloseGoogleHolidayPreview()
+    {
+        if (IsGoogleHolidayBusy)
+        {
+            return;
+        }
+
+        _googleHolidayPreview = null;
+        _selectedGoogleHolidayKeys.Clear();
+    }
+
+    private void ToggleGoogleHoliday(string key, ChangeEventArgs args)
+    {
+        if (args.Value is bool isSelected && isSelected)
+        {
+            if (_googleHolidayPreview?.Holidays.Any(item =>
+                    item.Holiday.Key == key && item.Status == GoogleHolidayImportStatusDto.New) == true)
+            {
+                _selectedGoogleHolidayKeys.Add(key);
+            }
+        }
+        else
+        {
+            _selectedGoogleHolidayKeys.Remove(key);
+        }
+    }
+
+    private void ToggleAllGoogleHolidays(ChangeEventArgs args)
+    {
+        if (args.Value is bool isSelected && isSelected)
+        {
+            SelectAllImportableGoogleHolidays();
+        }
+        else
+        {
+            _selectedGoogleHolidayKeys.Clear();
+        }
+    }
+
+    private void SelectAllImportableGoogleHolidays()
+    {
+        _selectedGoogleHolidayKeys.Clear();
+        if (_googleHolidayPreview is null)
+        {
+            return;
+        }
+
+        foreach (var item in _googleHolidayPreview.Holidays.Where(item => item.Status == GoogleHolidayImportStatusDto.New))
+        {
+            _selectedGoogleHolidayKeys.Add(item.Holiday.Key);
+        }
+    }
+
+    private bool AreAllGoogleHolidaysSelected()
+    {
+        if (_googleHolidayPreview is null)
+        {
+            return false;
+        }
+
+        var importableKeys = _googleHolidayPreview.Holidays
+            .Where(item => item.Status == GoogleHolidayImportStatusDto.New)
+            .Select(item => item.Holiday.Key)
+            .ToList();
+        return importableKeys.Count > 0 && importableKeys.All(_selectedGoogleHolidayKeys.Contains);
+    }
+
+    private int GetSelectedGoogleHolidayCount() => _selectedGoogleHolidayKeys.Count;
+
+    private int GetImportableGoogleHolidayCount() =>
+        _googleHolidayPreview?.Holidays.Count(item => item.Status == GoogleHolidayImportStatusDto.New) ?? 0;
+
+    private int GetGoogleHolidayCount(GoogleHolidayImportStatusDto status) =>
+        _googleHolidayPreview?.Holidays.Count(item => item.Status == status) ?? 0;
+
+    private static string GetGoogleHolidayStatusLabel(GoogleHolidayImportStatusDto status) => status switch
+    {
+        GoogleHolidayImportStatusDto.New => "New",
+        GoogleHolidayImportStatusDto.AlreadyExists => "Already exists",
+        _ => "Overlaps existing"
+    };
+
+    private static string GetGoogleHolidayStatusClass(GoogleHolidayImportStatusDto status) => status switch
+    {
+        GoogleHolidayImportStatusDto.New => "text-bg-success",
+        GoogleHolidayImportStatusDto.AlreadyExists => "text-bg-secondary",
+        _ => "text-bg-warning"
+    };
+
+    private static string? GetGoogleHolidayRowClass(GoogleHolidayImportStatusDto status) => status switch
+    {
+        GoogleHolidayImportStatusDto.AlreadyExists => "google-holiday-row-existing",
+        GoogleHolidayImportStatusDto.Overlap => "google-holiday-row-overlap",
+        _ => null
+    };
+
+    private static string FormatGoogleHolidayRange(GoogleHolidayDto holiday) =>
+        holiday.FromDate == holiday.ToDate
+            ? holiday.FromDate.ToString("d MMM yyyy")
+            : $"{holiday.FromDate:d MMM} – {holiday.ToDate:d MMM yyyy}";
+
+    private static string FormatExistingHolidayConflict(HolidayDto holiday) =>
+        holiday.FromDate == holiday.ToDate
+            ? $"{holiday.Name} ({holiday.FromDate:d MMM})"
+            : $"{holiday.Name} ({holiday.FromDate:d MMM}–{holiday.ToDate:d MMM})";
 
     private void ShowAddForm()
     {

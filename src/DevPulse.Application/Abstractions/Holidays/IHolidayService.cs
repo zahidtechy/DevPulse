@@ -11,4 +11,8 @@ public interface IHolidayService
     Task<Result<HolidayDto>> UpdateAsync(Guid id, UpdateHolidayRequest request, CancellationToken cancellationToken = default);
 
     Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<Result<GoogleHolidayPreviewDto>> PreviewGoogleHolidaysAsync(int year, CancellationToken cancellationToken = default);
+
+    Task<Result<GoogleHolidayImportResultDto>> ImportGoogleHolidaysAsync(ImportGoogleHolidaysRequest request, CancellationToken cancellationToken = default);
 }

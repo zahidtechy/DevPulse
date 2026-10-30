@@ -26,6 +26,36 @@ public sealed class HolidaysController : ControllerBase
         return Ok(holidays);
     }
 
+    [HttpGet("google/preview")]
+    [Authorize(Policy = "AdminOnly")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(GoogleHolidayPreviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> PreviewGoogleHolidays([FromQuery] int year, CancellationToken cancellationToken)
+    {
+        if (year < 1900 || year > 2100)
+        {
+            return BadRequest(new { error = "Year must be between 1900 and 2100." });
+        }
+
+        var result = await _holidayService.PreviewGoogleHolidaysAsync(year, cancellationToken);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : StatusCode(StatusCodes.Status502BadGateway, new { error = result.Error });
+    }
+
+    [HttpPost("google/import")]
+    [Authorize(Policy = "AdminOnly")]
+    [RequestSizeLimit(32 * 1024)]
+    [ProducesResponseType(typeof(GoogleHolidayImportResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ImportGoogleHolidays([FromBody] ImportGoogleHolidaysRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _holidayService.ImportGoogleHolidaysAsync(request, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+    }
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(HolidayDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
