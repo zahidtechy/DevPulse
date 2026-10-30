@@ -742,6 +742,49 @@
         }
     }
 
+    private void ValidateEmailField()
+    {
+        _emailError = null;
+
+        if (!_editingUserId.HasValue)
+        {
+            if (string.IsNullOrWhiteSpace(_newUser.Email))
+                _emailError = "Email is required.";
+            else if (!System.Net.Mail.MailAddress.TryCreate(_newUser.Email.Trim(), out _))
+                _emailError = "Enter a valid email address.";
+        }
+    }
+
+    private void ValidateNewPasswordField() =>
+        _newPasswordError = !_editingUserId.HasValue ? ValidatePassword(_newUser.Password) : null;
+
+    private void ValidateDisplayNameField() =>
+        _displayNameError = string.IsNullOrWhiteSpace(_newUser.DisplayName)
+            ? "Display name is required."
+            : null;
+
+    private void ValidateRoleField() =>
+        _roleError = string.IsNullOrWhiteSpace(_newUser.Role) || !AppRoles.All.Contains(_newUser.Role)
+            ? "Please select a valid role."
+            : null;
+
+    private void ValidateTelegramIdField() =>
+        _telegramIdError = !string.IsNullOrWhiteSpace(_newUser.TelegramId) && !_newUser.TelegramId.All(char.IsDigit)
+            ? "Telegram ID must contain numbers only."
+            : null;
+
+    private void ValidateResetPasswordField() =>
+        _resetPasswordFieldError = ValidatePassword(_resetPassword);
+
+    private void ValidateResetPasswordConfirmField()
+    {
+        _resetPasswordConfirmError = string.IsNullOrWhiteSpace(_resetPasswordConfirm)
+            ? "Please confirm the new password."
+            : _resetPassword != _resetPasswordConfirm
+                ? "Passwords do not match."
+                : null;
+    }
+
     private static string? ValidatePassword(string? password)
     {
         if (string.IsNullOrWhiteSpace(password))
