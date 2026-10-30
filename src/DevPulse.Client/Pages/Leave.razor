@@ -110,163 +110,160 @@
                 @RenderAllApplications()
             </div>
         </div>
+        <ModalDialog IsVisible="_showApplyModal"
+                     Title="New leave application"
+                     IsBusy="_isBusy"
+                     OnClose="CloseApplyModal">
 
-        @if (_showApplyModal)
-        {
-            <div class="modal-backdrop fade show"></div>
+            <ChildContent>
+                <p class="text-muted small mb-3">
+                    Working days are counted from your leave policy.
+                </p>
 
-            <div class="modal fade show d-block"
-                 tabindex="-1"
-                 role="dialog"
-                 aria-modal="true"
-                 aria-labelledby="applyLeaveModalTitle">
-                <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <div>
-                                <h5 class="modal-title" id="applyLeaveModalTitle">New leave application</h5>
-                                <p class="text-muted small mb-0">
-                                    Working days are counted from your leave policy.
-                                </p>
-                            </div>
-
-                            <button type="button"
-                                    class="btn-close"
-                                    aria-label="Close"
-                                    disabled="@_isBusy"
-                                    @onclick="CloseApplyModal">
-                            </button>
-                        </div>
-
-                        <div class="modal-body">
-                            @if (!_me.CanApply)
-                            {
-                                <div class="leave-notice leave-notice-warning">
-                                    <strong>Account inactive</strong>
-                                    <p class="mb-0">
-                                        Your developer record is inactive. Contact an administrator.
-                                    </p>
-                                </div>
-                            }
-                            else if (_me.ReportingManagerDeveloperId is null)
-                            {
-                                <div class="leave-notice leave-notice-warning">
-                                    <strong>Reporting manager required</strong>
-                                    <p class="mb-0">
-                                        No reporting manager is assigned to your developer profile.
-                                        Ask an administrator to assign one on the Developers page before applying for leave.
-                                    </p>
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="leave-form-grid">
-                                    <div class="leave-field leave-field-type">
-                                        <label class="form-label">Leave type</label>
-                                        <select class="form-select"
-                                                @bind="_selectedLeaveTypeId"
-                                                @bind:after="OnLeaveTypeOrDatesChanged">
-                                            <option value="@Guid.Empty">Select type...</option>
-
-                                            @foreach (var type in _activeLeaveTypes)
-                                            {
-                                                <option value="@type.Id">
-                                                    @type.Name (@type.DaysPerYear days/year)
-                                                </option>
-                                            }
-                                        </select>
-
-                                        @if (_selectedLeaveType is not null &&
-                                             !string.IsNullOrWhiteSpace(_selectedLeaveType.PolicyNotes))
-                                        {
-                                            <div class="form-text leave-policy-note">
-                                                @_selectedLeaveType.PolicyNotes
-                                            </div>
-                                        }
-                                    </div>
-
-                                    <div class="leave-field">
-                                        <label class="form-label">From</label>
-                                        <input type="date"
-                                               class="form-control"
-                                               @bind="_fromDate"
-                                               @bind:format="yyyy-MM-dd"
-                                               @bind:after="OnLeaveTypeOrDatesChanged" />
-                                    </div>
-
-                                    <div class="leave-field">
-                                        <label class="form-label">To</label>
-                                        <input type="date"
-                                               class="form-control"
-                                               @bind="_toDate"
-                                               @bind:format="yyyy-MM-dd"
-                                               @bind:after="OnLeaveTypeOrDatesChanged" />
-                                    </div>
-
-                                    <div class="leave-field">
-                                        <label class="form-label">Working days</label>
-                                        <div class="leave-days-display">
-                                            @if (_calculatedDays.HasValue)
-                                            {
-                                                <span class="leave-days-value">
-                                                    @_calculatedDays.Value.ToString("0.#")
-                                                </span>
-                                                <span class="leave-days-label">
-                                                    @(_calculatedDays.Value == 1 ? "day" : "days")
-                                                </span>
-                                            }
-                                            else
-                                            {
-                                                <span class="leave-days-placeholder">Select dates</span>
-                                            }
-                                        </div>
-                                    </div>
-
-                                    <div class="leave-field leave-field-approver">
-                                        <label class="form-label">Reporting manager</label>
-                                        <div class="leave-approver-chip">
-                                            <span class="leave-approver-name">
-                                                @_me.ReportingManagerName
-                                            </span>
-                                            <span class="leave-approver-note">
-                                                Requests go to your assigned manager.
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div class="leave-field leave-field-reason">
-                                        <label class="form-label">Reason</label>
-                                        <textarea class="form-control leave-reason-input"
-                                                  rows="3"
-                                                  @bind="_reason"
-                                                  placeholder="Brief reason for your leave request"></textarea>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-
-                        <div class="modal-footer">
-                            <button type="button"
-                                    class="btn btn-outline-secondary"
-                                    disabled="@_isBusy"
-                                    @onclick="CloseApplyModal">
-                                Cancel
-                            </button>
-
-                            @if (_me.CanApply && _me.ReportingManagerDeveloperId is not null)
-                            {
-                                <BusyButton CssClass="btn btn-primary leave-submit-btn"
-                                            IsBusy="_isBusy"
-                                            BusyText="Submitting..."
-                                            OnClick="SubmitAsync">
-                                    Submit application
-                                </BusyButton>
-                            }
-                        </div>
+                @if (!_me.CanApply)
+                {
+                    <div class="leave-notice leave-notice-warning">
+                        <strong>Account inactive</strong>
+                        <p class="mb-0">
+                            Your developer record is inactive. Contact an administrator.
+                        </p>
                     </div>
-                </div>
-            </div>
-        }
+                }
+                else if (_me.ReportingManagerDeveloperId is null)
+                {
+                    <div class="leave-notice leave-notice-warning">
+                        <strong>Reporting manager required</strong>
+                        <p class="mb-0">
+                            No reporting manager is assigned to your developer profile.
+                            Ask an administrator to assign one on the Developers page before applying for leave.
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <div class="row g-3">
+
+                        <div class="col-md-12">
+                            <label class="form-label" for="leaveType">Leave type</label>
+
+                            <select id="leaveType"
+                                    class="form-select"
+                                    @bind="_selectedLeaveTypeId"
+                                    @bind:after="OnLeaveTypeOrDatesChanged">
+                                <option value="@Guid.Empty">Select type...</option>
+
+                                @foreach (var type in _activeLeaveTypes)
+                                {
+                                    <option value="@type.Id">
+                                        @type.Name (@type.DaysPerYear days/year)
+                                    </option>
+                                }
+                            </select>
+
+                            @if (_selectedLeaveType is not null &&
+                                 !string.IsNullOrWhiteSpace(_selectedLeaveType.PolicyNotes))
+                            {
+                                <div class="form-text leave-policy-note">
+                                    @_selectedLeaveType.PolicyNotes
+                                </div>
+                            }
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="fromDate">From</label>
+
+                            <input id="fromDate"
+                                   type="date"
+                                   class="form-control"
+                                   @bind="_fromDate"
+                                   @bind:format="yyyy-MM-dd"
+                                   @bind:after="OnLeaveTypeOrDatesChanged" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="toDate">To</label>
+
+                            <input id="toDate"
+                                   type="date"
+                                   class="form-control"
+                                   @bind="_toDate"
+                                   @bind:format="yyyy-MM-dd"
+                                   @bind:after="OnLeaveTypeOrDatesChanged" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Working days</label>
+
+                            <div class="leave-days-display">
+                                @if (_calculatedDays.HasValue)
+                                {
+                                    <span class="leave-days-value">
+                                        @_calculatedDays.Value.ToString("0.#")
+                                    </span>
+
+                                    <span class="leave-days-label">
+                                        @(_calculatedDays.Value == 1 ? "day" : "days")
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="leave-days-placeholder">
+                                        Select dates
+                                    </span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Reporting manager</label>
+
+                            <div class="leave-approver-chip">
+                                <span class="leave-approver-name">
+                                    @_me.ReportingManagerName
+                                </span>
+
+                                <span class="leave-approver-note">
+                                    Requests go to your assigned manager.
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="leaveReason">Reason</label>
+
+                            <textarea id="leaveReason"
+                                      class="form-control leave-reason-input"
+                                      rows="3"
+                                      @bind="_reason"
+                                      placeholder="Brief reason for your leave request">
+                    </textarea>
+                        </div>
+
+                    </div>
+                }
+            </ChildContent>
+
+            <FooterContent>
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        disabled="@_isBusy"
+                        @onclick="CloseApplyModal">
+                    Cancel
+                </button>
+
+                @if (_me.CanApply && _me.ReportingManagerDeveloperId is not null)
+                {
+                    <BusyButton CssClass="btn btn-primary leave-submit-btn"
+                                IsBusy="_isBusy"
+                                BusyText="Submitting..."
+                                OnClick="SubmitAsync">
+                        Submit application
+                    </BusyButton>
+                }
+            </FooterContent>
+
+        </ModalDialog>
+        
     }
 </div>
 
