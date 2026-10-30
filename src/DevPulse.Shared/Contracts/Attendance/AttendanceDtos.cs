@@ -9,6 +9,18 @@ public enum AttendanceDayStatusDto
     Absent = 4
 }
 
+public enum AttendanceDayStatusFilterDto
+{
+    All = 0,
+    Pending = 1,
+    OnTime = 2,
+    Late = 3,
+    EarlyLeave = 4,
+    Incomplete = 5,
+    Absent = 6,
+    NoRecord = 7
+}
+
 public enum AttendanceCorrectionStatusDto
 {
     Pending = 0,
@@ -97,6 +109,13 @@ public record AttendanceDayRowDto(
     bool PunchOutCorrectionRequested,
     Guid? PendingCorrectionRequestId,
     int CorrectionRequestCount);
+
+public record AttendanceDaysPageDto(
+    IReadOnlyList<AttendanceDayRowDto> Items,
+    int PageNumber,
+    int PageSize,
+    int TotalCount,
+    int TotalPages);
 
 public record AttendanceDayDetailsDto(
     AttendanceDayRowDto Row,

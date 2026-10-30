@@ -5,6 +5,8 @@ namespace DevPulse.Server.Controllers;
 [Authorize]
 public sealed class AttendanceController : ControllerBase
 {
+    private static readonly HashSet<int> AllowedAttendancePageSizes = [10, 20, 50, 100];
+
     private readonly IAttendanceService _attendanceService;
 
     public AttendanceController(IAttendanceService attendanceService)
@@ -32,27 +34,48 @@ public sealed class AttendanceController : ControllerBase
     }
 
     [HttpGet("days")]
-    [ProducesResponseType(typeof(IReadOnlyList<AttendanceDayRowDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AttendanceDaysPageDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAttendanceDays(
         [FromQuery] DateOnly from,
         [FromQuery] DateOnly to,
         [FromQuery] Guid? developerId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] AttendanceDayStatusFilterDto status = AttendanceDayStatusFilterDto.All,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
         if (to < from)
         {
             return BadRequest(new { error = "End date must be on or after start date." });
         }
 
-        var rows = await _attendanceService.GetAttendanceDaysAsync(
+        if (!Enum.IsDefined(status))
+        {
+            return BadRequest(new { error = "Attendance status is not valid." });
+        }
+
+        if (page < 1)
+        {
+            return BadRequest(new { error = "Page must be greater than zero." });
+        }
+
+        if (!AllowedAttendancePageSizes.Contains(pageSize))
+        {
+            return BadRequest(new { error = "Page size must be 10, 20, 50, or 100." });
+        }
+
+        var result = await _attendanceService.GetAttendanceDaysAsync(
             GetUserEmail(),
             User.IsInRole(AppRoles.Admin),
             from,
             to,
             developerId,
+            status,
+            page,
+            pageSize,
             cancellationToken);
-        return Ok(rows);
+        return Ok(result);
     }
 
     [HttpGet("days/{developerId:guid}/{workDate}")]

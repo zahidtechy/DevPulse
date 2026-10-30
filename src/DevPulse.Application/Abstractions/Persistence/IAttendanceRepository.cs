@@ -16,10 +16,8 @@ public interface IAttendanceRepository
         Guid? developerId,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceDaySourceRow>> GetAttendanceDaySourceRowsAsync(
-        DateOnly fromDate,
-        DateOnly toDate,
-        Guid? developerId,
+    Task<AttendanceDaySourcePage> GetAttendanceDaySourcePageAsync(
+        AttendanceDayPageQuery query,
         CancellationToken cancellationToken = default);
 
     Task AddRecordAsync(AttendanceRecord record, CancellationToken cancellationToken = default);
@@ -50,24 +48,3 @@ public interface IAttendanceRepository
 
     Task DeleteCorrectionRequestAsync(AttendanceCorrectionRequest request, CancellationToken cancellationToken = default);
 }
-
-/// <summary>
-/// Lightweight source row used to build the combined attendance-day read model.
-/// Record and correction rows are returned by one UNION ALL query.
-/// </summary>
-public sealed record AttendanceDaySourceRow(
-    Guid DeveloperId,
-    string DeveloperName,
-    DateOnly WorkDate,
-    bool HasRecord,
-    DateTime? PunchInUtc,
-    DateTime? PunchOutUtc,
-    bool PunchInIsCorrected,
-    bool PunchOutIsCorrected,
-    DateTime? PunchInCorrectedAtUtc,
-    DateTime? PunchOutCorrectedAtUtc,
-    Guid? CorrectionRequestId,
-    AttendanceCorrectionStatus? CorrectionStatus,
-    DateTime? RequestedPunchInUtc,
-    DateTime? RequestedPunchOutUtc,
-    DateTime? CorrectionCreatedAtUtc);

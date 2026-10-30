@@ -144,12 +144,15 @@ public sealed class AttendanceService : IAttendanceService
         return Result<AttendancePunchResultDto>.Success(new AttendancePunchResultDto(dto, updatedNext));
     }
 
-    public async Task<IReadOnlyList<AttendanceDayRowDto>> GetAttendanceDaysAsync(
+    public async Task<AttendanceDaysPageDto> GetAttendanceDaysAsync(
         string userEmail,
         bool canViewAll,
         DateOnly fromDate,
         DateOnly toDate,
         Guid? developerId,
+        AttendanceDayStatusFilterDto status,
+        int pageNumber,
+        int pageSize,
         CancellationToken cancellationToken = default)
     {
         var effectiveDeveloperId = developerId;
@@ -158,7 +161,7 @@ public sealed class AttendanceService : IAttendanceService
             var currentDeveloper = await ResolveDeveloperAsync(userEmail, cancellationToken);
             if (currentDeveloper is null)
             {
-                return [];
+                return new AttendanceDaysPageDto([], 1, pageSize, 0, 0);
             }
 
             // The caller cannot widen or change their own scope with a query parameter.
@@ -167,18 +170,34 @@ public sealed class AttendanceService : IAttendanceService
 
         var settings = await GetSettingsEntityAsync(cancellationToken);
         var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
-        var sourceRows = await _attendanceRepository.GetAttendanceDaySourceRowsAsync(
-            fromDate,
-            toDate,
-            effectiveDeveloperId,
+        var sourcePage = await _attendanceRepository.GetAttendanceDaySourcePageAsync(
+            new AttendanceDayPageQuery(
+                fromDate,
+                toDate,
+                effectiveDeveloperId,
+                MapStatusFilter(status),
+                pageNumber,
+                pageSize,
+                settings.BufferStartTime,
+                settings.BufferEndTime,
+                settings.OfficeTimeZoneId),
             cancellationToken);
 
-        return sourceRows
+        var items = sourcePage.SourceRows
             .GroupBy(row => (row.DeveloperId, row.WorkDate))
             .Select(group => BuildAttendanceDayRow(group, settings, timeZone))
-            .OrderByDescending(row => row.WorkDate)
-            .ThenBy(row => row.DeveloperName)
             .ToList();
+
+        var totalPages = sourcePage.TotalCount == 0
+            ? 0
+            : (sourcePage.TotalCount + sourcePage.PageSize - 1) / sourcePage.PageSize;
+
+        return new AttendanceDaysPageDto(
+            items,
+            sourcePage.PageNumber,
+            sourcePage.PageSize,
+            sourcePage.TotalCount,
+            totalPages);
     }
 
     public async Task<AttendanceDayDetailsDto?> GetAttendanceDayDetailsAsync(
@@ -787,6 +806,18 @@ public sealed class AttendanceService : IAttendanceService
         AttendanceCorrectionStatus.Approved => AttendanceCorrectionStatusDto.Approved,
         AttendanceCorrectionStatus.Rejected => AttendanceCorrectionStatusDto.Rejected,
         _ => AttendanceCorrectionStatusDto.Pending
+    };
+
+    private static AttendanceDayStatusFilter MapStatusFilter(AttendanceDayStatusFilterDto status) => status switch
+    {
+        AttendanceDayStatusFilterDto.Pending => AttendanceDayStatusFilter.Pending,
+        AttendanceDayStatusFilterDto.OnTime => AttendanceDayStatusFilter.OnTime,
+        AttendanceDayStatusFilterDto.Late => AttendanceDayStatusFilter.Late,
+        AttendanceDayStatusFilterDto.EarlyLeave => AttendanceDayStatusFilter.EarlyLeave,
+        AttendanceDayStatusFilterDto.Incomplete => AttendanceDayStatusFilter.Incomplete,
+        AttendanceDayStatusFilterDto.Absent => AttendanceDayStatusFilter.Absent,
+        AttendanceDayStatusFilterDto.NoRecord => AttendanceDayStatusFilter.NoRecord,
+        _ => AttendanceDayStatusFilter.All
     };
 
     private static Result ValidateSettings(UpdateAttendanceSettingsRequest request)

@@ -76,16 +76,18 @@ else
                             <div class="attendance-row-actions">
                                 <button type="button"
                                         class="btn btn-sm btn-outline-secondary attendance-icon-action"
+                                        disabled="@IsBusy"
                                         title="View attendance details"
                                         aria-label="View attendance details"
                                         @onclick="() => OnDetails.InvokeAsync(row)">
-                                    <span class="bi-eye" aria-hidden="true"></span>
+                                    <span class="bi-info-circle" aria-hidden="true"></span>
                                 </button>
 
                                 @if (CanRequestCorrection?.Invoke(row) == true)
                                 {
                                     <button type="button"
                                             class="btn btn-sm btn-outline-primary attendance-icon-action"
+                                            disabled="@IsBusy"
                                             title="Request correction"
                                             aria-label="Request correction"
                                             @onclick="() => OnRequestCorrection.InvokeAsync(row)">
@@ -97,6 +99,7 @@ else
                                 {
                                     <button type="button"
                                             class="btn btn-sm btn-outline-danger attendance-icon-action"
+                                            disabled="@IsBusy"
                                             title="Cancel correction request"
                                             aria-label="Cancel correction request"
                                             @onclick="() => OnCancel.InvokeAsync(cancelId)">
@@ -108,6 +111,7 @@ else
                                 {
                                     <button type="button"
                                             class="btn btn-sm btn-success attendance-icon-action"
+                                            disabled="@IsBusy"
                                             title="Approve correction request"
                                             aria-label="Approve correction request"
                                             @onclick="() => OnApprove.InvokeAsync(reviewId)">
@@ -115,6 +119,7 @@ else
                                     </button>
                                     <button type="button"
                                             class="btn btn-sm btn-danger attendance-icon-action"
+                                            disabled="@IsBusy"
                                             title="Reject correction request"
                                             aria-label="Reject correction request"
                                             @onclick="() => OnReject.InvokeAsync(reviewId)">
@@ -126,6 +131,7 @@ else
                                 {
                                     <button type="button"
                                             class="btn btn-sm btn-outline-primary attendance-icon-action"
+                                            disabled="@IsBusy"
                                             title="Auto fill missing attendance"
                                             aria-label="Auto fill missing attendance"
                                             @onclick="() => OnAdminEdit.InvokeAsync(row)">
@@ -144,6 +150,9 @@ else
 @code {
     [Parameter]
     public IReadOnlyList<AttendanceDayRowDto> Rows { get; set; } = [];
+
+    [Parameter]
+    public bool IsBusy { get; set; }
 
     [Parameter]
     public bool ShowDeveloper { get; set; }

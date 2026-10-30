@@ -5626,6 +5626,61 @@ button.holiday-day:hover {
     background: var(--dp-bg);
 }
 
+.attendance-records-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.65rem 1rem;
+    padding: 0.7rem 1rem;
+    border-top: 1px solid var(--dp-border);
+    background: var(--dp-surface);
+}
+
+.attendance-records-pagination-meta,
+.attendance-records-page-size {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.attendance-records-range,
+.attendance-records-page-size {
+    color: var(--dp-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.attendance-records-page-size {
+    margin: 0;
+}
+
+.attendance-records-page-size .form-select {
+    width: 4.5rem;
+    min-height: 2rem;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+    font-size: 0.75rem;
+}
+
+.attendance-records-pagination .pagination {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.2rem;
+}
+
+.attendance-records-pagination .page-link {
+    min-width: 2rem;
+    border-radius: 0.35rem;
+    text-align: center;
+}
+
+.attendance-records-page-ellipsis {
+    border-color: transparent;
+    background: transparent;
+}
+
 /* Correction request form */
 .attendance-correction-grid {
     display: grid;
@@ -6430,6 +6485,27 @@ button.holiday-day:hover {
 
     .attendance-days-table-scroll {
         -webkit-overflow-scrolling: touch;
+    }
+
+    .attendance-records-pagination {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .attendance-records-pagination-meta {
+        justify-content: space-between;
+    }
+
+    .attendance-records-pagination nav {
+        max-width: 100%;
+        overflow-x: auto;
+        padding-bottom: 0.1rem;
+    }
+
+    .attendance-records-pagination .pagination {
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        width: max-content;
     }
 
     .attendance-page .form-control,

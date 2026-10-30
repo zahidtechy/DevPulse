@@ -6,7 +6,14 @@ public interface IAttendanceApiClient
 
     Task<AttendancePunchResultDto?> PunchAsync(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceDayRowDto>> GetAttendanceDaysAsync(DateOnly from, DateOnly to, Guid? developerId, CancellationToken cancellationToken = default);
+    Task<AttendanceDaysPageDto> GetAttendanceDaysAsync(
+        DateOnly from,
+        DateOnly to,
+        Guid? developerId,
+        AttendanceDayStatusFilterDto status,
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default);
 
     Task<AttendanceDayDetailsDto?> GetAttendanceDayDetailsAsync(Guid developerId, DateOnly workDate, CancellationToken cancellationToken = default);
 
@@ -53,23 +60,27 @@ public sealed class AttendanceApiClient : IAttendanceApiClient
         return await response.Content.ReadFromJsonAsync<AttendancePunchResultDto>(_jsonOptions, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AttendanceDayRowDto>> GetAttendanceDaysAsync(
+    public async Task<AttendanceDaysPageDto> GetAttendanceDaysAsync(
         DateOnly from,
         DateOnly to,
         Guid? developerId,
+        AttendanceDayStatusFilterDto status,
+        int pageNumber,
+        int pageSize,
         CancellationToken cancellationToken = default)
     {
-        var url = $"api/attendance/days?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}";
+        var url = $"api/attendance/days?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}"
+            + $"&status={status}&page={pageNumber}&pageSize={pageSize}";
         if (developerId.HasValue)
         {
             url += $"&developerId={developerId.Value}";
         }
 
-        var rows = await _httpClient.GetFromJsonAsync<List<AttendanceDayRowDto>>(
+        var page = await _httpClient.GetFromJsonAsync<AttendanceDaysPageDto>(
             url,
             _jsonOptions,
             cancellationToken);
-        return rows ?? [];
+        return page ?? new AttendanceDaysPageDto([], pageNumber, pageSize, 0, 0);
     }
 
     public async Task<AttendanceDayDetailsDto?> GetAttendanceDayDetailsAsync(

@@ -6,12 +6,15 @@ public interface IAttendanceService
 
     Task<Result<AttendancePunchResultDto>> PunchAsync(string userEmail, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceDayRowDto>> GetAttendanceDaysAsync(
+    Task<AttendanceDaysPageDto> GetAttendanceDaysAsync(
         string userEmail,
         bool canViewAll,
         DateOnly fromDate,
         DateOnly toDate,
         Guid? developerId,
+        AttendanceDayStatusFilterDto status,
+        int pageNumber,
+        int pageSize,
         CancellationToken cancellationToken = default);
 
     Task<AttendanceDayDetailsDto?> GetAttendanceDayDetailsAsync(
