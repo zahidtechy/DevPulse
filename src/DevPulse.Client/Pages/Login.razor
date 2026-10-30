@@ -104,6 +104,7 @@
 
     private async Task HandleLoginAsync()
     {
+        Toast.SuppressErrors = false;
         _isBusy = true;
 
         try
@@ -111,7 +112,7 @@
             var user = await AuthService.LoginAsync(new LoginRequest(_model.Email.Trim(), _model.Password));
             if (user is null)
             {
-                Toast.Error("Login failed.");
+                Toast.Error("Login failed.", key: ToastKeys.Login);
                 return;
             }
 
@@ -119,7 +120,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Login);
         }
         finally
         {

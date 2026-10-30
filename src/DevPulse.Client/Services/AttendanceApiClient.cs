@@ -22,7 +22,7 @@ public interface IAttendanceApiClient
 
     Task CancelCorrectionRequestAsync(Guid id, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetPendingCorrectionRequestsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(CancellationToken cancellationToken = default);
 
     Task<AttendanceCorrectionRequestDto?> ApproveCorrectionRequestAsync(Guid id, ReviewAttendanceCorrectionRequest request, CancellationToken cancellationToken = default);
 
@@ -120,10 +120,10 @@ public sealed class AttendanceApiClient : IAttendanceApiClient
         await EnsureSuccessAsync(response, cancellationToken, "Failed to cancel correction request.");
     }
 
-    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetPendingCorrectionRequestsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(CancellationToken cancellationToken = default)
     {
         var requests = await _httpClient.GetFromJsonAsync<List<AttendanceCorrectionRequestDto>>(
-            "api/attendance/correction-requests/pending",
+            "api/attendance/correction-requests/all",
             _jsonOptions,
             cancellationToken);
         return requests ?? [];

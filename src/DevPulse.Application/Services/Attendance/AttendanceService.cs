@@ -39,6 +39,25 @@ public sealed class AttendanceService : IAttendanceService
 
         var settings = await GetSettingsEntityAsync(cancellationToken);
         var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
+
+        if (!developer.IsOwnTeam)
+        {
+            return new AttendanceMeDto(
+                developer.Id,
+                developer.Name,
+                false,
+                AttendanceNextActionDto.PunchIn,
+                null,
+                settings.OfficeTimeZoneId,
+                false,
+                false,
+                null,
+                null,
+                null,
+                null,
+                IsOwnTeam: false);
+        }
+
         var today = _statusCalculator.GetOfficeToday(timeZone);
         var record = await _attendanceRepository.GetRecordAsync(developer.Id, today, cancellationToken);
         var nextAction = GetNextAction(record);
@@ -77,6 +96,11 @@ public sealed class AttendanceService : IAttendanceService
         if (!developer.IsActive)
         {
             return Result<AttendancePunchResultDto>.Failure("Your developer profile is inactive.");
+        }
+
+        if (!developer.IsOwnTeam)
+        {
+            return Result<AttendancePunchResultDto>.Failure("Attendance is only available to own-team developers.");
         }
 
         var settings = await GetSettingsEntityAsync(cancellationToken);
@@ -144,6 +168,11 @@ public sealed class AttendanceService : IAttendanceService
             return [];
         }
 
+        if (!developer.IsOwnTeam)
+        {
+            return [];
+        }
+
         var settings = await GetSettingsEntityAsync(cancellationToken);
         var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
         var records = await _attendanceRepository.GetRecordsByDeveloperAsync(developer.Id, fromDate, toDate, cancellationToken);
@@ -190,7 +219,7 @@ public sealed class AttendanceService : IAttendanceService
     {
         var settings = await GetSettingsEntityAsync(cancellationToken);
         var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
-        var records = await _attendanceRepository.GetRecordsAsync(fromDate, toDate, developerId, cancellationToken);
+        var records = await _attendanceRepository.GetRecordsAsync(fromDate, toDate, developerId, cancellationToken, ownTeamOnly: true);
         return records.Select(r => MapRecord(r, settings, timeZone)).ToList();
     }
 
@@ -211,8 +240,8 @@ public sealed class AttendanceService : IAttendanceService
         var workingDays = EnumerateWorkingDays(fromDate, toDate, leaveSettings.WeekendDaysBitmask, holidays).ToList();
 
         var developers = await _developerRepository.GetAllAsync(cancellationToken);
-        var activeDevelopers = developers.Where(d => d.IsActive).ToList();
-        var records = await _attendanceRepository.GetRecordsAsync(fromDate, toDate, null, cancellationToken);
+        var activeDevelopers = developers.Where(d => d.IsActive && d.IsOwnTeam).ToList();
+        var records = await _attendanceRepository.GetRecordsAsync(fromDate, toDate, null, cancellationToken, ownTeamOnly: true);
         var recordLookup = records.ToDictionary(r => (r.DeveloperId, r.WorkDate));
 
         var onTime = 0;
@@ -272,6 +301,11 @@ public sealed class AttendanceService : IAttendanceService
         if (developer is null)
         {
             return Result<AttendanceCorrectionRequestDto>.Failure("Your login email is not linked to a Developer record.");
+        }
+
+        if (!developer.IsOwnTeam)
+        {
+            return Result<AttendanceCorrectionRequestDto>.Failure("Attendance corrections are only available to own-team developers.");
         }
 
         var validation = ValidateCorrectionRequest(request);
@@ -347,6 +381,11 @@ public sealed class AttendanceService : IAttendanceService
             return [];
         }
 
+        if (!developer.IsOwnTeam)
+        {
+            return [];
+        }
+
         var requests = await _attendanceRepository.GetCorrectionRequestsByDeveloperAsync(developer.Id, cancellationToken);
         return requests.Select(MapCorrectionRequest).ToList();
     }
@@ -360,6 +399,11 @@ public sealed class AttendanceService : IAttendanceService
         if (developer is null)
         {
             return Result.Failure("Your login email is not linked to a Developer record.");
+        }
+
+        if (!developer.IsOwnTeam)
+        {
+            return Result.Failure("Attendance corrections are only available to own-team developers.");
         }
 
         var entity = await _attendanceRepository.GetCorrectionRequestByIdAsync(requestId, cancellationToken);
@@ -377,10 +421,10 @@ public sealed class AttendanceService : IAttendanceService
         return Result.Success();
     }
 
-    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetPendingCorrectionRequestsAsync(
+    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(
         CancellationToken cancellationToken = default)
     {
-        var requests = await _attendanceRepository.GetPendingCorrectionRequestsAsync(cancellationToken);
+        var requests = await _attendanceRepository.GetCorrectionRequestsAsync(cancellationToken, ownTeamOnly: true);
         return requests.Select(MapCorrectionRequest).ToList();
     }
 
@@ -401,14 +445,21 @@ public sealed class AttendanceService : IAttendanceService
             return Result<AttendanceCorrectionRequestDto>.Failure("This request has already been reviewed.");
         }
 
+        if (entity.Developer?.IsOwnTeam != true)
+        {
+            return Result<AttendanceCorrectionRequestDto>.Failure("Correction requests can only be reviewed for own-team developers.");
+        }
+
         var punchIn = request.ApprovedPunchInUtc ?? entity.RequestedPunchInUtc;
         var punchOut = request.ApprovedPunchOutUtc ?? entity.RequestedPunchOutUtc;
+        var reviewedAtUtc = DateTime.UtcNow;
 
         var upsertResult = await ApplyCorrectedPunchesAsync(
             entity.DeveloperId,
             entity.WorkDate,
             punchIn,
             punchOut,
+            reviewedAtUtc,
             cancellationToken);
         if (upsertResult.IsFailure)
         {
@@ -418,7 +469,7 @@ public sealed class AttendanceService : IAttendanceService
         entity.Status = AttendanceCorrectionStatus.Approved;
         entity.ReviewerComment = NormalizeOptionalText(request.ReviewerComment, MaxCommentLength);
         entity.ReviewedByUserId = adminUserId;
-        entity.ReviewedAtUtc = DateTime.UtcNow;
+        entity.ReviewedAtUtc = reviewedAtUtc;
 
         await _attendanceRepository.UpdateCorrectionRequestAsync(entity, cancellationToken);
         return Result<AttendanceCorrectionRequestDto>.Success(MapCorrectionRequest(entity));
@@ -439,6 +490,11 @@ public sealed class AttendanceService : IAttendanceService
         if (entity.Status != AttendanceCorrectionStatus.Pending)
         {
             return Result<AttendanceCorrectionRequestDto>.Failure("This request has already been reviewed.");
+        }
+
+        if (entity.Developer?.IsOwnTeam != true)
+        {
+            return Result<AttendanceCorrectionRequestDto>.Failure("Correction requests can only be reviewed for own-team developers.");
         }
 
         entity.Status = AttendanceCorrectionStatus.Rejected;
@@ -462,6 +518,11 @@ public sealed class AttendanceService : IAttendanceService
             return Result<AttendanceRecordDto>.Failure("Developer was not found.");
         }
 
+        if (!developer.IsOwnTeam)
+        {
+            return Result<AttendanceRecordDto>.Failure("Attendance records can only be edited for own-team developers.");
+        }
+
         if (request.PunchInUtc.HasValue
             && request.PunchOutUtc.HasValue
             && request.PunchOutUtc <= request.PunchInUtc)
@@ -474,6 +535,7 @@ public sealed class AttendanceService : IAttendanceService
             workDate,
             request.PunchInUtc,
             request.PunchOutUtc,
+            DateTime.UtcNow,
             cancellationToken);
         if (applyResult.IsFailure)
         {
@@ -493,6 +555,7 @@ public sealed class AttendanceService : IAttendanceService
         DateOnly workDate,
         DateTime? punchInUtc,
         DateTime? punchOutUtc,
+        DateTime correctedAtUtc,
         CancellationToken cancellationToken)
     {
         if (!punchInUtc.HasValue && !punchOutUtc.HasValue)
@@ -512,16 +575,18 @@ public sealed class AttendanceService : IAttendanceService
             };
         }
 
-        if (punchInUtc.HasValue)
+        if (punchInUtc.HasValue && record.PunchInUtc != punchInUtc)
         {
             record.PunchInUtc = punchInUtc;
             record.PunchInIsCorrected = true;
+            record.PunchInCorrectedAtUtc = correctedAtUtc;
         }
 
-        if (punchOutUtc.HasValue)
+        if (punchOutUtc.HasValue && record.PunchOutUtc != punchOutUtc)
         {
             record.PunchOutUtc = punchOutUtc;
             record.PunchOutIsCorrected = true;
+            record.PunchOutCorrectedAtUtc = correctedAtUtc;
         }
 
         if (record.PunchInUtc.HasValue
@@ -567,7 +632,10 @@ public sealed class AttendanceService : IAttendanceService
         return AttendanceNextActionDto.Complete;
     }
 
-    private AttendanceRecordDto MapRecord(AttendanceRecord record, AttendanceSettings settings, TimeZoneInfo timeZone)
+    private AttendanceRecordDto MapRecord(
+        AttendanceRecord record,
+        AttendanceSettings settings,
+        TimeZoneInfo timeZone)
     {
         var status = _statusCalculator.ComputeStatus(record, settings, timeZone);
         var workHours = _statusCalculator.ComputeWorkHours(record);
@@ -583,7 +651,9 @@ public sealed class AttendanceService : IAttendanceService
             record.PunchInIsCorrected,
             record.PunchOutIsCorrected,
             status,
-            workHours);
+            workHours,
+            record.PunchInCorrectedAtUtc,
+            record.PunchOutCorrectedAtUtc);
     }
 
     private static AttendanceSettingsDto MapSettings(AttendanceSettings settings) =>

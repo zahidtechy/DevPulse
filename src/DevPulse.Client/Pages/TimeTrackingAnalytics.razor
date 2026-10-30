@@ -170,7 +170,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.TimeTracking);
         }
     }
 
@@ -190,7 +190,7 @@
     {
         if (!Guid.TryParse(_selectedOrgId, out var orgId))
         {
-            Toast.Warning("Select a Hubstaff organization.");
+            Toast.Warning("Select a Hubstaff organization.", key: ToastKeys.TimeTracking);
             return;
         }
 
@@ -210,11 +210,11 @@
         {
             if (IsAnalyticsInfoMessage(ex.Message))
             {
-                Toast.Info(ex.Message);
+                Toast.Info(ex.Message, key: ToastKeys.TimeTracking);
             }
             else
             {
-                Toast.Error(ex.Message);
+                Toast.Error(ex.Message, key: ToastKeys.TimeTracking);
             }
             _analytics = null;
         }
@@ -228,7 +228,7 @@
     {
         if (!Guid.TryParse(_selectedOrgId, out var orgId))
         {
-            Toast.Warning("Select a Hubstaff organization before syncing.");
+            Toast.Warning("Select a Hubstaff organization before syncing.", key: ToastKeys.HubstaffSync);
             return;
         }
 
@@ -241,14 +241,14 @@
                 DateOnly.FromDateTime(_toDate));
 
             var result = await HubstaffSyncApi.TriggerSyncAsync(request);
-            Toast.Success(result?.Message ?? "Sync completed.");
+            Toast.Success(result?.Message ?? "Sync completed.", key: ToastKeys.HubstaffSync);
             await LoadSyncStatusAsync();
             await LoadOrganizationsAsync();
             await LoadAnalyticsAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.HubstaffSync);
         }
         finally
         {

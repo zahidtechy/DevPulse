@@ -35,7 +35,8 @@ public record AttendanceMeDto(
     TimeOnly? PunchInEarliestTime = null,
     TimeOnly? PunchOutEarliestTime = null,
     TimeOnly? PunchOutLatestTime = null,
-    TimeOnly? PunchInLatestTime = null);
+    TimeOnly? PunchInLatestTime = null,
+    bool IsOwnTeam = true);
 
 public record AttendanceSettingsDto(
     TimeOnly WorkStartTime,
@@ -70,7 +71,10 @@ public record AttendanceRecordDto(
     bool PunchInIsCorrected,
     bool PunchOutIsCorrected,
     AttendanceDayStatusDto Status,
-    decimal? WorkHours);
+    decimal? WorkHours,
+    // When each punch was last corrected on the attendance record (UTC).
+    DateTime? PunchInCorrectedAtUtc = null,
+    DateTime? PunchOutCorrectedAtUtc = null);
 
 public record AttendancePunchResultDto(
     AttendanceRecordDto Record,

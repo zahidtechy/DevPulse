@@ -3,7 +3,7 @@
     <div class="attendance-empty-state">
         <div class="attendance-empty-icon" aria-hidden="true"></div>
         <h5>No correction requests</h5>
-        <p class="text-muted mb-0">@(AllowReview ? "There are no pending requests to review." : "You have not submitted any correction requests yet.")</p>
+        <p class="text-muted mb-0">@(AllowReview ? "There are no correction requests matching the current filters." : "You have not submitted any correction requests yet.")</p>
     </div>
 }
 else
@@ -27,20 +27,23 @@ else
                     <tr>
                         <td class="attendance-dev-name">@request.DeveloperName</td>
                         <td class="attendance-date-cell">@request.WorkDate.ToString("MMM d, yyyy")</td>
-                        <td><span class="attendance-punch-time">@FormatUtc(request.RequestedPunchInUtc)</span></td>
-                        <td><span class="attendance-punch-time">@FormatUtc(request.RequestedPunchOutUtc)</span></td>
-                        <td class="attendance-reason-cell">@request.Reason</td>
-                        <td><span class="attendance-badge @GetCorrectionStatusClass(request.Status)">@FormatCorrectionStatus(request.Status)</span></td>
+                        <td><span class="attendance-punch-time">@AttendanceFormatter.FormatTime(request.RequestedPunchInUtc, OfficeTimeZoneId)</span></td>
+                        <td><span class="attendance-punch-time">@AttendanceFormatter.FormatTime(request.RequestedPunchOutUtc, OfficeTimeZoneId)</span></td>
+                        <td class="attendance-reason-cell" title="@request.Reason">@TruncateReason(request.Reason)</td>
+                        <td><span class="attendance-badge @AttendanceFormatter.CorrectionStatusClass(request.Status)">@AttendanceFormatter.CorrectionStatusLabel(request.Status)</span></td>
                         <td class="attendance-table-actions">
-                            @if (AllowCancel && request.Status == AttendanceCorrectionStatusDto.Pending)
-                            {
-                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnCancel.InvokeAsync(request.Id)">Cancel</button>
-                            }
-                            @if (AllowReview && request.Status == AttendanceCorrectionStatusDto.Pending)
-                            {
-                                <button type="button" class="btn btn-sm btn-success me-1" @onclick="() => OnApprove.InvokeAsync(request.Id)">Approve</button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnReject.InvokeAsync(request.Id)">Reject</button>
-                            }
+                            <div class="attendance-row-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OnDetails.InvokeAsync(request.Id)">Details</button>
+                                @if (CanCancel?.Invoke(request) == true)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnCancel.InvokeAsync(request.Id)">Cancel</button>
+                                }
+                                @if (AllowReview && request.Status == AttendanceCorrectionStatusDto.Pending)
+                                {
+                                    <button type="button" class="btn btn-sm btn-success" @onclick="() => OnApprove.InvokeAsync(request.Id)">Approve</button>
+                                    <button type="button" class="btn btn-sm btn-danger" @onclick="() => OnReject.InvokeAsync(request.Id)">Reject</button>
+                                }
+                            </div>
                         </td>
                     </tr>
                 }
@@ -53,14 +56,18 @@ else
     [Parameter]
     public IReadOnlyList<AttendanceCorrectionRequestDto> Requests { get; set; } = [];
 
+    /// <summary>Decides whether the Cancel action applies to a given request.</summary>
     [Parameter]
-    public bool AllowCancel { get; set; }
+    public Func<AttendanceCorrectionRequestDto, bool>? CanCancel { get; set; }
 
     [Parameter]
     public bool AllowReview { get; set; }
 
     [Parameter]
     public string OfficeTimeZoneId { get; set; } = "Asia/Dhaka";
+
+    [Parameter]
+    public EventCallback<Guid> OnDetails { get; set; }
 
     [Parameter]
     public EventCallback<Guid> OnCancel { get; set; }
@@ -71,37 +78,20 @@ else
     [Parameter]
     public EventCallback<Guid> OnReject { get; set; }
 
-    private string FormatUtc(DateTime? utc)
+    // Keep the reason column compact; the full text is available on hover (title)
+    // and in the row's details modal.
+    private const int ReasonPreviewLength = 30;
+
+    private static string TruncateReason(string? reason)
     {
-        if (!utc.HasValue)
+        if (string.IsNullOrWhiteSpace(reason))
         {
             return "—";
         }
 
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(OfficeTimeZoneId);
-            return TimeZoneInfo.ConvertTimeFromUtc(utc.Value, tz).ToString("h:mm tt");
-        }
-        catch
-        {
-            return utc.Value.ToLocalTime().ToString("h:mm tt");
-        }
+        var trimmed = reason.Trim();
+        return trimmed.Length <= ReasonPreviewLength
+            ? trimmed
+            : $"{trimmed[..ReasonPreviewLength].TrimEnd()}…";
     }
-
-    private static string FormatCorrectionStatus(AttendanceCorrectionStatusDto status) => status switch
-    {
-        AttendanceCorrectionStatusDto.Pending => "Pending",
-        AttendanceCorrectionStatusDto.Approved => "Approved",
-        AttendanceCorrectionStatusDto.Rejected => "Rejected",
-        _ => status.ToString()
-    };
-
-    private static string GetCorrectionStatusClass(AttendanceCorrectionStatusDto status) => status switch
-    {
-        AttendanceCorrectionStatusDto.Pending => "pending",
-        AttendanceCorrectionStatusDto.Approved => "on-time",
-        AttendanceCorrectionStatusDto.Rejected => "incomplete",
-        _ => string.Empty
-    };
 }

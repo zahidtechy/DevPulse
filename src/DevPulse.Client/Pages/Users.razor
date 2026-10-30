@@ -27,7 +27,7 @@
     {
         <LoadingIndicator Text="Processing..." />
     }
-
+    @*reset password model start here *@
     <ModalDialog IsVisible="_resetPasswordUserId.HasValue"
                  Title="Reset Password"
                  IsBusy="_isBusy"
@@ -47,16 +47,26 @@
                     <PasswordInput id="resetPassword"
                                    name="resetPassword"
                                    @bind-Value="_resetPassword"
+                                   @bind-Value:after="ValidateResetPasswordField"
                                    autocomplete="new-password"
-                                   aria-describedby="resetPasswordHelp" />
-                    <div class="form-text" id="resetPasswordHelp">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
+                                   aria-describedby="resetPasswordError" />
+                    @if (!string.IsNullOrWhiteSpace(_resetPasswordFieldError))
+                    {
+                        <div id="resetPasswordError" class="text-danger small mt-1" role="alert">@_resetPasswordFieldError</div>
+                    }
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" for="resetPasswordConfirm">Confirm password</label>
                     <PasswordInput id="resetPasswordConfirm"
                                    name="resetPasswordConfirm"
                                    @bind-Value="_resetPasswordConfirm"
-                                   autocomplete="new-password" />
+                                   @bind-Value:after="ValidateResetPasswordConfirmField"
+                                   autocomplete="new-password"
+                                   aria-describedby="resetPasswordConfirmError" />
+                    @if (!string.IsNullOrWhiteSpace(_resetPasswordConfirmError))
+                    {
+                        <div id="resetPasswordConfirmError" class="text-danger small mt-1" role="alert">@_resetPasswordConfirmError</div>
+                    }
                 </div>
             </div>
         </ChildContent>
@@ -67,6 +77,9 @@
             </BusyButton>
         </FooterContent>
     </ModalDialog>
+    @*reset password model end here *@
+
+    @*show Add form model start here *@
 
     <ModalDialog IsVisible="_showAddForm"
                  Title="@(_editingUserId.HasValue ? "Edit User" : "Add User")"
@@ -82,31 +95,47 @@
                 @if (!_editingUserId.HasValue)
                 {
                     <div class="col-md-6">
-                        <label class="form-label">Email</label>
-                        <input type="email" class="form-control" @bind="_newUser.Email" />
+                        <label class="form-label" for="userEmail">Email</label>
+                        <input id="userEmail" type="email" class="form-control" @bind="_newUser.Email" @bind:after="ValidateEmailField" aria-describedby="emailError" />
+                        @if (!string.IsNullOrWhiteSpace(_emailError))
+                        {
+                            <div id="emailError" class="text-danger small mt-1" role="alert">@_emailError</div>
+                        }
                     </div>
                     <div class="col-md-6">
                         <label class="form-label" for="newUserPassword">Password</label>
                         <PasswordInput id="newUserPassword"
                                        name="newUserPassword"
                                        @bind-Value="_newUser.Password"
+                                       @bind-Value:after="ValidateNewPasswordField"
                                        autocomplete="new-password"
-                                       aria-describedby="newUserPasswordHelp" />
-                        <div class="form-text" id="newUserPasswordHelp">At least 8 characters with uppercase, lowercase, digit, and special character.</div>
+                                       aria-describedby="newUserPasswordError" />
+                        @if (!string.IsNullOrWhiteSpace(_newPasswordError))
+                        {
+                            <div id="newUserPasswordError" class="text-danger small mt-1" role="alert">@_newPasswordError</div>
+                        }
                     </div>
                 }
                 <div class="col-md-6">
-                    <label class="form-label">Display name</label>
-                    <input class="form-control" @bind="_newUser.DisplayName" />
+                    <label class="form-label" for="displayName">Display name</label>
+                    <input id="displayName" class="form-control" @bind="_newUser.DisplayName" @bind:after="ValidateDisplayNameField" aria-describedby="displayNameError" />
+                    @if (!string.IsNullOrWhiteSpace(_displayNameError))
+                    {
+                        <div id="displayNameError" class="text-danger small mt-1" role="alert">@_displayNameError</div>
+                    }
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Role</label>
-                    <select class="form-select" @bind="_newUser.Role">
+                    <label class="form-label" for="userRole">Role</label>
+                    <select id="userRole" class="form-select" @bind="_newUser.Role" @bind:after="ValidateRoleField" aria-describedby="roleError">
                         @foreach (var role in AppRoles.All)
                         {
                             <option value="@role">@role</option>
                         }
                     </select>
+                    @if (!string.IsNullOrWhiteSpace(_roleError))
+                    {
+                        <div id="roleError" class="text-danger small mt-1" role="alert">@_roleError</div>
+                    }
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" for="telegramId">Telegram ID</label>
@@ -115,8 +144,13 @@
                            inputmode="numeric"
                            maxlength="32"
                            placeholder="e.g. 123456789"
-                           @bind="_newUser.TelegramId" />
-                    <div class="form-text">Optional numeric Telegram user ID for direct notifications.</div>
+                           @bind="_newUser.TelegramId"
+                           @bind:after="ValidateTelegramIdField"
+                           aria-describedby="telegramIdError" />
+                    @if (!string.IsNullOrWhiteSpace(_telegramIdError))
+                    {
+                        <div id="telegramIdError" class="text-danger small mt-1" role="alert">@_telegramIdError</div>
+                    }
                 </div>
                 @if (_editingUserId.HasValue)
                 {
@@ -163,6 +197,8 @@
             </BusyButton>
         </FooterContent>
     </ModalDialog>
+
+@*show Add form model end here *@
 
     @if (_deleteTarget is not null)
     {
@@ -377,6 +413,15 @@
     private string _selectedDeveloperId = string.Empty;
     private string? _formError;
     private string? _resetPasswordError;
+    private string? _emailError;
+    private string? _newPasswordError;
+    private string? _displayNameError;
+    private string? _roleError;
+    private string? _telegramIdError;
+    private string? _developerLinkError;
+    private string? _createDeveloperError;
+    private string? _resetPasswordFieldError;
+    private string? _resetPasswordConfirmError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -435,7 +480,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Users);
         }
         finally
         {
@@ -453,7 +498,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Users);
         }
     }
 
@@ -495,6 +540,7 @@
         _developerSearch = string.Empty;
         _showAddForm = true;
         _formError = null;
+        ClearFormFieldErrors();
     }
 
     private void EditUser(UserDto user)
@@ -511,6 +557,7 @@
         _developerSearch = string.Empty;
         _showAddForm = true;
         _formError = null;
+        ClearFormFieldErrors();
     }
 
     private void HideForm()
@@ -531,6 +578,8 @@
         _resetPassword = string.Empty;
         _resetPasswordConfirm = string.Empty;
         _resetPasswordError = null;
+        _resetPasswordFieldError = null;
+        _resetPasswordConfirmError = null;
     }
 
     private void HideResetPasswordForm()
@@ -541,6 +590,8 @@
         _resetPassword = string.Empty;
         _resetPasswordConfirm = string.Empty;
         _resetPasswordError = null;
+        _resetPasswordFieldError = null;
+        _resetPasswordConfirmError = null;
     }
 
     private async Task ResetPasswordAsync()
@@ -551,16 +602,15 @@
         }
 
         _resetPasswordError = null;
+        _resetPasswordFieldError = ValidatePassword(_resetPassword);
+        _resetPasswordConfirmError = string.IsNullOrWhiteSpace(_resetPasswordConfirm)
+            ? "Please confirm the new password."
+            : _resetPassword != _resetPasswordConfirm
+                ? "Passwords do not match."
+                : null;
 
-        if (string.IsNullOrWhiteSpace(_resetPassword))
+        if (_resetPasswordFieldError is not null || _resetPasswordConfirmError is not null)
         {
-            _resetPasswordError = "New password is required.";
-            return;
-        }
-
-        if (_resetPassword != _resetPasswordConfirm)
-        {
-            _resetPasswordError = "Passwords do not match.";
             return;
         }
 
@@ -569,7 +619,7 @@
         try
         {
             await UserApi.ChangePasswordAsync(_resetPasswordUserId.Value, new ChangePasswordRequest(_resetPassword));
-            Toast.Success($"Password reset for {_resetPasswordDisplayName}.");
+            Toast.Success($"Password reset for {_resetPasswordDisplayName}.", key: ToastKeys.Users);
             HideResetPasswordForm();
         }
         catch (Exception ex)
@@ -584,9 +634,9 @@
 
     private async Task SaveUserAsync()
     {
-        if (_createDeveloper && !string.IsNullOrWhiteSpace(_selectedDeveloperId))
+        ValidateUserForm();
+        if (HasFormFieldErrors)
         {
-            _formError = "Choose either an existing developer or creating a new one, not both.";
             return;
         }
 
@@ -605,7 +655,7 @@
                     _editIsActive,
                     developerId,
                     _newUser.TelegramId));
-                Toast.Success("User updated.");
+                Toast.Success("User updated.", key: ToastKeys.Users);
             }
             else
             {
@@ -621,7 +671,7 @@
                     ? "User and developer profile created."
                     : developerId.HasValue
                         ? "User created and linked to developer."
-                        : "User created.");
+                        : "User created.", key: ToastKeys.Users);
             }
 
             HideForm();
@@ -635,6 +685,88 @@
         {
             _isBusy = false;
         }
+    }
+
+    private bool HasFormFieldErrors =>
+        _emailError is not null || _newPasswordError is not null ||
+        _displayNameError is not null || _roleError is not null ||
+        _telegramIdError is not null || _developerLinkError is not null ||
+        _createDeveloperError is not null;
+
+    private void ValidateUserForm()
+    {
+        ClearFormFieldErrors();
+
+        if (!_editingUserId.HasValue)
+        {
+            if (string.IsNullOrWhiteSpace(_newUser.Email))
+            {
+                _emailError = "Email is required.";
+            }
+            else if (!System.Net.Mail.MailAddress.TryCreate(_newUser.Email.Trim(), out _))
+            {
+                _emailError = "Enter a valid email address.";
+            }
+
+            _newPasswordError = ValidatePassword(_newUser.Password);
+        }
+
+        if (string.IsNullOrWhiteSpace(_newUser.DisplayName))
+        {
+            _displayNameError = "Display name is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(_newUser.Role) || !AppRoles.All.Contains(_newUser.Role))
+        {
+            _roleError = "Please select a valid role.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(_newUser.TelegramId) &&
+            !_newUser.TelegramId.All(char.IsDigit))
+        {
+            _telegramIdError = "Telegram ID must contain numbers only.";
+        }
+
+        if (_createDeveloper && !string.IsNullOrWhiteSpace(_selectedDeveloperId))
+        {
+            _developerLinkError = "Clear the developer selection when creating a new developer profile.";
+            _createDeveloperError = "Choose either an existing developer or create a new profile, not both.";
+        }
+        else if (!string.IsNullOrWhiteSpace(_selectedDeveloperId) &&
+                 !Guid.TryParse(_selectedDeveloperId, out _))
+        {
+            _developerLinkError = "Select a valid developer profile.";
+        }
+    }
+
+    private static string? ValidatePassword(string? password)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            return "Password is required.";
+        }
+
+        if (password.Length < 8 ||
+            !password.Any(char.IsUpper) ||
+            !password.Any(char.IsLower) ||
+            !password.Any(char.IsDigit) ||
+            !password.Any(ch => !char.IsLetterOrDigit(ch)))
+        {
+            return "Use at least 8 characters with uppercase, lowercase, a number, and a special character.";
+        }
+
+        return null;
+    }
+
+    private void ClearFormFieldErrors()
+    {
+        _emailError = null;
+        _newPasswordError = null;
+        _displayNameError = null;
+        _roleError = null;
+        _telegramIdError = null;
+        _developerLinkError = null;
+        _createDeveloperError = null;
     }
 
     private void ShowDeleteConfirmation(UserDto user)
@@ -682,12 +814,12 @@
         try
         {
             await UserApi.DeleteUserAsync(id);
-            Toast.Success("User deleted.");
+            Toast.Success("User deleted.", key: ToastKeys.Users);
             await LoadUsersAsync();
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.Users);
         }
         finally
         {

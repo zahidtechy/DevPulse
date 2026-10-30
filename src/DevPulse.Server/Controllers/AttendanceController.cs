@@ -109,12 +109,12 @@ public sealed class AttendanceController : ControllerBase
         return Ok(analytics);
     }
 
-    [HttpGet("correction-requests/pending")]
+    [HttpGet("correction-requests/all")]
     [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(IReadOnlyList<AttendanceCorrectionRequestDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetPendingCorrectionRequests(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetCorrectionRequests(CancellationToken cancellationToken)
     {
-        var requests = await _attendanceService.GetPendingCorrectionRequestsAsync(cancellationToken);
+        var requests = await _attendanceService.GetCorrectionRequestsAsync(cancellationToken);
         return Ok(requests);
     }
 

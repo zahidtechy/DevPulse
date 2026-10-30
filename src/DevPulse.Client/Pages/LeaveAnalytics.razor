@@ -488,7 +488,7 @@
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message);
+            Toast.Error(ex.Message, key: ToastKeys.LeaveAnalytics);
             _summary = null;
         }
         finally
