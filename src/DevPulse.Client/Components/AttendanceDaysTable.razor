@@ -1,0 +1,215 @@
+@if (Rows.Count == 0)
+{
+    <div class="attendance-empty-state attendance-days-empty-state">
+        <div class="attendance-empty-icon" aria-hidden="true"></div>
+        <h5>No attendance data</h5>
+        <p class="text-muted mb-0">No attendance records or correction requests were found for the selected filters.</p>
+    </div>
+}
+else
+{
+    <div class="attendance-days-table-scroll">
+        <table class="table table-hover mb-0 attendance-table attendance-days-table @(ShowDeveloper ? "attendance-days-table-admin" : "attendance-days-table-user")">
+            <thead>
+                <tr>
+                    @if (ShowDeveloper)
+                    {
+                        <th class="attendance-developer-column">Developer</th>
+                    }
+                    <th class="attendance-date-column">Date</th>
+                    <th class="attendance-punch-column">Check in</th>
+                    <th class="attendance-punch-column">Check out</th>
+                    <th class="attendance-hours-column">Worked</th>
+                    <th class="attendance-status-column">Status</th>
+                    <th class="attendance-table-actions attendance-days-actions-column">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Rows)
+                {
+                    <tr @key="row">
+                        @if (ShowDeveloper)
+                        {
+                            <td class="attendance-dev-name attendance-developer-column" title="@row.DeveloperName">@row.DeveloperName</td>
+                        }
+                        <td class="attendance-date-cell attendance-date-column">@row.WorkDate.ToString("MMM d, yyyy")</td>
+                        <td class="attendance-punch-column">
+                            <div class="attendance-punch-cell">
+                                <span class="attendance-punch-time">@AttendanceFormatter.FormatTime(row.PunchInUtc, OfficeTimeZoneId)</span>
+                                @if (row.PunchInCorrectionRequested)
+                                {
+                                    <span class="attendance-cell-note pending" title="Pending check-in correction request">Requested</span>
+                                }
+                                else if (row.PunchInIsCorrected)
+                                {
+                                    <span class="attendance-cell-note corrected" title="@FormatCorrectedLabel(row.PunchInCorrectedAtUtc)">@FormatCorrectedLabel(row.PunchInCorrectedAtUtc)</span>
+                                }
+                            </div>
+                        </td>
+                        <td class="attendance-punch-column">
+                            <div class="attendance-punch-cell">
+                                <span class="attendance-punch-time">@AttendanceFormatter.FormatTime(row.PunchOutUtc, OfficeTimeZoneId)</span>
+                                @if (row.PunchOutCorrectionRequested)
+                                {
+                                    <span class="attendance-cell-note pending" title="Pending check-out correction request">Requested</span>
+                                }
+                                else if (row.PunchOutIsCorrected)
+                                {
+                                    <span class="attendance-cell-note corrected" title="@FormatCorrectedLabel(row.PunchOutCorrectedAtUtc)">@FormatCorrectedLabel(row.PunchOutCorrectedAtUtc)</span>
+                                }
+                            </div>
+                        </td>
+                        <td class="attendance-hours-cell attendance-hours-column">
+                            @if (row.PunchInUtc is not null && row.PunchOutUtc is null && IsToday(row.WorkDate))
+                            {
+                                <LiveWorkDuration PunchInUtc="row.PunchInUtc" PunchOutUtc="row.PunchOutUtc" />
+                            }
+                            else
+                            {
+                                @AttendanceFormatter.FormatWorkHours(row.WorkHours)
+                            }
+                        </td>
+                        <td class="attendance-status-column">
+                            <span class="attendance-badge attendance-status-badge @StatusClass(row)">@StatusLabel(row)</span>
+                        </td>
+                        <td class="attendance-table-actions attendance-days-actions-cell">
+                            <div class="attendance-row-actions">
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-secondary attendance-icon-action"
+                                        title="View attendance details"
+                                        aria-label="View attendance details"
+                                        @onclick="() => OnDetails.InvokeAsync(row)">
+                                    <span class="bi-eye" aria-hidden="true"></span>
+                                </button>
+
+                                @if (CanRequestCorrection?.Invoke(row) == true)
+                                {
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-primary attendance-icon-action"
+                                            title="Request correction"
+                                            aria-label="Request correction"
+                                            @onclick="() => OnRequestCorrection.InvokeAsync(row)">
+                                        <span class="bi-pencil-square" aria-hidden="true"></span>
+                                    </button>
+                                }
+
+                                @if (CanCancelCorrection?.Invoke(row) == true && row.PendingCorrectionRequestId is { } cancelId)
+                                {
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger attendance-icon-action"
+                                            title="Cancel correction request"
+                                            aria-label="Cancel correction request"
+                                            @onclick="() => OnCancel.InvokeAsync(cancelId)">
+                                        <span class="bi-trash" aria-hidden="true"></span>
+                                    </button>
+                                }
+
+                                @if (AllowReview && row.PendingCorrectionRequestId is { } reviewId)
+                                {
+                                    <button type="button"
+                                            class="btn btn-sm btn-success attendance-icon-action"
+                                            title="Approve correction request"
+                                            aria-label="Approve correction request"
+                                            @onclick="() => OnApprove.InvokeAsync(reviewId)">
+                                        <span class="bi-check-lg" aria-hidden="true"></span>
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-sm btn-danger attendance-icon-action"
+                                            title="Reject correction request"
+                                            aria-label="Reject correction request"
+                                            @onclick="() => OnReject.InvokeAsync(reviewId)">
+                                        <span class="bi-x-lg" aria-hidden="true"></span>
+                                    </button>
+                                }
+
+                                @if (AllowAdminEdit && (row.PunchInUtc is null || row.PunchOutUtc is null))
+                                {
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-primary attendance-icon-action"
+                                            title="Auto fill missing attendance"
+                                            aria-label="Auto fill missing attendance"
+                                            @onclick="() => OnAdminEdit.InvokeAsync(row)">
+                                        <span class="bi-magic" aria-hidden="true"></span>
+                                    </button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<AttendanceDayRowDto> Rows { get; set; } = [];
+
+    [Parameter]
+    public bool ShowDeveloper { get; set; }
+
+    [Parameter]
+    public bool AllowReview { get; set; }
+
+    [Parameter]
+    public bool AllowAdminEdit { get; set; }
+
+    [Parameter]
+    public string OfficeTimeZoneId { get; set; } = "Asia/Dhaka";
+
+    [Parameter]
+    public Func<AttendanceDayRowDto, bool>? CanRequestCorrection { get; set; }
+
+    [Parameter]
+    public Func<AttendanceDayRowDto, bool>? CanCancelCorrection { get; set; }
+
+    [Parameter]
+    public EventCallback<AttendanceDayRowDto> OnDetails { get; set; }
+
+    [Parameter]
+    public EventCallback<AttendanceDayRowDto> OnRequestCorrection { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnCancel { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnApprove { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnReject { get; set; }
+
+    [Parameter]
+    public EventCallback<AttendanceDayRowDto> OnAdminEdit { get; set; }
+
+    private string FormatCorrectedLabel(DateTime? correctedAtUtc) =>
+        correctedAtUtc is null
+            ? "Corrected"
+            : $"Corrected on {AttendanceFormatter.FormatCorrectedAt(correctedAtUtc, OfficeTimeZoneId)}";
+
+    private static string StatusLabel(AttendanceDayRowDto row) =>
+        row.HasPendingCorrection
+            ? "Pending"
+            : row.RecordStatus is null
+                ? "No record"
+                : AttendanceFormatter.DayStatusLabel(row.RecordStatus.Value);
+
+    private static string StatusClass(AttendanceDayRowDto row) =>
+        row.HasPendingCorrection
+            ? "pending"
+            : row.RecordStatus is null
+                ? "absent"
+                : AttendanceFormatter.DayStatusClass(row.RecordStatus.Value);
+
+    private bool IsToday(DateOnly workDate)
+    {
+        try
+        {
+            var timeZone = TimeZoneInfo.FindSystemTimeZoneById(OfficeTimeZoneId);
+            return workDate == DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
+        }
+        catch
+        {
+            return workDate == DateOnly.FromDateTime(DateTime.Now);
+        }
+    }
+}

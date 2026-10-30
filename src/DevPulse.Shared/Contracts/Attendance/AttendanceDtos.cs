@@ -75,6 +75,38 @@ public record AttendanceRecordDto(
     DateTime? PunchInCorrectedAtUtc = null,
     DateTime? PunchOutCorrectedAtUtc = null);
 
+/// <summary>
+/// Combined attendance-record and correction-request summary for one developer
+/// on one work date. This is a read model only; it does not replace either
+/// underlying entity.
+/// </summary>
+public record AttendanceDayRowDto(
+    Guid DeveloperId,
+    string DeveloperName,
+    DateOnly WorkDate,
+    DateTime? PunchInUtc,
+    DateTime? PunchOutUtc,
+    bool PunchInIsCorrected,
+    bool PunchOutIsCorrected,
+    DateTime? PunchInCorrectedAtUtc,
+    DateTime? PunchOutCorrectedAtUtc,
+    AttendanceDayStatusDto? RecordStatus,
+    decimal? WorkHours,
+    bool HasPendingCorrection,
+    bool PunchInCorrectionRequested,
+    bool PunchOutCorrectionRequested,
+    Guid? PendingCorrectionRequestId,
+    int CorrectionRequestCount);
+
+public record AttendanceDayDetailsDto(
+    AttendanceDayRowDto Row,
+    AttendanceRecordDto? Record,
+    IReadOnlyList<AttendanceCorrectionRequestDto> CorrectionRequests);
+
+public record AttendancePendingCorrectionCountsDto(
+    int TotalPendingCount,
+    int MyPendingCount);
+
 public record AttendancePunchResultDto(
     AttendanceRecordDto Record,
     AttendanceNextActionDto NextAction);

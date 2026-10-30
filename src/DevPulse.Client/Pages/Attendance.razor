@@ -33,7 +33,7 @@
         </div>
         <LoadingIndicator Text="Loading attendance..." />
     }
-    else if (!_me.CanPunch && _me.DeveloperId is null)
+    else if (!_isAdmin && !_me.CanPunch && _me.DeveloperId is null)
     {
         <div class="leave-notice leave-notice-warning">
             <strong>Developer profile required</strong>
@@ -48,29 +48,33 @@
             <div class="filter-card card attendance-toolbar">
                 <div class="card-body">
                     <div class="period-chips leave-tabs attendance-tabs" role="tablist" aria-label="Attendance sections">
-                        <button type="button" role="tab" aria-selected="@(_tab == AttendanceTab.Today)" class="period-chip @(_tab == AttendanceTab.Today ? "active" : null)" @onclick="() => SetTab(AttendanceTab.Today)">
+                        <button type="button" role="tab" aria-selected="@(_tab == AttendanceTab.Today)" class="period-chip @(_tab == AttendanceTab.Today ? "active" : null)" @onclick="() => SetTabAsync(AttendanceTab.Today)">
                             <span class="bi-clock-history attendance-tab-icon" aria-hidden="true"></span>
                             Today
                         </button>
-                        <button type="button" role="tab" aria-selected="@(_tab == AttendanceTab.History)" class="period-chip @(_tab == AttendanceTab.History ? "active" : null)" @onclick="() => SetTab(AttendanceTab.History)">
+                        <button type="button" role="tab" aria-selected="@(_tab == AttendanceTab.Records)" class="period-chip @(_tab == AttendanceTab.Records ? "active" : null)" @onclick="() => SetTabAsync(AttendanceTab.Records)">
                             <span class="bi-calendar3 attendance-tab-icon" aria-hidden="true"></span>
-                            My history
-                        </button>
-                        <button type="button" role="tab" aria-selected="@(_tab == AttendanceTab.Corrections)" class="period-chip @(_tab == AttendanceTab.Corrections ? "active" : null)" @onclick="() => SetTab(AttendanceTab.Corrections)">
-                            <span class="bi-pencil-square attendance-tab-icon" aria-hidden="true"></span>
-                            Attendance corrections
-                            @if (_isAdmin && GetAllPendingCorrectionCount() > 0)
+                            Records
+                            @if (_isAdmin && _pendingCorrectionCounts.TotalPendingCount > 0)
                             {
-                                <span class="leave-tab-count leave-tab-count-alert">@GetAllPendingCorrectionCount()</span>
+                                <span class="leave-tab-count leave-tab-count-alert"
+                                      title="All pending correction requests"
+                                      aria-label="@($"{_pendingCorrectionCounts.TotalPendingCount} pending correction requests across the team")">
+                                    @_pendingCorrectionCounts.TotalPendingCount
+                                </span>
                             }
-                            @if (GetMyPendingCorrectionCount() > 0)
+                            @if (_pendingCorrectionCounts.MyPendingCount > 0)
                             {
-                                <span class="leave-tab-count leave-tab-count-user">@GetMyPendingCorrectionCount()</span>
+                                <span class="leave-tab-count leave-tab-count-user"
+                                      title="My pending correction requests"
+                                      aria-label="@($"{_pendingCorrectionCounts.MyPendingCount} of my correction requests pending")">
+                                    @_pendingCorrectionCounts.MyPendingCount
+                                </span>
                             }
                         </button>
                         <AuthorizeView Roles="@AppRoles.Admin">
                             <Authorized>
-                                <button type="button" role="tab" aria-selected="@(_tab == AttendanceTab.AdminAnalytics)" class="period-chip @(_tab == AttendanceTab.AdminAnalytics ? "active" : null)" @onclick="() => SetTab(AttendanceTab.AdminAnalytics)">
+                                <button type="button" role="tab" aria-selected="@(_tab == AttendanceTab.AdminAnalytics)" class="period-chip @(_tab == AttendanceTab.AdminAnalytics ? "active" : null)" @onclick="() => SetTabAsync(AttendanceTab.AdminAnalytics)">
                                     <span class="bi-bar-chart-line attendance-tab-icon" aria-hidden="true"></span>
                                     Analytics
                                 </button>
@@ -169,165 +173,96 @@
                         </div>
                     </div>
                 }
-                else if (_tab == AttendanceTab.History)
+                else if (_tab == AttendanceTab.Records)
                 {
-                    <div class="attendance-filter-bar card form-card">
-                        <div class="card-body">
-                            <div class="attendance-filter-row">
+                    <div class="attendance-filter-bar card attendance-records-card" aria-busy="@_isLoadingRecords">
+                        <div class="card-body attendance-records-controls">
+                            <div class="attendance-records-heading">
+                                <div>
+                                    <h5 class="card-title mb-1">@(_isAdmin ? "All attendance" : "My attendance")</h5>
+                                    <p class="attendance-section-desc mb-0">
+                                        @(_isAdmin
+                                            ? "Review team attendance, resolve correction requests, and complete missing punches."
+                                            : "Check your punches, hours worked, and correction request status.")
+                                    </p>
+                                </div>
+                                @if (_me.DeveloperId is not null)
+                                {
+                                    <BusyButton CssClass="btn btn-primary" OnClick="OpenCorrectionModal">
+                                        <span class="bi-plus-lg me-1" aria-hidden="true"></span>
+                                        Request correction
+                                    </BusyButton>
+                                }
+                            </div>
+
+                            <div class="attendance-filter-row @(_isAdmin ? "attendance-records-filter-row-admin" : "attendance-records-filter-row-user")">
                                 <div class="attendance-filter-field">
                                     <label class="form-label">From</label>
-                                    <DateInput @bind-Value="_historyFrom" DefaultValue="@DefaultFromDate" />
+                                    <DateInput @bind-Value="_recordsFrom" DefaultValue="@DefaultFromDate" />
                                 </div>
                                 <div class="attendance-filter-field">
                                     <label class="form-label">To</label>
-                                    <DateInput @bind-Value="_historyTo" DefaultValue="@DefaultToDate" />
+                                    <DateInput @bind-Value="_recordsTo" DefaultValue="@DefaultToDate" />
+                                </div>
+                                @if (_isAdmin)
+                                {
+                                    <div class="attendance-filter-field attendance-filter-field-wide">
+                                        <label class="form-label">Developer</label>
+                                        <select class="form-select" @bind="_recordsDeveloperId">
+                                            <option value="">All developers</option>
+                                            @foreach (var developer in _developers)
+                                            {
+                                                <option value="@developer.Id">@developer.Name</option>
+                                            }
+                                        </select>
+                                    </div>
+                                }
+                                <div class="attendance-filter-field">
+                                    <label class="form-label">Status</label>
+                                    <select class="form-select" @bind="_recordsStatusFilter">
+                                        <option value="@AttendanceRowStatusFilter.All">All statuses</option>
+                                        <option value="@AttendanceRowStatusFilter.Pending">Pending</option>
+                                        <option value="@AttendanceRowStatusFilter.OnTime">On time</option>
+                                        <option value="@AttendanceRowStatusFilter.Late">Late</option>
+                                        <option value="@AttendanceRowStatusFilter.EarlyLeave">Early leave</option>
+                                        <option value="@AttendanceRowStatusFilter.Incomplete">Incomplete</option>
+                                        <option value="@AttendanceRowStatusFilter.Absent">Absent</option>
+                                        <option value="@AttendanceRowStatusFilter.NoRecord">No record</option>
+                                    </select>
                                 </div>
                                 <div class="attendance-filter-action">
-                                    <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingHistory" BusyText="Loading..." OnClick="LoadHistoryAsync">Load history</BusyButton>
+                                    <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingRecords" BusyText="Loading..." OnClick="LoadAttendanceDaysAsync">Load</BusyButton>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                    @if (_isLoadingHistory)
-                    {
-                        <LoadingIndicator Text="Loading your attendance history..." Compact="true" />
-                    }
-                    else
-                    {
-                        <div class="attendance-table-scroll">
-                            <AttendanceRecordsTable Records="_myHistory" OfficeTimeZoneId="_me.OfficeTimeZoneId" />
-                        </div>
-                    }
-                }
-                else if (_tab == AttendanceTab.Corrections)
-                {
-                    <div class="attendance-corrections-panel">
-                        <div class="card form-card attendance-corrections-card">
-                            <div class="card-body">
-                                <div class="attendance-corrections-head">
-                                    <div>
-                                        <h5 class="card-title mb-1">Correction requests</h5>
-                                        <AuthorizeView Roles="@AppRoles.Admin">
-                                            <Authorized>
-                                                <p class="attendance-section-desc mb-0">Review pending requests or check past decisions.</p>
-                                            </Authorized>
-                                            <NotAuthorized>
-                                                <p class="attendance-section-desc mb-0">Track your requests and submit a new one when you miss a punch.</p>
-                                            </NotAuthorized>
-                                        </AuthorizeView>
-                                    </div>
-                                    <div class="attendance-section-actions">
-                                        <BusyButton CssClass="btn btn-primary" OnClick="OpenCorrectionModal">
-                                            <span class="bi-plus-lg me-1" aria-hidden="true"></span>
-                                            Add request
-                                        </BusyButton>
-                                        <button type="button"
-                                                class="attendance-collapse-toggle"
-                                                aria-expanded="@_correctionRequestsExpanded.ToString().ToLowerInvariant()"
-                                                aria-controls="attendance-correction-requests-content"
-                                                aria-label="@(_correctionRequestsExpanded ? "Collapse correction requests" : "Expand correction requests")"
-                                                title="@(_correctionRequestsExpanded ? "Collapse correction requests" : "Expand correction requests")"
-                                                @onclick="ToggleCorrectionRequests">
-                                            <span class="@(_correctionRequestsExpanded ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></span>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div id="attendance-correction-requests-content"
-                                     class="attendance-collapsible-content"
-                                     hidden="@(!_correctionRequestsExpanded)">
-                                    <div class="attendance-filter-row attendance-corrections-filter-row @(_isAdmin ? null : "attendance-corrections-filter-row-user")">
-                                        <div class="attendance-filter-field">
-                                            <label class="form-label">From</label>
-                                            <DateInput @bind-Value="_correctionFrom" DefaultValue="@DefaultFromDate" />
-                                        </div>
-                                        <div class="attendance-filter-field">
-                                            <label class="form-label">To</label>
-                                            <DateInput @bind-Value="_correctionTo" DefaultValue="@DefaultToDate" />
-                                        </div>
-                                        @if (_isAdmin)
-                                        {
-                                            <div class="attendance-filter-field attendance-filter-field-wide">
-                                                <label class="form-label">Developer</label>
-                                                <select class="form-select" @bind="_correctionDeveloperId">
-                                                    <option value="">All developers</option>
-                                                    @foreach (var dev in _developers)
-                                                    {
-                                                        <option value="@dev.Id">@dev.Name</option>
-                                                    }
-                                                </select>
-                                            </div>
-                                        }
-                                        <div class="attendance-filter-action">
-                                            <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingCorrections" BusyText="..." OnClick="LoadCorrectionRequestsAsync">Load</BusyButton>
-                                        </div>
-                                    </div>
-
-                                    @if (_isAdmin)
-                                    {
-                                        <div class="attendance-corrections-filter-chips" role="group" aria-label="Filter by status">
-                                            <button type="button" class="period-chip @(_correctionStatusFilter is null ? "active" : null)" @onclick="() => _correctionStatusFilter = null">All</button>
-                                            <button type="button" class="period-chip @(_correctionStatusFilter == AttendanceCorrectionStatusDto.Pending ? "active" : null)" @onclick="() => _correctionStatusFilter = AttendanceCorrectionStatusDto.Pending">Pending</button>
-                                            <button type="button" class="period-chip @(_correctionStatusFilter == AttendanceCorrectionStatusDto.Approved ? "active" : null)" @onclick="() => _correctionStatusFilter = AttendanceCorrectionStatusDto.Approved">Approved</button>
-                                            <button type="button" class="period-chip @(_correctionStatusFilter == AttendanceCorrectionStatusDto.Rejected ? "active" : null)" @onclick="() => _correctionStatusFilter = AttendanceCorrectionStatusDto.Rejected">Rejected</button>
-                                        </div>
-                                    }
-
-                                    @if (_isLoadingCorrections)
-                                    {
-                                        <LoadingIndicator Text="Loading correction requests..." Compact="true" />
-                                    }
-                                    else
-                                    {
-                                        <div class="attendance-table-scroll attendance-correction-scroll">
-                                            <AttendanceCorrectionsTable Requests="GetFilteredCorrections()"
-                                                                        CanCancel="CanCancelCorrection"
-                                                                        AllowReview="_isAdmin"
-                                                                        OfficeTimeZoneId="_me.OfficeTimeZoneId"
-                                                                        OnDetails="OpenDetails"
-                                                                        OnCancel="CancelCorrectionAsync"
-                                                                        OnApprove="id => OpenReviewModal(id, true)"
-                                                                        OnReject="id => OpenReviewModal(id, false)" />
-                                        </div>
-                                    }
-                                </div>
+                            <div class="attendance-records-presets" role="group" aria-label="Quick date range">
+                                <button type="button" class="period-chip" disabled="@_isLoadingRecords" @onclick="() => SetRecordsRangePresetAsync(0, 0)">Today</button>
+                                <button type="button" class="period-chip" disabled="@_isLoadingRecords" @onclick="() => SetRecordsRangePresetAsync(-1, -1)">Yesterday</button>
+                                <button type="button" class="period-chip" disabled="@_isLoadingRecords" @onclick="() => SetRecordsRangePresetAsync(-30, 0)">Last 30 days</button>
                             </div>
                         </div>
-                        @if (_isAdmin)
+
+                        @if (_isLoadingRecords && !_hasLoadedRecords)
                         {
-                            <div class="attendance-corrections-records">
-                                <div class="attendance-filter-bar card form-card attendance-connected-records-card">
-                                    <div class="card-body">
-                                        <div class="attendance-corrections-head">
-                                            <h5 class="card-title mb-0">All attendance records</h5>
-                                            <button type="button"
-                                                    class="attendance-collapse-toggle"
-                                                    aria-expanded="@_attendanceRecordsExpanded.ToString().ToLowerInvariant()"
-                                                    aria-controls="all-attendance-records-content"
-                                                    aria-label="@(_attendanceRecordsExpanded ? "Collapse all attendance records" : "Expand all attendance records")"
-                                                    title="@(_attendanceRecordsExpanded ? "Collapse all attendance records" : "Expand all attendance records")"
-                                                    @onclick="ToggleAttendanceRecords">
-                                                <span class="@(_attendanceRecordsExpanded ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></span>
-                                            </button>
-                                        </div>
-                                        <div id="all-attendance-records-content"
-                                             class="attendance-collapsible-content"
-                                             hidden="@(!_attendanceRecordsExpanded)">
-                                            @AdminFilterFields("All attendance records", LoadAdminRecordsAsync, includeTitle: false)
-                                            @if (_isAdminLoading)
-                                            {
-                                                <LoadingIndicator Text="Loading records..." Compact="true" />
-                                            }
-                                            else
-                                            {
-                                                <div class="attendance-table-scroll attendance-connected-records-scroll">
-                                                    <AttendanceRecordsTable Records="_adminRecords" ShowDeveloper="true" ShowAdminEdit="true" OfficeTimeZoneId="_me.OfficeTimeZoneId" OnAdminEdit="AdminQuickFixAsync" />
-                                                </div>
-                                            }
-                                        </div>
-                                    </div>
-                                </div>
+                            <div class="attendance-records-loading">
+                                <LoadingIndicator Text="Loading attendance..." Compact="true" />
                             </div>
+                        }
+
+                        @if (!_isLoadingRecords || _hasLoadedRecords)
+                        {
+                            <AttendanceDaysTable Rows="GetFilteredAttendanceDays()"
+                                                 ShowDeveloper="_isAdmin"
+                                                 AllowReview="_isAdmin"
+                                                 AllowAdminEdit="_isAdmin"
+                                                 OfficeTimeZoneId="_me.OfficeTimeZoneId"
+                                                 CanRequestCorrection="CanRequestCorrection"
+                                                 CanCancelCorrection="CanCancelCorrection"
+                                                 OnDetails="OpenDetailsAsync"
+                                                 OnRequestCorrection="OpenCorrectionModalForDayAsync"
+                                                 OnCancel="CancelCorrectionAsync"
+                                                 OnApprove="id => OpenReviewModal(id, true)"
+                                                 OnReject="id => OpenReviewModal(id, false)"
+                                                 OnAdminEdit="AdminQuickFixAsync" />
                         }
                     </div>
                 }
@@ -335,8 +270,8 @@
                 {
                     <AuthorizeView Roles="@AppRoles.Admin">
                         <Authorized>
-                            @AdminFilterBar("Analytics period", LoadAnalyticsAsync)
-                            @if (_isAdminLoading)
+                            @AnalyticsFilterBar()
+                            @if (_isLoadingAnalytics)
                             {
                                 <LoadingIndicator Text="Loading analytics..." Compact="true" />
                             }
@@ -413,7 +348,7 @@
                 else if (_hasCheckedCorrectionPunches && !_canRequestPunchIn && !_canRequestPunchOut)
                 {
                     <div class="attendance-correction-state alert alert-success mb-0" role="status">
-                        Punch in and punch out already exist for this date.
+                        @(_correctionUnavailableMessage ?? "Punch in and punch out already exist for this date.")
                     </div>
                 }
                 else if (_hasCheckedCorrectionPunches)
@@ -488,110 +423,161 @@
     </ModalDialog>
 
     <ModalDialog IsVisible="_showDetailsModal"
-                 Title="Correction details"
+                 Title="Attendance details"
                  OnClose="CloseDetails">
         <ChildContent>
-            @if (GetDetailsCorrection() is { } details)
+            @if (_isLoadingDetails)
             {
-                <div class="attendance-details-grid">
-                    <div>
-                        <span class="attendance-details-label">Developer</span>
-                        <span class="attendance-details-value">@details.DeveloperName</span>
-                    </div>
-                    <div>
-                        <span class="attendance-details-label">Date</span>
-                        <span class="attendance-details-value">@details.WorkDate.ToString("ddd, MMM d, yyyy")</span>
-                    </div>
-                    <div>
-                        <span class="attendance-details-label">Requested punch in</span>
-                        <span class="attendance-details-value">@AttendanceFormatter.FormatTime(details.RequestedPunchInUtc, _me.OfficeTimeZoneId)</span>
-                    </div>
-                    <div>
-                        <span class="attendance-details-label">Requested punch out</span>
-                        <span class="attendance-details-value">@AttendanceFormatter.FormatTime(details.RequestedPunchOutUtc, _me.OfficeTimeZoneId)</span>
-                    </div>
-                    <div>
-                        <span class="attendance-details-label">Status</span>
-                        <span class="attendance-badge @AttendanceFormatter.CorrectionStatusClass(details.Status)">@AttendanceFormatter.CorrectionStatusLabel(details.Status)</span>
-                    </div>
-                    <div>
-                        <span class="attendance-details-label">Reason</span>
-                        <p class="attendance-details-copy mb-0">@details.Reason</p>
-                    </div>
-                    <div>
-                        <span class="attendance-details-label">Submitted on</span>
-                        <span class="attendance-details-value">@AttendanceFormatter.FormatDateTime(details.CreatedAtUtc, _me.OfficeTimeZoneId)</span>
-                    </div>
-                    @if (details.ReviewedAtUtc is not null)
-                    {
+                <LoadingIndicator Text="Loading attendance details..." Compact="true" />
+            }
+            else if (!string.IsNullOrWhiteSpace(_detailsError))
+            {
+                <div class="alert alert-danger mb-0" role="alert">@_detailsError</div>
+            }
+            else if (_attendanceDetails is { } details)
+            {
+                <section class="attendance-details-section">
+                    <h6>Current attendance</h6>
+                    <div class="attendance-details-grid">
                         <div>
-                            <span class="attendance-details-label">Reviewed on</span>
-                            <span class="attendance-details-value">@AttendanceFormatter.FormatDateTime(details.ReviewedAtUtc, _me.OfficeTimeZoneId)</span>
+                            <span class="attendance-details-label">Developer</span>
+                            <span class="attendance-details-value">@details.Row.DeveloperName</span>
                         </div>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(details.ReviewerComment))
-                    {
                         <div>
-                            <span class="attendance-details-label">Reviewer comment</span>
-                            <p class="attendance-details-copy mb-0">@details.ReviewerComment</p>
+                            <span class="attendance-details-label">Date</span>
+                            <span class="attendance-details-value">@details.Row.WorkDate.ToString("ddd, MMM d, yyyy")</span>
                         </div>
-                    }
-                </div>
-
-                @if (CanCancelCorrection(details) || CanReviewCorrection(details))
-                {
-                    <div class="attendance-details-actions">
-                        @if (CanCancelCorrection(details))
+                        <div>
+                            <span class="attendance-details-label">Punch in</span>
+                            <span class="attendance-details-value">@AttendanceFormatter.FormatTime(details.Row.PunchInUtc, _me.OfficeTimeZoneId)</span>
+                        </div>
+                        @if (details.Row.PunchInIsCorrected)
                         {
-                            <button type="button" class="btn btn-outline-danger" @onclick="() => CancelFromDetailsAsync(details.Id)">Cancel request</button>
-                        }
-                        @if (CanReviewCorrection(details))
-                        {
-                            <div class="attendance-details-actions-row">
-                                <button type="button" class="btn btn-success" @onclick="() => ReviewFromDetails(details.Id, true)">Approve</button>
-                                <button type="button" class="btn btn-danger" @onclick="() => ReviewFromDetails(details.Id, false)">Reject</button>
+                            <div>
+                                <span class="attendance-details-label">Punch in corrected</span>
+                                <span class="attendance-details-value">@AttendanceFormatter.FormatCorrectedAt(details.Row.PunchInCorrectedAtUtc, _me.OfficeTimeZoneId)</span>
                             </div>
                         }
+                        <div>
+                            <span class="attendance-details-label">Punch out</span>
+                            <span class="attendance-details-value">@AttendanceFormatter.FormatTime(details.Row.PunchOutUtc, _me.OfficeTimeZoneId)</span>
+                        </div>
+                        @if (details.Row.PunchOutIsCorrected)
+                        {
+                            <div>
+                                <span class="attendance-details-label">Punch out corrected</span>
+                                <span class="attendance-details-value">@AttendanceFormatter.FormatCorrectedAt(details.Row.PunchOutCorrectedAtUtc, _me.OfficeTimeZoneId)</span>
+                            </div>
+                        }
+                        <div>
+                            <span class="attendance-details-label">Worked</span>
+                            <span class="attendance-details-value">@AttendanceFormatter.FormatWorkHours(details.Row.WorkHours)</span>
+                        </div>
+                        <div>
+                            <span class="attendance-details-label">Record status</span>
+                            <span class="attendance-badge @DetailsStatusClass(details.Row)">@DetailsStatusLabel(details.Row)</span>
+                        </div>
                     </div>
-                }
+                </section>
+
+                <section class="attendance-details-section">
+                    <h6>Correction history <span class="text-muted">(@details.CorrectionRequests.Count)</span></h6>
+                    @if (details.CorrectionRequests.Count == 0)
+                    {
+                        <p class="text-muted mb-0">No correction requests were submitted for this date.</p>
+                    }
+                    else
+                    {
+                        <div class="attendance-correction-history">
+                            @foreach (var request in details.CorrectionRequests)
+                            {
+                                <article class="attendance-correction-history-item" @key="request.Id">
+                                    <div class="attendance-correction-history-head">
+                                        <span class="attendance-badge @AttendanceFormatter.CorrectionStatusClass(request.Status)">@AttendanceFormatter.CorrectionStatusLabel(request.Status)</span>
+                                        <span class="text-muted">@AttendanceFormatter.FormatDateTime(request.CreatedAtUtc, _me.OfficeTimeZoneId)</span>
+                                    </div>
+                                    <div class="attendance-details-grid">
+                                        <div>
+                                            <span class="attendance-details-label">Requested punch in</span>
+                                            <span class="attendance-details-value">@AttendanceFormatter.FormatTime(request.RequestedPunchInUtc, _me.OfficeTimeZoneId)</span>
+                                        </div>
+                                        <div>
+                                            <span class="attendance-details-label">Requested punch out</span>
+                                            <span class="attendance-details-value">@AttendanceFormatter.FormatTime(request.RequestedPunchOutUtc, _me.OfficeTimeZoneId)</span>
+                                        </div>
+                                        <div>
+                                            <span class="attendance-details-label">Reason</span>
+                                            <p class="attendance-details-copy mb-0">@request.Reason</p>
+                                        </div>
+                                        @if (request.ReviewedAtUtc is not null)
+                                        {
+                                            <div>
+                                                <span class="attendance-details-label">Reviewed on</span>
+                                                <span class="attendance-details-value">@AttendanceFormatter.FormatDateTime(request.ReviewedAtUtc, _me.OfficeTimeZoneId)</span>
+                                            </div>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(request.ReviewerComment))
+                                        {
+                                            <div>
+                                                <span class="attendance-details-label">Reviewer comment</span>
+                                                <p class="attendance-details-copy mb-0">@request.ReviewerComment</p>
+                                            </div>
+                                        }
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
             }
         </ChildContent>
     </ModalDialog>
 </div>
 
 @code {
-    private enum AttendanceTab { Today, History, Corrections, AdminAnalytics }
+    private enum AttendanceTab { Today, Records, AdminAnalytics }
+
+    private enum AttendanceRowStatusFilter
+    {
+        All,
+        Pending,
+        OnTime,
+        Late,
+        EarlyLeave,
+        Incomplete,
+        Absent,
+        NoRecord
+    }
 
     private AttendanceTab _tab = AttendanceTab.Today;
     private AttendanceMeDto _me = new(null, null, false, AttendanceNextActionDto.PunchIn, null, "Asia/Dhaka");
     private AttendanceAnalyticsSummaryDto? _analytics;
-    private IReadOnlyList<AttendanceRecordDto> _myHistory = [];
-    private IReadOnlyList<AttendanceRecordDto> _adminRecords = [];
-    private IReadOnlyList<AttendanceCorrectionRequestDto> _corrections = [];
+    private AttendancePendingCorrectionCountsDto _pendingCorrectionCounts = new(0, 0);
+    private IReadOnlyList<AttendanceDayRowDto> _attendanceDays = [];
     private IReadOnlyList<DeveloperDto> _developers = [];
 
     private bool _isAdmin;
     private bool _isLoading = true;
     private bool _isPunching;
-    private bool _isLoadingHistory;
+    private bool _isLoadingRecords;
+    private bool _hasLoadedRecords;
+    private bool _isLoadingAnalytics;
     private bool _isSubmittingCorrection;
-    private bool _isLoadingCorrections;
     private bool _isCheckingCorrectionPunches;
     private bool _hasCheckedCorrectionPunches;
     private bool _canRequestPunchIn;
     private bool _canRequestPunchOut;
-    private bool _isAdminLoading;
-    private bool _correctionRequestsExpanded = true;
-    private bool _attendanceRecordsExpanded = true;
 
-    private DateOnly _historyFrom;
-    private DateOnly _historyTo;
-    private DateOnly _adminFrom;
-    private DateOnly _adminTo;
-    private string? _adminDeveloperId;
-    private string? _correctionDeveloperId;
-    private AttendanceCorrectionStatusDto? _correctionStatusFilter;
-    private string? _appliedCorrectionDeveloperId;
+    private DateOnly _recordsFrom;
+    private DateOnly _recordsTo;
+    private string? _recordsDeveloperId;
+    private AttendanceRowStatusFilter _recordsStatusFilter;
+    private DateOnly _appliedRecordsFrom;
+    private DateOnly _appliedRecordsTo;
+    private Guid? _appliedRecordsDeveloperId;
+    private AttendanceRowStatusFilter _appliedRecordsStatusFilter;
+    private DateOnly _analyticsFrom;
+    private DateOnly _analyticsTo;
     private string _maxCorrectionDate = DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd");
     private string _minCorrectionDate = DateOnly.FromDateTime(DateTime.Today).AddDays(-30).ToString("yyyy-MM-dd");
 
@@ -602,7 +588,10 @@
 
     private bool _showCorrectionModal;
     private bool _showDetailsModal;
-    private Guid? _detailsCorrectionId;
+    private bool _isLoadingDetails;
+    private AttendanceDayDetailsDto? _attendanceDetails;
+    private string? _detailsError;
+    private int _detailsLoadVersion;
     private bool _showReviewModal;
     private bool _isReviewingCorrection;
     private bool _reviewIsApprove;
@@ -610,10 +599,6 @@
     private string _reviewComment = string.Empty;
     private string? _reviewError;
 
-    private DateOnly _correctionFrom;
-    private DateOnly _correctionTo;
-    private DateOnly _appliedCorrectionFrom;
-    private DateOnly _appliedCorrectionTo;
     private DateOnly _correctionDate = DateOnly.FromDateTime(DateTime.Today);
     private bool _requestPunchIn = true;
     private bool _requestPunchOut;
@@ -621,11 +606,14 @@
     private TimeOnly _correctionPunchOutTime = new(18, 0);
     private string _correctionReason = string.Empty;
     private string? _correctionPunchCheckError;
+    private string? _correctionUnavailableMessage;
     private int _correctionPunchCheckVersion;
     private Timer? _punchWindowTimer;
     private Timer? _meRefreshTimer;
     private bool _isRefreshingMe;
     private int _meVersion;
+    private int _pendingCountsLoadVersion;
+    private Task? _recordsPrefetchTask;
     private string? _refreshError;
 
     protected override async Task OnInitializedAsync()
@@ -637,18 +625,18 @@
         // in the office's time zone, not the viewer's machine time zone.
         await LoadAsync();
         ApplyDefaultDateRanges();
+        _ = LoadPendingCorrectionCountsAsync();
+        // Start the cold Records query while the user is still on Today. Opening Records
+        // can then reuse this result instead of paying EF/query initialization latency.
+        _recordsPrefetchTask = PrefetchAttendanceDaysAsync();
     }
 
     private void ApplyDefaultDateRanges()
     {
-        _historyFrom = DefaultFromDate;
-        _historyTo = DefaultToDate;
-        _adminFrom = DefaultFromDate;
-        _adminTo = DefaultToDate;
-        _correctionFrom = DefaultFromDate;
-        _correctionTo = DefaultToDate;
-        _appliedCorrectionFrom = _correctionFrom;
-        _appliedCorrectionTo = _correctionTo;
+        _recordsFrom = DefaultFromDate;
+        _recordsTo = DefaultToDate;
+        _analyticsFrom = DefaultFromDate;
+        _analyticsTo = DefaultToDate;
         _correctionDate = DefaultToDate;
     }
 
@@ -738,71 +726,46 @@
         return DateTime.Today.Add(time.Value.ToTimeSpan()).ToString("h:mm tt");
     }
 
-    private RenderFragment AdminFilterBar(string title, Func<Task> loadAction) => @<div class="attendance-filter-bar card form-card">
+    private RenderFragment AnalyticsFilterBar() => @<div class="attendance-filter-bar card form-card">
         <div class="card-body">
-            @AdminFilterFields(title, loadAction)
+            <span class="filter-section-label attendance-filter-title">Analytics period</span>
+            <div class="attendance-filter-row">
+                <div class="attendance-filter-field">
+                    <label class="form-label">From</label>
+                    <DateInput @bind-Value="_analyticsFrom" DefaultValue="@DefaultFromDate" />
+                </div>
+                <div class="attendance-filter-field">
+                    <label class="form-label">To</label>
+                    <DateInput @bind-Value="_analyticsTo" DefaultValue="@DefaultToDate" />
+                </div>
+                <div class="attendance-filter-action">
+                    <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingAnalytics" BusyText="Loading..." OnClick="LoadAnalyticsAsync">Load</BusyButton>
+                </div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap mt-2">
+                <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(0, 0)">Today</button>
+                <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(-1, -1)">Yesterday</button>
+                <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(-30, 0)">Last 30 days</button>
+            </div>
         </div>
     </div>;
-
-    private RenderFragment AdminFilterFields(string title, Func<Task> loadAction, bool includeTitle = true) => @<text>
-        @if (includeTitle)
-        {
-            <span class="filter-section-label attendance-filter-title">@title</span>
-        }
-        <div class="attendance-filter-row attendance-filter-row-admin">
-            <div class="attendance-filter-field">
-                <label class="form-label">From</label>
-                <DateInput @bind-Value="_adminFrom" DefaultValue="@DefaultFromDate" />
-            </div>
-            <div class="attendance-filter-field">
-                <label class="form-label">To</label>
-                <DateInput @bind-Value="_adminTo" DefaultValue="@DefaultToDate" />
-            </div>
-            <div class="attendance-filter-field attendance-filter-field-wide">
-                <label class="form-label">Developer</label>
-                <select class="form-select" @bind="_adminDeveloperId">
-                    <option value="">All developers</option>
-                    @foreach (var dev in _developers) { <option value="@dev.Id">@dev.Name</option> }
-                </select>
-            </div>
-            <div class="attendance-filter-action">
-                <BusyButton CssClass="btn btn-primary" IsBusy="_isAdminLoading" BusyText="..." OnClick="loadAction">Load</BusyButton>
-            </div>
-        </div>
-        <div class="d-flex gap-2 flex-wrap mt-2">
-            <button type="button" class="period-chip" disabled="@_isAdminLoading" @onclick="() => SetAdminRangePresetAsync(0, 0, loadAction)">Today</button>
-            <button type="button" class="period-chip" disabled="@_isAdminLoading" @onclick="() => SetAdminRangePresetAsync(-1, -1, loadAction)">Yesterday</button>
-            <button type="button" class="period-chip" disabled="@_isAdminLoading" @onclick="() => SetAdminRangePresetAsync(-30, 0, loadAction)">Last 30 days</button>
-        </div>
-    </text>;
-
-    private void ToggleCorrectionRequests() =>
-        _correctionRequestsExpanded = !_correctionRequestsExpanded;
-
-    private void ToggleAttendanceRecords() =>
-        _attendanceRecordsExpanded = !_attendanceRecordsExpanded;
 
     private async Task LoadAsync()
     {
         _isLoading = true;
         try
         {
-            ApplyMe(await AttendanceApi.GetMeAsync());
+            var meTask = AttendanceApi.GetMeAsync();
+            var authStateTask = AuthStateProvider.GetAuthenticationStateAsync();
+            await Task.WhenAll(meTask, authStateTask);
 
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            ApplyMe(await meTask);
+            var authState = await authStateTask;
             _isAdmin = authState.User.IsInRole(AppRoles.Admin);
 
             if (_isAdmin)
             {
-                var developersTask = DeveloperApi.GetDevelopersAsync();
-                var correctionsTask = AttendanceApi.GetCorrectionRequestsAsync();
-                await Task.WhenAll(developersTask, correctionsTask);
-                _developers = await developersTask;
-                _corrections = await correctionsTask;
-            }
-            else
-            {
-                _corrections = await AttendanceApi.GetMyCorrectionRequestsAsync();
+                _developers = await DeveloperApi.GetDevelopersAsync();
             }
         }
         catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
@@ -894,12 +857,9 @@
             if (result is not null)
             {
                 await RefreshMeBestEffortAsync();
-                // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
-                await LoadHistoryAsync(notifyOnError: false);
-                var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-                if (authState.User.IsInRole(AppRoles.Admin))
+                await RefreshAttendanceDaysIfLoadedAsync();
+                if (_isAdmin && _analytics is not null)
                 {
-                    await LoadAdminRecordsAsync(notifyOnError: false);
                     await LoadAnalyticsAsync(notifyOnError: false);
                 }
 
@@ -912,20 +872,130 @@
         finally { _isPunching = false; }
     }
 
-    private Task LoadHistoryAsync() => LoadHistoryAsync(notifyOnError: true);
-
-    private async Task LoadHistoryAsync(bool notifyOnError)
+    private Task LoadAttendanceDaysAsync()
     {
-        _isLoadingHistory = true;
-        try { _myHistory = await AttendanceApi.GetMyHistoryAsync(_historyFrom, _historyTo); }
-        catch (Exception ex) { NoteRefreshError(ex, notifyOnError); }
-        finally { _isLoadingHistory = false; }
+        // Status is evaluated client-side, but it is staged like the date and developer
+        // controls so the visible grid changes only after a successful Load.
+        Guid? developerId = _isAdmin && Guid.TryParse(_recordsDeveloperId, out var id) ? id : null;
+        _ = LoadPendingCorrectionCountsAsync();
+        return LoadAttendanceDaysAsync(
+            _recordsFrom,
+            _recordsTo,
+            developerId,
+            _recordsStatusFilter,
+            applyFilters: true,
+            notifyOnError: true);
+    }
+
+    private Task PrefetchAttendanceDaysAsync() =>
+        LoadAttendanceDaysAsync(
+            _recordsFrom,
+            _recordsTo,
+            developerId: null,
+            _recordsStatusFilter,
+            applyFilters: true,
+            notifyOnError: false,
+            trackRefreshError: false);
+
+    private async Task LoadAttendanceDaysAsync(
+        DateOnly from,
+        DateOnly to,
+        Guid? developerId,
+        AttendanceRowStatusFilter statusFilter,
+        bool applyFilters,
+        bool notifyOnError,
+        bool trackRefreshError = true)
+    {
+        _isLoadingRecords = true;
+        try
+        {
+            _attendanceDays = await AttendanceApi.GetAttendanceDaysAsync(from, to, developerId);
+            if (applyFilters)
+            {
+                _appliedRecordsFrom = from;
+                _appliedRecordsTo = to;
+                _appliedRecordsDeveloperId = developerId;
+                _appliedRecordsStatusFilter = statusFilter;
+            }
+
+            _hasLoadedRecords = true;
+        }
+        catch (Exception ex)
+        {
+            if (trackRefreshError)
+            {
+                NoteRefreshError(ex, notifyOnError);
+            }
+        }
+        finally { _isLoadingRecords = false; }
+    }
+
+    private async Task RefreshAttendanceDaysIfLoadedAsync()
+    {
+        if (_hasLoadedRecords)
+        {
+            await LoadAttendanceDaysAsync(
+                _appliedRecordsFrom,
+                _appliedRecordsTo,
+                _appliedRecordsDeveloperId,
+                _appliedRecordsStatusFilter,
+                applyFilters: false,
+                notifyOnError: false);
+        }
+    }
+
+    private async Task LoadPendingCorrectionCountsAsync(bool trackRefreshError = false)
+    {
+        var loadVersion = ++_pendingCountsLoadVersion;
+        try
+        {
+            var counts = await AttendanceApi.GetPendingCorrectionCountsAsync();
+            if (loadVersion != _pendingCountsLoadVersion)
+            {
+                return;
+            }
+
+            _pendingCorrectionCounts = counts;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            if (trackRefreshError && loadVersion == _pendingCountsLoadVersion)
+            {
+                NoteRefreshError(ex, notify: false);
+            }
+        }
+    }
+
+    private async Task SetRecordsRangePresetAsync(int fromOffsetDays, int toOffsetDays)
+    {
+        if (_isLoadingRecords)
+        {
+            return;
+        }
+
+        var today = GetOfficeToday();
+        _recordsFrom = today.AddDays(fromOffsetDays);
+        _recordsTo = today.AddDays(toOffsetDays);
+        await LoadAttendanceDaysAsync();
     }
 
     private async Task OpenCorrectionModal()
     {
+        _correctionDate = GetOfficeToday();
+        await ShowCorrectionModalAsync();
+    }
+
+    private async Task ShowCorrectionModalAsync()
+    {
         _showCorrectionModal = true;
         await CheckCorrectionPunchesAsync();
+    }
+
+    private async Task OpenCorrectionModalForDayAsync(AttendanceDayRowDto row)
+    {
+        _correctionDate = row.WorkDate;
+        await ShowCorrectionModalAsync();
     }
 
     private void CloseCorrectionModal()
@@ -952,18 +1022,31 @@
         _requestPunchIn = false;
         _requestPunchOut = false;
         _correctionPunchCheckError = null;
+        _correctionUnavailableMessage = null;
 
         try
         {
-            var records = await AttendanceApi.GetMyHistoryAsync(date, date);
+            if (_me.DeveloperId is null)
+            {
+                throw new InvalidOperationException("Your login is not linked to a developer profile.");
+            }
+
+            var details = await AttendanceApi.GetAttendanceDayDetailsAsync(_me.DeveloperId.Value, date);
             if (checkVersion != _correctionPunchCheckVersion || !_showCorrectionModal)
             {
                 return;
             }
 
-            var record = records.FirstOrDefault(r => r.WorkDate == date);
-            _canRequestPunchIn = record?.PunchInUtc is null;
-            _canRequestPunchOut = record?.PunchOutUtc is null;
+            if (details?.Row.HasPendingCorrection == true)
+            {
+                _correctionUnavailableMessage = "A pending correction request already exists for this date.";
+            }
+            else
+            {
+                _canRequestPunchIn = details?.Row.PunchInUtc is null;
+                _canRequestPunchOut = details?.Row.PunchOutUtc is null;
+            }
+
             _hasCheckedCorrectionPunches = true;
         }
         catch (Exception ex)
@@ -1010,24 +1093,9 @@
                 _requestPunchIn ? ToUtc(_correctionDate, _correctionPunchInTime) : null,
                 _requestPunchOut ? ToUtc(_correctionDate, _correctionPunchOutTime) : null,
                 _correctionReason));
-            // TEMPORARY: manually refresh every attendance list after each mutation so all
-            // tabs show fresh data in this session. Cross-session views still go stale (no
-            // SignalR/polling yet) — decide on a real-time strategy (SignalR hub vs polling)
-            // before treating this as final.
-            try
-            {
-                await LoadCorrectionsAsync();
-            }
-            catch (Exception ex)
-            {
-                NoteRefreshError(ex, notify: false);
-            }
-
-            await LoadHistoryAsync(notifyOnError: false);
-            if (_isAdmin)
-            {
-                await LoadAdminRecordsAsync(notifyOnError: false);
-            }
+            await Task.WhenAll(
+                RefreshAttendanceDaysIfLoadedAsync(),
+                LoadPendingCorrectionCountsAsync(trackRefreshError: true));
 
             _correctionReason = string.Empty;
             _showCorrectionModal = false;
@@ -1040,124 +1108,83 @@
         finally { _isSubmittingCorrection = false; }
     }
 
-    private async Task LoadCorrectionsAsync()
+    private Task LoadAnalyticsAsync() => LoadAnalyticsAsync(notifyOnError: true);
+
+    private async Task LoadAnalyticsAsync(bool notifyOnError)
     {
-        _corrections = _isAdmin
-            ? await AttendanceApi.GetCorrectionRequestsAsync()
-            : await AttendanceApi.GetMyCorrectionRequestsAsync();
-    }
-
-    private async Task LoadCorrectionRequestsAsync()
-    {
-        var from = _correctionFrom;
-        var to = _correctionTo;
-        var developerId = _correctionDeveloperId;
-
-        _isLoadingCorrections = true;
-        try
-        {
-            await LoadCorrectionsAsync();
-            _appliedCorrectionFrom = from;
-            _appliedCorrectionTo = to;
-            _appliedCorrectionDeveloperId = developerId;
-        }
-        catch (Exception ex)
-        {
-            NoteRefreshError(ex, notify: true);
-        }
-        finally
-        {
-            _isLoadingCorrections = false;
-        }
-    }
-
-    private async Task RefreshCorrectionsAsync()
-    {
-        try
-        {
-            await LoadCorrectionsAsync();
-        }
-        catch (Exception ex)
-        {
-            NoteRefreshError(ex, notify: false);
-        }
-
-        StateHasChanged();
-    }
-
-    private Task LoadAdminRecordsAsync() => LoadAdminRecordsAsync(notifyOnError: true);
-
-    private async Task LoadAdminRecordsAsync(bool notifyOnError)
-    {
-        _isAdminLoading = true;
-        try
-        {
-            Guid? developerId = Guid.TryParse(_adminDeveloperId, out var id) ? id : null;
-            _adminRecords = await AttendanceApi.GetRecordsAsync(_adminFrom, _adminTo, developerId);
-        }
+        _isLoadingAnalytics = true;
+        try { _analytics = await AttendanceApi.GetAnalyticsAsync(_analyticsFrom, _analyticsTo); }
         catch (Exception ex) { NoteRefreshError(ex, notifyOnError); }
-        finally { _isAdminLoading = false; }
+        finally { _isLoadingAnalytics = false; }
     }
 
-    private async Task SetAdminRangePresetAsync(int fromOffsetDays, int toOffsetDays, Func<Task> loadAction)
+    private async Task SetAnalyticsRangePresetAsync(int fromOffsetDays, int toOffsetDays)
     {
-        if (_isAdminLoading)
+        if (_isLoadingAnalytics)
         {
             return;
         }
 
         var today = GetOfficeToday();
-        _adminFrom = today.AddDays(fromOffsetDays);
-        _adminTo = today.AddDays(toOffsetDays);
-        await loadAction();
+        _analyticsFrom = today.AddDays(fromOffsetDays);
+        _analyticsTo = today.AddDays(toOffsetDays);
+        await LoadAnalyticsAsync();
     }
 
-    private Task LoadAnalyticsAsync() => LoadAnalyticsAsync(notifyOnError: true);
-
-    private async Task LoadAnalyticsAsync(bool notifyOnError)
+    private async Task OpenDetailsAsync(AttendanceDayRowDto row)
     {
-        _isAdminLoading = true;
-        try { _analytics = await AttendanceApi.GetAnalyticsAsync(_adminFrom, _adminTo); }
-        catch (Exception ex) { NoteRefreshError(ex, notifyOnError); }
-        finally { _isAdminLoading = false; }
-    }
-
-    private void OpenDetails(Guid id)
-    {
-        _detailsCorrectionId = id;
+        var loadVersion = ++_detailsLoadVersion;
         _showDetailsModal = true;
+        _isLoadingDetails = true;
+        _detailsError = null;
+        _attendanceDetails = null;
+
+        try
+        {
+            var details = await AttendanceApi.GetAttendanceDayDetailsAsync(row.DeveloperId, row.WorkDate);
+            if (loadVersion == _detailsLoadVersion && _showDetailsModal)
+            {
+                _attendanceDetails = details;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (loadVersion == _detailsLoadVersion && _showDetailsModal)
+            {
+                _detailsError = ex.Message;
+            }
+        }
+        finally
+        {
+            if (loadVersion == _detailsLoadVersion)
+            {
+                _isLoadingDetails = false;
+            }
+        }
     }
 
     private void CloseDetails()
     {
+        _detailsLoadVersion++;
         _showDetailsModal = false;
-        _detailsCorrectionId = null;
+        _isLoadingDetails = false;
+        _attendanceDetails = null;
+        _detailsError = null;
     }
 
-    private AttendanceCorrectionRequestDto? GetDetailsCorrection() =>
-        _detailsCorrectionId is null
-            ? null
-            : _corrections.FirstOrDefault(r => r.Id == _detailsCorrectionId.Value);
-
-    // Admins may only cancel their own requests (they approve or reject everyone else's).
-    private bool CanCancelCorrection(AttendanceCorrectionRequestDto request) =>
-        request.Status == AttendanceCorrectionStatusDto.Pending
-        && (!_isAdmin || request.DeveloperId == _me.DeveloperId);
-
-    private bool CanReviewCorrection(AttendanceCorrectionRequestDto request) =>
-        _isAdmin && request.Status == AttendanceCorrectionStatusDto.Pending;
-
-    private async Task CancelFromDetailsAsync(Guid id)
+    private bool CanRequestCorrection(AttendanceDayRowDto row)
     {
-        CloseDetails();
-        await CancelCorrectionAsync(id);
+        var today = GetOfficeToday();
+        return row.DeveloperId == _me.DeveloperId
+            && !row.HasPendingCorrection
+            && (row.PunchInUtc is null || row.PunchOutUtc is null)
+            && row.WorkDate <= today
+            && today.DayNumber - row.WorkDate.DayNumber <= 30;
     }
 
-    private void ReviewFromDetails(Guid id, bool approve)
-    {
-        CloseDetails();
-        OpenReviewModal(id, approve);
-    }
+    // Cancellation remains ownership-scoped, including for administrators.
+    private bool CanCancelCorrection(AttendanceDayRowDto row) =>
+        row.HasPendingCorrection && row.DeveloperId == _me.DeveloperId;
 
     private void OpenReviewModal(Guid id, bool approve)
     {
@@ -1193,7 +1220,6 @@
 
         try
         {
-            // TEMPORARY: same-session refresh only (see note in SubmitCorrectionAsync).
             var successMessage = "Correction request rejected.";
             if (_reviewIsApprove)
             {
@@ -1228,16 +1254,17 @@
 
     private async Task RefreshAfterCorrectionReviewAsync(bool wasApproved)
     {
-        // Refresh the connected grid first and independently of the other views. A failure
-        // to reload correction requests must not prevent attendance records from updating.
-        await LoadAdminRecordsAsync(notifyOnError: false);
-        await RefreshCorrectionsAsync();
-        await LoadHistoryAsync(notifyOnError: false);
+        await Task.WhenAll(
+            RefreshAttendanceDaysIfLoadedAsync(),
+            LoadPendingCorrectionCountsAsync(trackRefreshError: true));
 
         if (wasApproved)
         {
             await RefreshMeBestEffortAsync();
-            await LoadAnalyticsAsync(notifyOnError: false);
+            if (_analytics is not null)
+            {
+                await LoadAnalyticsAsync(notifyOnError: false);
+            }
         }
     }
 
@@ -1247,81 +1274,94 @@
         try
         {
             await AttendanceApi.CancelCorrectionRequestAsync(id);
-            await LoadCorrectionsAsync();
+            await Task.WhenAll(
+                RefreshAttendanceDaysIfLoadedAsync(),
+                LoadPendingCorrectionCountsAsync(trackRefreshError: true));
             SetActionMessage("Correction request cancelled.");
         }
         catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
     }
 
-    private async Task AdminQuickFixAsync(AttendanceRecordDto record)
+    private async Task AdminQuickFixAsync(AttendanceDayRowDto row)
     {
         _refreshError = null;
         try
         {
-            await AttendanceApi.AdminUpsertRecordAsync(record.DeveloperId, record.WorkDate,
+            await AttendanceApi.AdminUpsertRecordAsync(row.DeveloperId, row.WorkDate,
                 new AdminUpsertAttendanceRecordRequest(
-                    record.PunchInUtc ?? ToUtc(record.WorkDate, new TimeOnly(9, 0)),
-                    record.PunchOutUtc ?? ToUtc(record.WorkDate, new TimeOnly(18, 0))));
+                    row.PunchInUtc ?? ToUtc(row.WorkDate, new TimeOnly(9, 0)),
+                    row.PunchOutUtc ?? ToUtc(row.WorkDate, new TimeOnly(18, 0))));
             await RefreshMeBestEffortAsync();
-            await LoadAdminRecordsAsync(notifyOnError: false);
-            await LoadHistoryAsync(notifyOnError: false);
-            await LoadAnalyticsAsync(notifyOnError: false);
+            await RefreshAttendanceDaysIfLoadedAsync();
+            if (_analytics is not null)
+            {
+                await LoadAnalyticsAsync(notifyOnError: false);
+            }
             SetActionMessage("Attendance record updated.");
         }
         catch (Exception ex) { Toast.Error(ex.Message, key: ToastKeys.Attendance); }
     }
 
-    private void SetTab(AttendanceTab tab)
+    private async Task SetTabAsync(AttendanceTab tab)
     {
         _tab = tab;
-        if (tab == AttendanceTab.History && _myHistory.Count == 0) _ = LoadHistoryAsync();
-        else if (tab == AttendanceTab.Corrections)
+        if (tab == AttendanceTab.Records)
         {
-            _ = RefreshCorrectionsAsync();
-            // Admins also get the all-records grid below the corrections table.
-            if (_isAdmin && _adminRecords.Count == 0) _ = LoadAdminRecordsAsync();
-        }
-        else if (tab == AttendanceTab.AdminAnalytics && _analytics is null) _ = LoadAnalyticsAsync();
-    }
-
-    private int GetAllPendingCorrectionCount() =>
-        _corrections.Count(r => r.Status == AttendanceCorrectionStatusDto.Pending);
-
-    private int GetMyPendingCorrectionCount()
-    {
-        if (!_isAdmin)
-        {
-            return GetAllPendingCorrectionCount();
-        }
-
-        return _me.DeveloperId is null
-            ? 0
-            : _corrections.Count(r => r.Status == AttendanceCorrectionStatusDto.Pending
-                                       && r.DeveloperId == _me.DeveloperId);
-    }
-
-    private IReadOnlyList<AttendanceCorrectionRequestDto> GetFilteredCorrections()
-    {
-        IEnumerable<AttendanceCorrectionRequestDto> query = _corrections
-            .Where(r => r.WorkDate >= _appliedCorrectionFrom && r.WorkDate <= _appliedCorrectionTo);
-
-        if (_isAdmin)
-        {
-            if (_correctionStatusFilter is not null)
+            if (_recordsPrefetchTask is { } prefetchTask)
             {
-                query = query.Where(r => r.Status == _correctionStatusFilter.Value);
+                await prefetchTask;
+                if (ReferenceEquals(_recordsPrefetchTask, prefetchTask))
+                {
+                    _recordsPrefetchTask = null;
+                }
             }
 
-            if (Guid.TryParse(_appliedCorrectionDeveloperId, out var developerId))
+            if (!_hasLoadedRecords && !_isLoadingRecords)
             {
-                query = query.Where(r => r.DeveloperId == developerId);
+                await LoadAttendanceDaysAsync();
+            }
+            else
+            {
+                _ = LoadPendingCorrectionCountsAsync();
             }
         }
-
-        // Ordering (pending first, newest first) is applied by the API for both the admin
-        // and the developer list, so filtering never re-sorts.
-        return query.ToList();
+        else if (tab == AttendanceTab.AdminAnalytics && _analytics is null && !_isLoadingAnalytics)
+        {
+            await LoadAnalyticsAsync();
+        }
     }
+
+    private IReadOnlyList<AttendanceDayRowDto> GetFilteredAttendanceDays()
+    {
+        return _appliedRecordsStatusFilter == AttendanceRowStatusFilter.All
+            ? _attendanceDays
+            : _attendanceDays.Where(MatchesStatusFilter).ToList();
+    }
+
+    private bool MatchesStatusFilter(AttendanceDayRowDto row)
+    {
+        if (row.HasPendingCorrection)
+        {
+            return _appliedRecordsStatusFilter == AttendanceRowStatusFilter.Pending;
+        }
+
+        return _appliedRecordsStatusFilter switch
+        {
+            AttendanceRowStatusFilter.NoRecord => row.RecordStatus is null,
+            AttendanceRowStatusFilter.OnTime => row.RecordStatus == AttendanceDayStatusDto.OnTime,
+            AttendanceRowStatusFilter.Late => row.RecordStatus == AttendanceDayStatusDto.Late,
+            AttendanceRowStatusFilter.EarlyLeave => row.RecordStatus == AttendanceDayStatusDto.EarlyLeave,
+            AttendanceRowStatusFilter.Incomplete => row.RecordStatus == AttendanceDayStatusDto.Incomplete,
+            AttendanceRowStatusFilter.Absent => row.RecordStatus == AttendanceDayStatusDto.Absent,
+            _ => false
+        };
+    }
+
+    private static string DetailsStatusLabel(AttendanceDayRowDto row) =>
+        row.RecordStatus is null ? "No record" : AttendanceFormatter.DayStatusLabel(row.RecordStatus.Value);
+
+    private static string DetailsStatusClass(AttendanceDayRowDto row) =>
+        row.RecordStatus is null ? "absent" : AttendanceFormatter.DayStatusClass(row.RecordStatus.Value);
 
     private string GetPunchHint() => _me.NextAction switch
     {
@@ -1399,5 +1439,6 @@
         _punchWindowTimer?.Dispose();
         _meRefreshTimer?.Dispose();
         _correctionPunchCheckVersion++;
+        _pendingCountsLoadVersion++;
     }
 }

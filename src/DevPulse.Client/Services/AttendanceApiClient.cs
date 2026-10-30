@@ -6,23 +6,21 @@ public interface IAttendanceApiClient
 
     Task<AttendancePunchResultDto?> PunchAsync(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceRecordDto>> GetMyHistoryAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AttendanceDayRowDto>> GetAttendanceDaysAsync(DateOnly from, DateOnly to, Guid? developerId, CancellationToken cancellationToken = default);
+
+    Task<AttendanceDayDetailsDto?> GetAttendanceDayDetailsAsync(Guid developerId, DateOnly workDate, CancellationToken cancellationToken = default);
+
+    Task<AttendancePendingCorrectionCountsDto> GetPendingCorrectionCountsAsync(CancellationToken cancellationToken = default);
 
     Task<AttendanceSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default);
 
     Task<AttendanceSettingsDto?> UpdateSettingsAsync(UpdateAttendanceSettingsRequest request, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceRecordDto>> GetRecordsAsync(DateOnly from, DateOnly to, Guid? developerId, CancellationToken cancellationToken = default);
-
     Task<AttendanceAnalyticsSummaryDto> GetAnalyticsAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
 
     Task<AttendanceCorrectionRequestDto?> SubmitCorrectionRequestAsync(CreateAttendanceCorrectionRequest request, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetMyCorrectionRequestsAsync(CancellationToken cancellationToken = default);
-
     Task CancelCorrectionRequestAsync(Guid id, CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(CancellationToken cancellationToken = default);
 
     Task<AttendanceCorrectionRequestDto?> ApproveCorrectionRequestAsync(Guid id, ReviewAttendanceCorrectionRequest request, CancellationToken cancellationToken = default);
 
@@ -55,13 +53,44 @@ public sealed class AttendanceApiClient : IAttendanceApiClient
         return await response.Content.ReadFromJsonAsync<AttendancePunchResultDto>(_jsonOptions, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AttendanceRecordDto>> GetMyHistoryAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AttendanceDayRowDto>> GetAttendanceDaysAsync(
+        DateOnly from,
+        DateOnly to,
+        Guid? developerId,
+        CancellationToken cancellationToken = default)
     {
-        var history = await _httpClient.GetFromJsonAsync<List<AttendanceRecordDto>>(
-            $"api/attendance/my-history?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}",
+        var url = $"api/attendance/days?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}";
+        if (developerId.HasValue)
+        {
+            url += $"&developerId={developerId.Value}";
+        }
+
+        var rows = await _httpClient.GetFromJsonAsync<List<AttendanceDayRowDto>>(
+            url,
             _jsonOptions,
             cancellationToken);
-        return history ?? [];
+        return rows ?? [];
+    }
+
+    public async Task<AttendanceDayDetailsDto?> GetAttendanceDayDetailsAsync(
+        Guid developerId,
+        DateOnly workDate,
+        CancellationToken cancellationToken = default)
+    {
+        return await _httpClient.GetFromJsonAsync<AttendanceDayDetailsDto>(
+            $"api/attendance/days/{developerId}/{workDate:yyyy-MM-dd}",
+            _jsonOptions,
+            cancellationToken);
+    }
+
+    public async Task<AttendancePendingCorrectionCountsDto> GetPendingCorrectionCountsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var counts = await _httpClient.GetFromJsonAsync<AttendancePendingCorrectionCountsDto>(
+            "api/attendance/correction-requests/pending-counts",
+            _jsonOptions,
+            cancellationToken);
+        return counts ?? new AttendancePendingCorrectionCountsDto(0, 0);
     }
 
     public async Task<AttendanceSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
@@ -75,18 +104,6 @@ public sealed class AttendanceApiClient : IAttendanceApiClient
         var response = await _httpClient.PutAsJsonAsync("api/attendance/settings", request, _jsonOptions, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken, "Failed to update attendance settings.");
         return await response.Content.ReadFromJsonAsync<AttendanceSettingsDto>(_jsonOptions, cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<AttendanceRecordDto>> GetRecordsAsync(DateOnly from, DateOnly to, Guid? developerId, CancellationToken cancellationToken = default)
-    {
-        var url = $"api/attendance/records?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}";
-        if (developerId.HasValue)
-        {
-            url += $"&developerId={developerId.Value}";
-        }
-
-        var records = await _httpClient.GetFromJsonAsync<List<AttendanceRecordDto>>(url, _jsonOptions, cancellationToken);
-        return records ?? [];
     }
 
     public async Task<AttendanceAnalyticsSummaryDto> GetAnalyticsAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
@@ -105,28 +122,10 @@ public sealed class AttendanceApiClient : IAttendanceApiClient
         return await response.Content.ReadFromJsonAsync<AttendanceCorrectionRequestDto>(_jsonOptions, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetMyCorrectionRequestsAsync(CancellationToken cancellationToken = default)
-    {
-        var requests = await _httpClient.GetFromJsonAsync<List<AttendanceCorrectionRequestDto>>(
-            "api/attendance/correction-requests/mine",
-            _jsonOptions,
-            cancellationToken);
-        return requests ?? [];
-    }
-
     public async Task CancelCorrectionRequestAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.DeleteAsync($"api/attendance/correction-requests/{id}", cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken, "Failed to cancel correction request.");
-    }
-
-    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(CancellationToken cancellationToken = default)
-    {
-        var requests = await _httpClient.GetFromJsonAsync<List<AttendanceCorrectionRequestDto>>(
-            "api/attendance/correction-requests/all",
-            _jsonOptions,
-            cancellationToken);
-        return requests ?? [];
     }
 
     public async Task<AttendanceCorrectionRequestDto?> ApproveCorrectionRequestAsync(Guid id, ReviewAttendanceCorrectionRequest request, CancellationToken cancellationToken = default)

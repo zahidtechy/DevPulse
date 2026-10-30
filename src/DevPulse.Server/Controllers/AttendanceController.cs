@@ -31,18 +31,45 @@ public sealed class AttendanceController : ControllerBase
             : BadRequest(new { error = result.Error, errors = result.Errors });
     }
 
-    [HttpGet("my-history")]
-    [ProducesResponseType(typeof(IReadOnlyList<AttendanceRecordDto>), StatusCodes.Status200OK)]
+    [HttpGet("days")]
+    [ProducesResponseType(typeof(IReadOnlyList<AttendanceDayRowDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetMyHistory([FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAttendanceDays(
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] Guid? developerId,
+        CancellationToken cancellationToken)
     {
         if (to < from)
         {
             return BadRequest(new { error = "End date must be on or after start date." });
         }
 
-        var history = await _attendanceService.GetMyHistoryAsync(GetUserEmail(), from, to, cancellationToken);
-        return Ok(history);
+        var rows = await _attendanceService.GetAttendanceDaysAsync(
+            GetUserEmail(),
+            User.IsInRole(AppRoles.Admin),
+            from,
+            to,
+            developerId,
+            cancellationToken);
+        return Ok(rows);
+    }
+
+    [HttpGet("days/{developerId:guid}/{workDate}")]
+    [ProducesResponseType(typeof(AttendanceDayDetailsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAttendanceDayDetails(
+        Guid developerId,
+        DateOnly workDate,
+        CancellationToken cancellationToken)
+    {
+        var details = await _attendanceService.GetAttendanceDayDetailsAsync(
+            GetUserEmail(),
+            User.IsInRole(AppRoles.Admin),
+            developerId,
+            workDate,
+            cancellationToken);
+        return details is null ? NotFound() : Ok(details);
     }
 
     [HttpPost("correction-requests")]
@@ -54,16 +81,19 @@ public sealed class AttendanceController : ControllerBase
     {
         var result = await _attendanceService.SubmitCorrectionRequestAsync(GetUserEmail(), request, cancellationToken);
         return result.IsSuccess
-            ? Ok(result.Value)
-            : BadRequest(new { error = result.Error, errors = result.Errors });
+              ? Ok(result.Value)
+              : BadRequest(new { error = result.Error, errors = result.Errors });
     }
 
-    [HttpGet("correction-requests/mine")]
-    [ProducesResponseType(typeof(IReadOnlyList<AttendanceCorrectionRequestDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetMyCorrectionRequests(CancellationToken cancellationToken)
+    [HttpGet("correction-requests/pending-counts")]
+    [ProducesResponseType(typeof(AttendancePendingCorrectionCountsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPendingCorrectionCounts(CancellationToken cancellationToken)
     {
-        var requests = await _attendanceService.GetMyCorrectionRequestsAsync(GetUserEmail(), cancellationToken);
-        return Ok(requests);
+        var counts = await _attendanceService.GetPendingCorrectionCountsAsync(
+            GetUserEmail(),
+            User.IsInRole(AppRoles.Admin),
+            cancellationToken);
+        return Ok(counts);
     }
 
     [HttpDelete("correction-requests/{id:guid}")]
@@ -73,25 +103,6 @@ public sealed class AttendanceController : ControllerBase
     {
         var result = await _attendanceService.CancelCorrectionRequestAsync(GetUserEmail(), id, cancellationToken);
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error, errors = result.Errors });
-    }
-
-    [HttpGet("records")]
-    [Authorize(Policy = "AdminOnly")]
-    [ProducesResponseType(typeof(IReadOnlyList<AttendanceRecordDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetRecords(
-        [FromQuery] DateOnly from,
-        [FromQuery] DateOnly to,
-        [FromQuery] Guid? developerId,
-        CancellationToken cancellationToken)
-    {
-        if (to < from)
-        {
-            return BadRequest(new { error = "End date must be on or after start date." });
-        }
-
-        var records = await _attendanceService.GetRecordsAsync(from, to, developerId, cancellationToken);
-        return Ok(records);
     }
 
     [HttpGet("analytics")]
@@ -107,15 +118,6 @@ public sealed class AttendanceController : ControllerBase
 
         var analytics = await _attendanceService.GetAnalyticsAsync(from, to, cancellationToken);
         return Ok(analytics);
-    }
-
-    [HttpGet("correction-requests/all")]
-    [Authorize(Policy = "AdminOnly")]
-    [ProducesResponseType(typeof(IReadOnlyList<AttendanceCorrectionRequestDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetCorrectionRequests(CancellationToken cancellationToken)
-    {
-        var requests = await _attendanceService.GetCorrectionRequestsAsync(cancellationToken);
-        return Ok(requests);
     }
 
     [HttpPost("correction-requests/{id:guid}/approve")]

@@ -51,20 +51,6 @@ public sealed class AttendanceRepository : IAttendanceRepository
         await QueryRecords()
             .FirstOrDefaultAsync(x => x.DeveloperId == developerId && x.WorkDate == workDate, cancellationToken);
 
-    public async Task<AttendanceRecord?> GetRecordByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        await QueryRecords().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-    public async Task<IReadOnlyList<AttendanceRecord>> GetRecordsByDeveloperAsync(
-        Guid developerId,
-        DateOnly fromDate,
-        DateOnly toDate,
-        CancellationToken cancellationToken = default) =>
-        await QueryRecords()
-            .Where(x => x.DeveloperId == developerId && x.WorkDate >= fromDate && x.WorkDate <= toDate)
-            .OrderByDescending(x => x.WorkDate)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
     public async Task<IReadOnlyList<AttendanceRecord>> GetRecordsAsync(
         DateOnly fromDate,
         DateOnly toDate,
@@ -84,6 +70,89 @@ public sealed class AttendanceRepository : IAttendanceRepository
             .ThenBy(x => x.Developer!.Name)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AttendanceDaySourceRow>> GetAttendanceDaySourceRowsAsync(
+        DateOnly fromDate,
+        DateOnly toDate,
+        Guid? developerId,
+        CancellationToken cancellationToken = default)
+    {
+        var records = _dbContext.AttendanceRecords
+            .AsNoTracking()
+            .Where(x => x.WorkDate >= fromDate && x.WorkDate <= toDate);
+        var corrections = _dbContext.AttendanceCorrectionRequests
+            .AsNoTracking()
+            .Where(x => x.WorkDate >= fromDate && x.WorkDate <= toDate);
+
+        if (developerId.HasValue)
+        {
+            records = records.Where(x => x.DeveloperId == developerId.Value);
+            corrections = corrections.Where(x => x.DeveloperId == developerId.Value);
+        }
+
+        // Keep the set operation over server-translatable scalar projections. EF Core
+        // treats the positional read-model constructor as a client projection, so doing
+        // that before Concat prevents UNION ALL translation.
+        var recordRows = records.Select(x => new
+        {
+            x.DeveloperId,
+            DeveloperName = x.Developer.Name,
+            x.WorkDate,
+            HasRecord = true,
+            x.PunchInUtc,
+            x.PunchOutUtc,
+            x.PunchInIsCorrected,
+            x.PunchOutIsCorrected,
+            x.PunchInCorrectedAtUtc,
+            x.PunchOutCorrectedAtUtc,
+            CorrectionRequestId = (Guid?)null,
+            CorrectionStatus = (AttendanceCorrectionStatus?)null,
+            RequestedPunchInUtc = (DateTime?)null,
+            RequestedPunchOutUtc = (DateTime?)null,
+            CorrectionCreatedAtUtc = (DateTime?)null
+        });
+
+        var correctionRows = corrections.Select(x => new
+        {
+            x.DeveloperId,
+            DeveloperName = x.Developer.Name,
+            x.WorkDate,
+            HasRecord = false,
+            PunchInUtc = (DateTime?)null,
+            PunchOutUtc = (DateTime?)null,
+            PunchInIsCorrected = false,
+            PunchOutIsCorrected = false,
+            PunchInCorrectedAtUtc = (DateTime?)null,
+            PunchOutCorrectedAtUtc = (DateTime?)null,
+            CorrectionRequestId = (Guid?)x.Id,
+            CorrectionStatus = (AttendanceCorrectionStatus?)x.Status,
+            x.RequestedPunchInUtc,
+            x.RequestedPunchOutUtc,
+            CorrectionCreatedAtUtc = (DateTime?)x.CreatedAtUtc
+        });
+
+        var rows = await recordRows
+            .Concat(correctionRows)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(x => new AttendanceDaySourceRow(
+                x.DeveloperId,
+                x.DeveloperName,
+                x.WorkDate,
+                x.HasRecord,
+                x.PunchInUtc,
+                x.PunchOutUtc,
+                x.PunchInIsCorrected,
+                x.PunchOutIsCorrected,
+                x.PunchInCorrectedAtUtc,
+                x.PunchOutCorrectedAtUtc,
+                x.CorrectionRequestId,
+                x.CorrectionStatus,
+                x.RequestedPunchInUtc,
+                x.RequestedPunchOutUtc,
+                x.CorrectionCreatedAtUtc))
+            .ToList();
     }
 
     public async Task AddRecordAsync(AttendanceRecord record, CancellationToken cancellationToken = default)
@@ -113,25 +182,63 @@ public sealed class AttendanceRepository : IAttendanceRepository
                      && x.Status == AttendanceCorrectionStatus.Pending,
                 cancellationToken);
 
-    // Correction requests are always listed pending-first, newest first. Both read paths
-    // apply this here so callers don't have to re-sort.
-    public async Task<IReadOnlyList<AttendanceCorrectionRequest>> GetCorrectionRequestsByDeveloperAsync(
-        Guid developerId,
-        CancellationToken cancellationToken = default) =>
-        await QueryCorrectionRequests()
-            .Where(x => x.DeveloperId == developerId)
-            .OrderBy(x => x.Status == AttendanceCorrectionStatus.Pending ? 0 : 1)
-            .ThenByDescending(x => x.CreatedAtUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
     public async Task<IReadOnlyList<AttendanceCorrectionRequest>> GetCorrectionRequestsAsync(
-        CancellationToken cancellationToken = default) =>
-        await QueryCorrectionRequests()
+        DateOnly fromDate,
+        DateOnly toDate,
+        Guid? developerId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = QueryCorrectionRequests()
+            .Where(x => x.WorkDate >= fromDate && x.WorkDate <= toDate);
+
+        if (developerId.HasValue)
+        {
+            query = query.Where(x => x.DeveloperId == developerId.Value);
+        }
+
+        return await query
             .OrderBy(x => x.Status == AttendanceCorrectionStatus.Pending ? 0 : 1)
             .ThenByDescending(x => x.CreatedAtUtc)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<(int TotalCount, int DeveloperCount)> GetPendingCorrectionCountsAsync(
+        Guid? developerId,
+        bool includeTotal,
+        CancellationToken cancellationToken = default)
+    {
+        var pending = _dbContext.AttendanceCorrectionRequests
+            .AsNoTracking()
+            .Where(x => x.Status == AttendanceCorrectionStatus.Pending);
+
+        if (!includeTotal)
+        {
+            if (!developerId.HasValue)
+            {
+                return (0, 0);
+            }
+
+            var developerCount = await pending
+                .CountAsync(x => x.DeveloperId == developerId.Value, cancellationToken);
+            return (developerCount, developerCount);
+        }
+
+        var counts = await pending
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                TotalCount = group.Count(),
+                DeveloperCount = developerId.HasValue
+                    ? group.Count(x => x.DeveloperId == developerId.Value)
+                    : 0
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return counts is null
+            ? (0, 0)
+            : (counts.TotalCount, counts.DeveloperCount);
+    }
 
     public async Task AddCorrectionRequestAsync(AttendanceCorrectionRequest request, CancellationToken cancellationToken = default)
     {

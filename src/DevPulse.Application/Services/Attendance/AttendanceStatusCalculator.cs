@@ -59,16 +59,6 @@ public sealed class AttendanceStatusCalculator
         return Math.Round((decimal)duration.TotalHours, 2);
     }
 
-    public AttendanceDayStatusDto MapStatus(AttendanceDayStatus status) => status switch
-    {
-        AttendanceDayStatus.OnTime => AttendanceDayStatusDto.OnTime,
-        AttendanceDayStatus.Late => AttendanceDayStatusDto.Late,
-        AttendanceDayStatus.EarlyLeave => AttendanceDayStatusDto.EarlyLeave,
-        AttendanceDayStatus.Incomplete => AttendanceDayStatusDto.Incomplete,
-        AttendanceDayStatus.Absent => AttendanceDayStatusDto.Absent,
-        _ => AttendanceDayStatusDto.Absent
-    };
-
     public static TimeZoneInfo ResolveTimeZone(string timeZoneId)
     {
         try
