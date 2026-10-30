@@ -127,52 +127,32 @@
                         </div>
                     </div>
                 }
-            </div>
-
-            <div class="users-form-divider mt-4 pt-3">
-                <span class="filter-section-label">Developer profile</span>
-                <p class="text-muted small mb-3 mt-1">
-                    Link this user to a developer record for leave and attendance. Pick an existing developer or create a new one when adding a user.
-                </p>
-                
-            <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label" for="developerSearch">
-                        Search developer
-                    </label>
-
-                    <div class="users-search-wrap">
-                        <span class="bi-search users-search-icon" aria-hidden="true"></span>
-                        <input id="developerSearch"
-                               class="form-control users-search-input"
-                               placeholder="Filter by name or email..."
-                               @bind="_developerSearch"
-                               @bind:event="oninput"
-                               disabled="@(_createDeveloper && !_editingUserId.HasValue)" />
-                    </div>
-                </div>
-
-                <div class="col-md-6">
-                    <label class="form-label" for="developerLink">
                         Link to developer
                     </label>
 
-                    <select id="developerLink"
-                            class="form-select"
-                            @bind="_selectedDeveloperId"
-                            disabled="@(_createDeveloper && !_editingUserId.HasValue)">
-                        <option value="">No link (match by email only)</option>
-                        @foreach (var developer in FilteredDevelopers)
-                        {
-                            <option value="@developer.Id">
-                                @developer.Name@(string.IsNullOrWhiteSpace(developer.Email)
-                                    ? ""
-                                    : $" ({developer.Email})")
-                            </option>
-                        }
-                    </select>
+                    <div class="position-relative">
+                        <input id="developerSearch"
+                               class="form-control"
+                               placeholder="Search developer by name or email..."
+                               list="developerOptions"
+                               @bind="_developerSearch"
+                               @bind:event="oninput"
+                               disabled="@(_createDeveloper && !_editingUserId.HasValue)" />
+
+                        <datalist id="developerOptions">
+                            @foreach (var developer in FilteredDevelopers)
+                            {
+                                <option value="@developer.Name (@developer.Email)"></option>
+                            }
+                        </datalist>
+                    </div>
+
+                    <div class="form-text">
+                        Search and select an existing developer.
+                    </div>
                 </div>
-            </div>
 
             </div>
         </ChildContent>
