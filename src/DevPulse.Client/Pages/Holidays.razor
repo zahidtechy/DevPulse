@@ -1,5 +1,6 @@
 @page "/holidays"
 @attribute [Authorize]
+@implements IAsyncDisposable
 @inject IHolidayApiClient HolidayApi
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
@@ -105,11 +106,12 @@
                             @foreach (var month in quarter.Months)
                             {
                                 <MonthCalendar Year="SelectedYear"
+                                               Id="@GetHolidayMonthId(month)"
                                                Month="month"
                                                Holidays="_holidays"
                                                Today="_today"
                                                SelectedHolidayId="_highlightedHolidayId"
-                                               OnHolidaySelected="SelectHolidayAsync" />
+                                               OnHolidaySelected="SelectHolidayFromCalendarAsync" />
                             }
                         </div>
                     </section>
@@ -154,8 +156,8 @@
                                          class="holiday-list-item @GetHolidayListItemClass(holiday.Id)"
                                          role="button"
                                          tabindex="0"
-                                         @onclick="() => SelectHolidayAsync(holiday)"
-                                         @onkeydown="e => HandleListItemKeyDown(e, holiday)">
+                                         @onclick="() => SelectHolidayInCalendarAsync(holiday, group.Month)"
+                                         @onkeydown="e => HandleListItemKeyDownAsync(e, holiday, group.Month)">
                                         <div class="holiday-list-date-badge">
                                             @if (holiday.FromDate == holiday.ToDate || holiday.FromDate.Month == holiday.ToDate.Month)
                                             {
@@ -172,7 +174,9 @@
                                                 <div class="holiday-list-name">@holiday.Name</div>
                                                 <AuthorizeView Roles="@AppRoles.Admin">
                                                     <Authorized>
-                                                        <div class="holiday-list-actions" @onclick:stopPropagation="true">
+                                                        <div class="holiday-list-actions"
+                                                             @onclick:stopPropagation="true"
+                                                             @onkeydown:stopPropagation="true">
                                                             <button type="button"
                                                                     class="btn btn-outline-primary btn-sm holiday-list-action-btn"
                                                                     disabled="@_isBusy"
@@ -398,6 +402,7 @@
     private Guid? _highlightedHolidayId;
     private GoogleHolidayPreviewDto? _googleHolidayPreview;
     private readonly HashSet<string> _selectedGoogleHolidayKeys = new(StringComparer.Ordinal);
+    private IJSObjectReference? _holidayCalendarModule;
 
     private DateTime _fromDate;
     private DateTime _toDate;
@@ -639,35 +644,52 @@
         _showForm = true;
     }
 
-    private async Task SelectHolidayAsync(HolidayDto holiday)
+    private async Task SelectHolidayFromCalendarAsync(HolidayDto holiday)
     {
         _highlightedHolidayId = holiday.Id;
         await ScrollToHolidayListItemAsync(holiday.Id);
     }
 
+    private async Task SelectHolidayInCalendarAsync(HolidayDto holiday, int month)
+    {
+        _highlightedHolidayId = holiday.Id;
+        await ScrollToHolidayMonthAsync(month);
+    }
+
     private async Task ScrollToHolidayListItemAsync(Guid holidayId)
+    {
+        await ScrollToElementAsync(GetHolidayListItemId(holidayId), "nearest");
+    }
+
+    private async Task ScrollToHolidayMonthAsync(int month)
+    {
+        await ScrollToElementAsync(GetHolidayMonthId(month), "center");
+    }
+
+    private async Task ScrollToElementAsync(string elementId, string block)
     {
         try
         {
-            await JS.InvokeVoidAsync(
-                "eval",
-                $"document.getElementById('{GetHolidayListItemId(holidayId)}')?.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }})");
+            _holidayCalendarModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/holidayCalendar.js");
+            await _holidayCalendarModule.InvokeVoidAsync("scrollToElement", elementId, block);
         }
         catch
         {
-            // Scroll is optional if JS is unavailable.
+            // Selection still works when scrolling is unavailable.
         }
     }
 
-    private void HandleListItemKeyDown(KeyboardEventArgs args, HolidayDto holiday)
+    private async Task HandleListItemKeyDownAsync(KeyboardEventArgs args, HolidayDto holiday, int month)
     {
         if (args.Key is "Enter" or " ")
         {
-            _ = SelectHolidayAsync(holiday);
+            await SelectHolidayInCalendarAsync(holiday, month);
         }
     }
 
     private static string GetHolidayListItemId(Guid holidayId) => $"holiday-item-{holidayId}";
+
+    private string GetHolidayMonthId(int month) => $"holiday-month-{SelectedYear}-{month:D2}";
 
     private string? GetHolidayListItemClass(Guid holidayId)
     {
@@ -784,7 +806,7 @@
                 continue;
             }
 
-            yield return new HolidayGroup(monthStart.ToString("MMMM"), monthHolidays);
+            yield return new HolidayGroup(month, monthStart.ToString("MMMM"), monthHolidays);
         }
     }
 
@@ -894,7 +916,24 @@
         return raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? raw : $"An error occurred: {raw}";
     }
 
-    private sealed record HolidayGroup(string MonthName, IReadOnlyList<HolidayDto> Holidays);
+    public async ValueTask DisposeAsync()
+    {
+        if (_holidayCalendarModule is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _holidayCalendarModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // Page is unloading.
+        }
+    }
+
+    private sealed record HolidayGroup(int Month, string MonthName, IReadOnlyList<HolidayDto> Holidays);
 
     private sealed record HolidayQuarter(string Label, string MonthRange, IReadOnlyList<int> Months);
 }
