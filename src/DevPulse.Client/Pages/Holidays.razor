@@ -170,22 +170,38 @@
                                         <div class="holiday-list-item-main">
                                             <div class="holiday-list-name-row">
                                                 <div class="holiday-list-name">@holiday.Name</div>
+                                                <AuthorizeView Roles="@AppRoles.Admin">
+                                                    <Authorized>
+                                                        <div class="holiday-list-actions" @onclick:stopPropagation="true">
+                                                            <button type="button"
+                                                                    class="btn btn-outline-primary btn-sm holiday-list-action-btn"
+                                                                    disabled="@_isBusy"
+                                                                    title="@($"Edit {holiday.Name}")"
+                                                                    aria-label="@($"Edit {holiday.Name}")"
+                                                                    @onclick="() => EditHolidayAsync(holiday)">
+                                                                <span class="bi-pencil-square" aria-hidden="true"></span>
+                                                            </button>
+                                                            <button type="button"
+                                                                    class="btn btn-outline-danger btn-sm holiday-list-action-btn"
+                                                                    disabled="@_isBusy"
+                                                                    title="@($"Delete {holiday.Name}")"
+                                                                    aria-label="@($"Delete {holiday.Name}")"
+                                                                    @onclick="() => DeleteHolidayAsync(holiday)">
+                                                                <span class="bi-trash" aria-hidden="true"></span>
+                                                            </button>
+                                                        </div>
+                                                    </Authorized>
+                                                </AuthorizeView>
+                                            </div>
+                                            <div class="holiday-list-meta">
+                                                <div class="holiday-list-range">@FormatDateRange(holiday)</div>
                                                 <span class="holiday-duration-chip">@GetDurationDays(holiday) day@(GetDurationDays(holiday) == 1 ? "" : "s")</span>
                                             </div>
-                                            <div class="holiday-list-range">@FormatDateRange(holiday)</div>
                                             @if (!string.IsNullOrWhiteSpace(holiday.Reason))
                                             {
                                                 <div class="holiday-list-reason">@holiday.Reason</div>
                                             }
                                         </div>
-                                        <AuthorizeView Roles="@AppRoles.Admin">
-                                            <Authorized>
-                                                <div class="holiday-list-actions btn-group-actions" @onclick:stopPropagation="true">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => EditHolidayAsync(holiday)">Edit</button>
-                                                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => DeleteHolidayAsync(holiday)">Delete</button>
-                                                </div>
-                                            </Authorized>
-                                        </AuthorizeView>
                                     </div>
                                 }
                             </div>
@@ -655,18 +671,9 @@
 
     private string? GetHolidayListItemClass(Guid holidayId)
     {
-        var classes = new List<string>();
-        if (_isAdmin)
-        {
-            classes.Add("holiday-list-item-admin");
-        }
-
-        if (_highlightedHolidayId == holidayId)
-        {
-            classes.Add("holiday-list-item-selected");
-        }
-
-        return classes.Count == 0 ? null : string.Join(' ', classes);
+        return _highlightedHolidayId == holidayId
+            ? "holiday-list-item-selected"
+            : null;
     }
 
     private void EditHolidayAsync(HolidayDto holiday)
@@ -820,7 +827,7 @@
     {
         if (holiday.FromDate == holiday.ToDate)
         {
-            return holiday.FromDate.ToString("d");
+            return holiday.FromDate.Day.ToString();
         }
 
         if (holiday.FromDate.Month == holiday.ToDate.Month)
