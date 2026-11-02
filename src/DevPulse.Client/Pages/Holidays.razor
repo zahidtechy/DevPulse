@@ -39,45 +39,6 @@
         </AuthorizeView>
     </div>
 
-    @if (_showForm)
-    {
-        <AuthorizeView Roles="@AppRoles.Admin">
-            <Authorized>
-                <div class="filter-card card mb-4 holiday-form-card">
-                    <div class="card-body">
-                        <div class="filter-section-header mb-3">
-                            <span class="filter-section-label">@(_editingHolidayId.HasValue ? "Edit Holiday" : "New Holiday")</span>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label class="form-label">From date</label>
-                                <DateInput @bind-Value="_fromDate" DefaultValue="@DefaultFromDate" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">To date</label>
-                                <DateInput @bind-Value="_toDate" DefaultValue="@DefaultToDate" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Name</label>
-                                <input class="form-control" @bind="_name" placeholder="Independence Day" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Reason <span class="text-muted">(optional)</span></label>
-                                <input class="form-control" @bind="_reason" placeholder="National holiday" />
-                            </div>
-                        </div>
-                        <div class="filter-actions mt-3">
-                            <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
-                            <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveHolidayAsync">
-                                @(_editingHolidayId.HasValue ? "Update Holiday" : "Create Holiday")
-                            </BusyButton>
-                        </div>
-                    </div>
-                </div>
-            </Authorized>
-        </AuthorizeView>
-    }
-
     @if (_isLoading)
     {
         <LoadingIndicator Text="Loading holidays..." />
@@ -238,6 +199,52 @@
 
 <AuthorizeView Roles="@AppRoles.Admin">
     <Authorized>
+        <ModalDialog IsVisible="_showForm"
+                     Title="@(_editingHolidayId.HasValue ? "Edit Holiday" : "Add Holiday")"
+                     IsBusy="_isBusy"
+                     OnClose="HideForm">
+            <ChildContent>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="holidayFromDate">From date</label>
+                        <DateInput Id="holidayFromDate"
+                                   @bind-Value="_fromDate"
+                                   DefaultValue="@DefaultFromDate"
+                                   Disabled="@_isBusy" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="holidayToDate">To date</label>
+                        <DateInput Id="holidayToDate"
+                                   @bind-Value="_toDate"
+                                   DefaultValue="@DefaultToDate"
+                                   Disabled="@_isBusy" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="holidayName">Name</label>
+                        <input id="holidayName"
+                               class="form-control"
+                               disabled="@_isBusy"
+                               @bind="_name"
+                               placeholder="Independence Day" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="holidayReason">Reason <span class="text-muted">(optional)</span></label>
+                        <input id="holidayReason"
+                               class="form-control"
+                               disabled="@_isBusy"
+                               @bind="_reason"
+                               placeholder="National holiday" />
+                    </div>
+                </div>
+            </ChildContent>
+            <FooterContent>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
+                <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveHolidayAsync">
+                    @(_editingHolidayId.HasValue ? "Update Holiday" : "Create Holiday")
+                </BusyButton>
+            </FooterContent>
+        </ModalDialog>
+
         <ModalDialog IsVisible="@(_googleHolidayPreview is not null)"
                      Title="Bangladesh holidays from Google"
                      IsBusy="@IsGoogleHolidayBusy"
