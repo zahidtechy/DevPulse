@@ -9,6 +9,10 @@ public interface IHolidayApiClient
     Task<HolidayDto?> UpdateAsync(Guid id, UpdateHolidayRequest request, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<GoogleHolidayPreviewDto> PreviewGoogleHolidaysAsync(int year, CancellationToken cancellationToken = default);
+
+    Task<GoogleHolidayImportResultDto> ImportGoogleHolidaysAsync(ImportGoogleHolidaysRequest request, CancellationToken cancellationToken = default);
 }
 
 public sealed class HolidayApiClient : IHolidayApiClient
@@ -58,5 +62,31 @@ public sealed class HolidayApiClient : IHolidayApiClient
             var error = await response.Content.ReadAsStringAsync(cancellationToken);
             throw new InvalidOperationException($"Failed to delete holiday: {error}");
         }
+    }
+
+    public async Task<GoogleHolidayPreviewDto> PreviewGoogleHolidaysAsync(int year, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"api/holidays/google/preview?year={year}", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException($"Failed to fetch Google holidays: {error}");
+        }
+
+        return await response.Content.ReadFromJsonAsync<GoogleHolidayPreviewDto>(cancellationToken)
+            ?? throw new InvalidOperationException("Google holiday preview was empty.");
+    }
+
+    public async Task<GoogleHolidayImportResultDto> ImportGoogleHolidaysAsync(ImportGoogleHolidaysRequest request, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync("api/holidays/google/import", request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException($"Failed to import Google holidays: {error}");
+        }
+
+        return await response.Content.ReadFromJsonAsync<GoogleHolidayImportResultDto>(cancellationToken)
+            ?? throw new InvalidOperationException("Google holiday import returned no result.");
     }
 }

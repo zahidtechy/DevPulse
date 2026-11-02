@@ -3,8 +3,7 @@ using DevPulse.Shared.Contracts.Attendance;
 namespace DevPulse.Client.Components;
 
 /// <summary>
-/// Shared rendering rules for attendance times and status badges, so the record tables and
-/// the corrections page don't keep their own copies.
+/// Shared rendering rules for attendance times, durations, and statuses.
 /// </summary>
 public static class AttendanceFormatter
 {
@@ -20,6 +19,19 @@ public static class AttendanceFormatter
 
     public static string FormatCorrectedAt(DateTime? utc, string timeZoneId) =>
         Format(utc, timeZoneId, CorrectedAtFormat);
+
+    public static string FormatWorkHours(decimal? workHours)
+    {
+        if (workHours is null || workHours <= 0)
+        {
+            return "—";
+        }
+
+        var totalMinutes = (int)Math.Round(workHours.Value * 60m, MidpointRounding.AwayFromZero);
+        var hours = totalMinutes / 60;
+        var minutes = totalMinutes % 60;
+        return hours > 0 ? $"{hours}h {minutes:00}m" : $"{minutes}m";
+    }
 
     private static string Format(DateTime? utc, string timeZoneId, string format)
     {

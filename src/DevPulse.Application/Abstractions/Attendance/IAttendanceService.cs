@@ -6,22 +6,33 @@ public interface IAttendanceService
 
     Task<Result<AttendancePunchResultDto>> PunchAsync(string userEmail, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceRecordDto>> GetMyHistoryAsync(
+    Task<AttendanceDaysPageDto> GetAttendanceDaysAsync(
         string userEmail,
+        bool canViewAll,
         DateOnly fromDate,
         DateOnly toDate,
+        Guid? developerId,
+        AttendanceDayStatusFilterDto status,
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default);
+
+    Task<AttendanceDayDetailsDto?> GetAttendanceDayDetailsAsync(
+        string userEmail,
+        bool canViewAll,
+        Guid developerId,
+        DateOnly workDate,
+        CancellationToken cancellationToken = default);
+
+    Task<AttendancePendingCorrectionCountsDto> GetPendingCorrectionCountsAsync(
+        string userEmail,
+        bool canViewAll,
         CancellationToken cancellationToken = default);
 
     Task<AttendanceSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default);
 
     Task<Result<AttendanceSettingsDto>> UpdateSettingsAsync(
         UpdateAttendanceSettingsRequest request,
-        CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyList<AttendanceRecordDto>> GetRecordsAsync(
-        DateOnly fromDate,
-        DateOnly toDate,
-        Guid? developerId,
         CancellationToken cancellationToken = default);
 
     Task<AttendanceAnalyticsSummaryDto> GetAnalyticsAsync(
@@ -34,16 +45,9 @@ public interface IAttendanceService
         CreateAttendanceCorrectionRequest request,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetMyCorrectionRequestsAsync(
-        string userEmail,
-        CancellationToken cancellationToken = default);
-
     Task<Result> CancelCorrectionRequestAsync(
         string userEmail,
         Guid requestId,
-        CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(
         CancellationToken cancellationToken = default);
 
     Task<Result<AttendanceCorrectionRequestDto>> ApproveCorrectionRequestAsync(

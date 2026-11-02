@@ -10,6 +10,8 @@ public interface IHolidayRepository
 
     Task AddAsync(CompanyHoliday holiday, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<CompanyHoliday>> AddNonOverlappingAsync(IReadOnlyList<CompanyHoliday> holidays, CancellationToken cancellationToken = default);
+
     Task UpdateAsync(CompanyHoliday holiday, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);

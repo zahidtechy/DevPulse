@@ -9,6 +9,18 @@ public enum AttendanceDayStatusDto
     Absent = 4
 }
 
+public enum AttendanceDayStatusFilterDto
+{
+    All = 0,
+    Pending = 1,
+    OnTime = 2,
+    Late = 3,
+    EarlyLeave = 4,
+    Incomplete = 5,
+    Absent = 6,
+    NoRecord = 7
+}
+
 public enum AttendanceCorrectionStatusDto
 {
     Pending = 0,
@@ -35,8 +47,7 @@ public record AttendanceMeDto(
     TimeOnly? PunchInEarliestTime = null,
     TimeOnly? PunchOutEarliestTime = null,
     TimeOnly? PunchOutLatestTime = null,
-    TimeOnly? PunchInLatestTime = null,
-    bool IsOwnTeam = true);
+    TimeOnly? PunchInLatestTime = null);
 
 public record AttendanceSettingsDto(
     TimeOnly WorkStartTime,
@@ -75,6 +86,45 @@ public record AttendanceRecordDto(
     // When each punch was last corrected on the attendance record (UTC).
     DateTime? PunchInCorrectedAtUtc = null,
     DateTime? PunchOutCorrectedAtUtc = null);
+
+/// <summary>
+/// Combined attendance-record and correction-request summary for one developer
+/// on one work date. This is a read model only; it does not replace either
+/// underlying entity.
+/// </summary>
+public record AttendanceDayRowDto(
+    Guid DeveloperId,
+    string DeveloperName,
+    DateOnly WorkDate,
+    DateTime? PunchInUtc,
+    DateTime? PunchOutUtc,
+    bool PunchInIsCorrected,
+    bool PunchOutIsCorrected,
+    DateTime? PunchInCorrectedAtUtc,
+    DateTime? PunchOutCorrectedAtUtc,
+    AttendanceDayStatusDto? RecordStatus,
+    decimal? WorkHours,
+    bool HasPendingCorrection,
+    bool PunchInCorrectionRequested,
+    bool PunchOutCorrectionRequested,
+    Guid? PendingCorrectionRequestId,
+    int CorrectionRequestCount);
+
+public record AttendanceDaysPageDto(
+    IReadOnlyList<AttendanceDayRowDto> Items,
+    int PageNumber,
+    int PageSize,
+    int TotalCount,
+    int TotalPages);
+
+public record AttendanceDayDetailsDto(
+    AttendanceDayRowDto Row,
+    AttendanceRecordDto? Record,
+    IReadOnlyList<AttendanceCorrectionRequestDto> CorrectionRequests);
+
+public record AttendancePendingCorrectionCountsDto(
+    int TotalPendingCount,
+    int MyPendingCount);
 
 public record AttendancePunchResultDto(
     AttendanceRecordDto Record,

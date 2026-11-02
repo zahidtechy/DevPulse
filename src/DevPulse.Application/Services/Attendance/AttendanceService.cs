@@ -32,32 +32,25 @@ public sealed class AttendanceService : IAttendanceService
     public async Task<AttendanceMeDto> GetMeAsync(string userEmail, CancellationToken cancellationToken = default)
     {
         var developer = await ResolveDeveloperAsync(userEmail, cancellationToken);
+        var settings = await GetSettingsEntityAsync(cancellationToken);
         if (developer is null)
         {
-            return new AttendanceMeDto(null, null, false, AttendanceNextActionDto.PunchIn, null, "Asia/Dhaka", true, true, null, null, null);
-        }
-
-        var settings = await GetSettingsEntityAsync(cancellationToken);
-        var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
-
-        if (!developer.IsOwnTeam)
-        {
             return new AttendanceMeDto(
-                developer.Id,
-                developer.Name,
+                null,
+                null,
                 false,
                 AttendanceNextActionDto.PunchIn,
                 null,
                 settings.OfficeTimeZoneId,
-                false,
-                false,
+                true,
+                true,
+                _statusCalculator.GetPunchInEarliestTime(settings),
                 null,
-                null,
-                null,
-                null,
-                IsOwnTeam: false);
+                _statusCalculator.GetPunchOutLatestTime(settings),
+                _statusCalculator.GetPunchInLatestTime(settings));
         }
 
+        var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
         var today = _statusCalculator.GetOfficeToday(timeZone);
         var record = await _attendanceRepository.GetRecordAsync(developer.Id, today, cancellationToken);
         var nextAction = GetNextAction(record);
@@ -96,11 +89,6 @@ public sealed class AttendanceService : IAttendanceService
         if (!developer.IsActive)
         {
             return Result<AttendancePunchResultDto>.Failure("Your developer profile is inactive.");
-        }
-
-        if (!developer.IsOwnTeam)
-        {
-            return Result<AttendancePunchResultDto>.Failure("Attendance is only available to own-team developers.");
         }
 
         var settings = await GetSettingsEntityAsync(cancellationToken);
@@ -156,27 +144,130 @@ public sealed class AttendanceService : IAttendanceService
         return Result<AttendancePunchResultDto>.Success(new AttendancePunchResultDto(dto, updatedNext));
     }
 
-    public async Task<IReadOnlyList<AttendanceRecordDto>> GetMyHistoryAsync(
+    public async Task<AttendanceDaysPageDto> GetAttendanceDaysAsync(
         string userEmail,
+        bool canViewAll,
         DateOnly fromDate,
         DateOnly toDate,
+        Guid? developerId,
+        AttendanceDayStatusFilterDto status,
+        int pageNumber,
+        int pageSize,
         CancellationToken cancellationToken = default)
     {
-        var developer = await ResolveDeveloperAsync(userEmail, cancellationToken);
-        if (developer is null)
+        var effectiveDeveloperId = developerId;
+        if (!canViewAll)
         {
-            return [];
-        }
+            var currentDeveloper = await ResolveDeveloperAsync(userEmail, cancellationToken);
+            if (currentDeveloper is null)
+            {
+                return new AttendanceDaysPageDto([], 1, pageSize, 0, 0);
+            }
 
-        if (!developer.IsOwnTeam)
-        {
-            return [];
+            // The caller cannot widen or change their own scope with a query parameter.
+            effectiveDeveloperId = currentDeveloper.Id;
         }
 
         var settings = await GetSettingsEntityAsync(cancellationToken);
         var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
-        var records = await _attendanceRepository.GetRecordsByDeveloperAsync(developer.Id, fromDate, toDate, cancellationToken);
-        return records.Select(r => MapRecord(r, settings, timeZone)).ToList();
+        var sourcePage = await _attendanceRepository.GetAttendanceDaySourcePageAsync(
+            new AttendanceDayPageQuery(
+                fromDate,
+                toDate,
+                effectiveDeveloperId,
+                MapStatusFilter(status),
+                pageNumber,
+                pageSize,
+                settings.BufferStartTime,
+                settings.BufferEndTime,
+                settings.OfficeTimeZoneId),
+            cancellationToken);
+
+        var items = sourcePage.SourceRows
+            .GroupBy(row => (row.DeveloperId, row.WorkDate))
+            .Select(group => BuildAttendanceDayRow(group, settings, timeZone))
+            .ToList();
+
+        var totalPages = sourcePage.TotalCount == 0
+            ? 0
+            : (sourcePage.TotalCount + sourcePage.PageSize - 1) / sourcePage.PageSize;
+
+        return new AttendanceDaysPageDto(
+            items,
+            sourcePage.PageNumber,
+            sourcePage.PageSize,
+            sourcePage.TotalCount,
+            totalPages);
+    }
+
+    public async Task<AttendanceDayDetailsDto?> GetAttendanceDayDetailsAsync(
+        string userEmail,
+        bool canViewAll,
+        Guid developerId,
+        DateOnly workDate,
+        CancellationToken cancellationToken = default)
+    {
+        Developer? developer;
+        if (canViewAll)
+        {
+            developer = await _developerRepository.GetByIdAsync(developerId, cancellationToken);
+        }
+        else
+        {
+            developer = await ResolveDeveloperAsync(userEmail, cancellationToken);
+            if (developer?.Id != developerId)
+            {
+                return null;
+            }
+        }
+
+        if (developer is null)
+        {
+            return null;
+        }
+
+        var settings = await GetSettingsEntityAsync(cancellationToken);
+        var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
+        var record = await _attendanceRepository.GetRecordAsync(developerId, workDate, cancellationToken);
+        var corrections = await _attendanceRepository.GetCorrectionRequestsAsync(
+            workDate,
+            workDate,
+            developerId,
+            cancellationToken);
+        var row = BuildAttendanceDayRow(
+            developerId,
+            workDate,
+            record,
+            corrections,
+            developer,
+            settings,
+            timeZone);
+
+        return new AttendanceDayDetailsDto(
+            row,
+            record is null ? null : MapRecord(record, settings, timeZone),
+            corrections.Select(MapCorrectionRequest).ToList());
+    }
+
+    public async Task<AttendancePendingCorrectionCountsDto> GetPendingCorrectionCountsAsync(
+        string userEmail,
+        bool canViewAll,
+        CancellationToken cancellationToken = default)
+    {
+        var developer = await ResolveDeveloperAsync(userEmail, cancellationToken);
+        if (!canViewAll && developer is null)
+        {
+            return new AttendancePendingCorrectionCountsDto(0, 0);
+        }
+
+        var counts = await _attendanceRepository.GetPendingCorrectionCountsAsync(
+            developer?.Id,
+            includeTotal: canViewAll,
+            cancellationToken);
+
+        return new AttendancePendingCorrectionCountsDto(
+            canViewAll ? counts.TotalCount : counts.DeveloperCount,
+            counts.DeveloperCount);
     }
 
     public async Task<AttendanceSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
@@ -211,18 +302,6 @@ public sealed class AttendanceService : IAttendanceService
         return Result<AttendanceSettingsDto>.Success(MapSettings(settings));
     }
 
-    public async Task<IReadOnlyList<AttendanceRecordDto>> GetRecordsAsync(
-        DateOnly fromDate,
-        DateOnly toDate,
-        Guid? developerId,
-        CancellationToken cancellationToken = default)
-    {
-        var settings = await GetSettingsEntityAsync(cancellationToken);
-        var timeZone = AttendanceStatusCalculator.ResolveTimeZone(settings.OfficeTimeZoneId);
-        var records = await _attendanceRepository.GetRecordsAsync(fromDate, toDate, developerId, cancellationToken, ownTeamOnly: true);
-        return records.Select(r => MapRecord(r, settings, timeZone)).ToList();
-    }
-
     public async Task<AttendanceAnalyticsSummaryDto> GetAnalyticsAsync(
         DateOnly fromDate,
         DateOnly toDate,
@@ -240,8 +319,8 @@ public sealed class AttendanceService : IAttendanceService
         var workingDays = EnumerateWorkingDays(fromDate, toDate, leaveSettings.WeekendDaysBitmask, holidays).ToList();
 
         var developers = await _developerRepository.GetAllAsync(cancellationToken);
-        var activeDevelopers = developers.Where(d => d.IsActive && d.IsOwnTeam).ToList();
-        var records = await _attendanceRepository.GetRecordsAsync(fromDate, toDate, null, cancellationToken, ownTeamOnly: true);
+        var activeDevelopers = developers.Where(d => d.IsActive).ToList();
+        var records = await _attendanceRepository.GetRecordsAsync(fromDate, toDate, null, cancellationToken);
         var recordLookup = records.ToDictionary(r => (r.DeveloperId, r.WorkDate));
 
         var onTime = 0;
@@ -301,11 +380,6 @@ public sealed class AttendanceService : IAttendanceService
         if (developer is null)
         {
             return Result<AttendanceCorrectionRequestDto>.Failure("Your login email is not linked to a Developer record.");
-        }
-
-        if (!developer.IsOwnTeam)
-        {
-            return Result<AttendanceCorrectionRequestDto>.Failure("Attendance corrections are only available to own-team developers.");
         }
 
         var validation = ValidateCorrectionRequest(request);
@@ -371,25 +445,6 @@ public sealed class AttendanceService : IAttendanceService
         return Result<AttendanceCorrectionRequestDto>.Success(MapCorrectionRequest(entity));
     }
 
-    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetMyCorrectionRequestsAsync(
-        string userEmail,
-        CancellationToken cancellationToken = default)
-    {
-        var developer = await ResolveDeveloperAsync(userEmail, cancellationToken);
-        if (developer is null)
-        {
-            return [];
-        }
-
-        if (!developer.IsOwnTeam)
-        {
-            return [];
-        }
-
-        var requests = await _attendanceRepository.GetCorrectionRequestsByDeveloperAsync(developer.Id, cancellationToken);
-        return requests.Select(MapCorrectionRequest).ToList();
-    }
-
     public async Task<Result> CancelCorrectionRequestAsync(
         string userEmail,
         Guid requestId,
@@ -399,11 +454,6 @@ public sealed class AttendanceService : IAttendanceService
         if (developer is null)
         {
             return Result.Failure("Your login email is not linked to a Developer record.");
-        }
-
-        if (!developer.IsOwnTeam)
-        {
-            return Result.Failure("Attendance corrections are only available to own-team developers.");
         }
 
         var entity = await _attendanceRepository.GetCorrectionRequestByIdAsync(requestId, cancellationToken);
@@ -421,13 +471,6 @@ public sealed class AttendanceService : IAttendanceService
         return Result.Success();
     }
 
-    public async Task<IReadOnlyList<AttendanceCorrectionRequestDto>> GetCorrectionRequestsAsync(
-        CancellationToken cancellationToken = default)
-    {
-        var requests = await _attendanceRepository.GetCorrectionRequestsAsync(cancellationToken, ownTeamOnly: true);
-        return requests.Select(MapCorrectionRequest).ToList();
-    }
-
     public async Task<Result<AttendanceCorrectionRequestDto>> ApproveCorrectionRequestAsync(
         Guid requestId,
         Guid adminUserId,
@@ -443,11 +486,6 @@ public sealed class AttendanceService : IAttendanceService
         if (entity.Status != AttendanceCorrectionStatus.Pending)
         {
             return Result<AttendanceCorrectionRequestDto>.Failure("This request has already been reviewed.");
-        }
-
-        if (entity.Developer?.IsOwnTeam != true)
-        {
-            return Result<AttendanceCorrectionRequestDto>.Failure("Correction requests can only be reviewed for own-team developers.");
         }
 
         var punchIn = request.ApprovedPunchInUtc ?? entity.RequestedPunchInUtc;
@@ -492,11 +530,6 @@ public sealed class AttendanceService : IAttendanceService
             return Result<AttendanceCorrectionRequestDto>.Failure("This request has already been reviewed.");
         }
 
-        if (entity.Developer?.IsOwnTeam != true)
-        {
-            return Result<AttendanceCorrectionRequestDto>.Failure("Correction requests can only be reviewed for own-team developers.");
-        }
-
         entity.Status = AttendanceCorrectionStatus.Rejected;
         entity.ReviewerComment = NormalizeOptionalText(request.ReviewerComment, MaxCommentLength);
         entity.ReviewedByUserId = adminUserId;
@@ -516,11 +549,6 @@ public sealed class AttendanceService : IAttendanceService
         if (developer is null)
         {
             return Result<AttendanceRecordDto>.Failure("Developer was not found.");
-        }
-
-        if (!developer.IsOwnTeam)
-        {
-            return Result<AttendanceRecordDto>.Failure("Attendance records can only be edited for own-team developers.");
         }
 
         if (request.PunchInUtc.HasValue
@@ -610,8 +638,15 @@ public sealed class AttendanceService : IAttendanceService
 
     private async Task<AttendanceSettings> GetSettingsEntityAsync(CancellationToken cancellationToken)
     {
+        var settings = await _attendanceRepository.GetSettingsAsync(cancellationToken);
+        if (settings is not null)
+        {
+            return settings;
+        }
+
         await _attendanceRepository.EnsureSettingsAsync(cancellationToken);
-        return (await _attendanceRepository.GetSettingsAsync(cancellationToken))!;
+        return await _attendanceRepository.GetSettingsAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Attendance settings could not be initialized.");
     }
 
     private Task<Developer?> ResolveDeveloperAsync(string userEmail, CancellationToken cancellationToken) =>
@@ -630,6 +665,88 @@ public sealed class AttendanceService : IAttendanceService
         }
 
         return AttendanceNextActionDto.Complete;
+    }
+
+    private AttendanceDayRowDto BuildAttendanceDayRow(
+        IGrouping<(Guid DeveloperId, DateOnly WorkDate), AttendanceDaySourceRow> sourceRows,
+        AttendanceSettings settings,
+        TimeZoneInfo timeZone)
+    {
+        var recordRow = sourceRows.FirstOrDefault(row => row.HasRecord);
+        var correctionRows = sourceRows.Where(row => !row.HasRecord).ToList();
+        var pending = correctionRows
+            .Where(row => row.CorrectionStatus == AttendanceCorrectionStatus.Pending)
+            .OrderByDescending(row => row.CorrectionCreatedAtUtc)
+            .FirstOrDefault();
+        var record = recordRow is null
+            ? null
+            : new AttendanceRecord
+            {
+                DeveloperId = sourceRows.Key.DeveloperId,
+                WorkDate = sourceRows.Key.WorkDate,
+                PunchInUtc = recordRow.PunchInUtc,
+                PunchOutUtc = recordRow.PunchOutUtc,
+                PunchInIsCorrected = recordRow.PunchInIsCorrected,
+                PunchOutIsCorrected = recordRow.PunchOutIsCorrected,
+                PunchInCorrectedAtUtc = recordRow.PunchInCorrectedAtUtc,
+                PunchOutCorrectedAtUtc = recordRow.PunchOutCorrectedAtUtc
+            };
+
+        return new AttendanceDayRowDto(
+            sourceRows.Key.DeveloperId,
+            recordRow?.DeveloperName ?? correctionRows.FirstOrDefault()?.DeveloperName ?? string.Empty,
+            sourceRows.Key.WorkDate,
+            recordRow?.PunchInUtc,
+            recordRow?.PunchOutUtc,
+            recordRow?.PunchInIsCorrected ?? false,
+            recordRow?.PunchOutIsCorrected ?? false,
+            recordRow?.PunchInCorrectedAtUtc,
+            recordRow?.PunchOutCorrectedAtUtc,
+            record is null ? null : _statusCalculator.ComputeStatus(record, settings, timeZone),
+            record is null ? null : _statusCalculator.ComputeWorkHours(record),
+            pending is not null,
+            pending?.RequestedPunchInUtc is not null,
+            pending?.RequestedPunchOutUtc is not null,
+            pending?.CorrectionRequestId,
+            correctionRows.Count);
+    }
+
+    private AttendanceDayRowDto BuildAttendanceDayRow(
+        Guid developerId,
+        DateOnly workDate,
+        AttendanceRecord? record,
+        IReadOnlyList<AttendanceCorrectionRequest> corrections,
+        Developer? fallbackDeveloper,
+        AttendanceSettings settings,
+        TimeZoneInfo timeZone)
+    {
+        var pending = corrections
+            .Where(request => request.Status == AttendanceCorrectionStatus.Pending)
+            .OrderByDescending(request => request.CreatedAtUtc)
+            .FirstOrDefault();
+        var firstCorrection = corrections.FirstOrDefault();
+        var developerName = record?.Developer?.Name
+            ?? firstCorrection?.Developer?.Name
+            ?? fallbackDeveloper?.Name
+            ?? string.Empty;
+
+        return new AttendanceDayRowDto(
+            developerId,
+            developerName,
+            workDate,
+            record?.PunchInUtc,
+            record?.PunchOutUtc,
+            record?.PunchInIsCorrected ?? false,
+            record?.PunchOutIsCorrected ?? false,
+            record?.PunchInCorrectedAtUtc,
+            record?.PunchOutCorrectedAtUtc,
+            record is null ? null : _statusCalculator.ComputeStatus(record, settings, timeZone),
+            record is null ? null : _statusCalculator.ComputeWorkHours(record),
+            pending is not null,
+            pending?.RequestedPunchInUtc is not null,
+            pending?.RequestedPunchOutUtc is not null,
+            pending?.Id,
+            corrections.Count);
     }
 
     private AttendanceRecordDto MapRecord(
@@ -689,6 +806,18 @@ public sealed class AttendanceService : IAttendanceService
         AttendanceCorrectionStatus.Approved => AttendanceCorrectionStatusDto.Approved,
         AttendanceCorrectionStatus.Rejected => AttendanceCorrectionStatusDto.Rejected,
         _ => AttendanceCorrectionStatusDto.Pending
+    };
+
+    private static AttendanceDayStatusFilter MapStatusFilter(AttendanceDayStatusFilterDto status) => status switch
+    {
+        AttendanceDayStatusFilterDto.Pending => AttendanceDayStatusFilter.Pending,
+        AttendanceDayStatusFilterDto.OnTime => AttendanceDayStatusFilter.OnTime,
+        AttendanceDayStatusFilterDto.Late => AttendanceDayStatusFilter.Late,
+        AttendanceDayStatusFilterDto.EarlyLeave => AttendanceDayStatusFilter.EarlyLeave,
+        AttendanceDayStatusFilterDto.Incomplete => AttendanceDayStatusFilter.Incomplete,
+        AttendanceDayStatusFilterDto.Absent => AttendanceDayStatusFilter.Absent,
+        AttendanceDayStatusFilterDto.NoRecord => AttendanceDayStatusFilter.NoRecord,
+        _ => AttendanceDayStatusFilter.All
     };
 
     private static Result ValidateSettings(UpdateAttendanceSettingsRequest request)

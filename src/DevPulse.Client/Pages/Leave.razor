@@ -172,23 +172,13 @@
                         <div class="col-md-6">
                             <label class="form-label" for="fromDate">From</label>
 
-                            <input id="fromDate"
-                                   type="date"
-                                   class="form-control"
-                                   @bind="_fromDate"
-                                   @bind:format="yyyy-MM-dd"
-                                   @bind:after="OnLeaveTypeOrDatesChanged" />
+                            <DateInput Id="fromDate" @bind-Value="_fromDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" DefaultValue="@DefaultFromDate" />
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label" for="toDate">To</label>
 
-                            <input id="toDate"
-                                   type="date"
-                                   class="form-control"
-                                   @bind="_toDate"
-                                   @bind:format="yyyy-MM-dd"
-                                   @bind:after="OnLeaveTypeOrDatesChanged" />
+                            <DateInput Id="toDate" @bind-Value="_toDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" DefaultValue="@DefaultToDate" />
                         </div>
 
                         <div class="col-md-6">
@@ -282,8 +272,13 @@
 
     private Guid _selectedLeaveTypeId;
 
-    private DateOnly _fromDate = DateOnly.FromDateTime(DateTime.Today);
-    private DateOnly _toDate = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly _fromDate;
+    private DateOnly _toDate;
+
+    // Single definition of the range default: used on first open and when a date
+    // field is cleared, so the two can never drift apart.
+    private DateOnly DefaultFromDate => DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly DefaultToDate => DateOnly.FromDateTime(DateTime.Today);
 
     private decimal? _calculatedDays;
 
@@ -306,6 +301,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _fromDate = DefaultFromDate;
+        _toDate = DefaultToDate;
         await LoadAsync();
     }
 

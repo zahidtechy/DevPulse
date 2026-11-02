@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace DevPulse.Infrastructure.Persistence.Repositories;
 
 public sealed class HolidayRepository : IHolidayRepository
@@ -46,6 +48,42 @@ public sealed class HolidayRepository : IHolidayRepository
     {
         _dbContext.CompanyHolidays.Add(holiday);
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CompanyHoliday>> AddNonOverlappingAsync(
+        IReadOnlyList<CompanyHoliday> holidays,
+        CancellationToken cancellationToken = default)
+    {
+        if (holidays.Count == 0)
+        {
+            return [];
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        var fromDate = holidays.Min(holiday => holiday.FromDate);
+        var toDate = holidays.Max(holiday => holiday.ToDate);
+        var existing = await _dbContext.CompanyHolidays
+            .Where(holiday => holiday.FromDate <= toDate && holiday.ToDate >= fromDate)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var imported = new List<CompanyHoliday>();
+        foreach (var holiday in holidays.OrderBy(item => item.FromDate).ThenBy(item => item.Name))
+        {
+            if (existing.Any(item => item.FromDate <= holiday.ToDate && item.ToDate >= holiday.FromDate))
+            {
+                continue;
+            }
+
+            _dbContext.CompanyHolidays.Add(holiday);
+            existing.Add(holiday);
+            imported.Add(holiday);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return imported;
     }
 
     public async Task UpdateAsync(CompanyHoliday holiday, CancellationToken cancellationToken = default)
