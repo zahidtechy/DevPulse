@@ -36,6 +36,8 @@ public interface ILeaveApiClient
 
     Task<LeaveSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default);
 
+    Task<LeaveWeekendSettingsDto> GetWeekendSettingsAsync(CancellationToken cancellationToken = default);
+
     Task<LeaveSettingsDto?> UpdateSettingsAsync(UpdateLeaveSettingsRequest request, CancellationToken cancellationToken = default);
 
     Task SendTestTelegramAsync(CancellationToken cancellationToken = default);
@@ -159,6 +161,12 @@ public sealed class LeaveApiClient : ILeaveApiClient
     {
         var settings = await _httpClient.GetFromJsonAsync<LeaveSettingsDto>("api/leave/settings", _jsonOptions, cancellationToken);
         return settings ?? new LeaveSettingsDto(false, null, 65, null, null, false);
+    }
+
+    public async Task<LeaveWeekendSettingsDto> GetWeekendSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        var settings = await _httpClient.GetFromJsonAsync<LeaveWeekendSettingsDto>("api/leave/settings/weekend", _jsonOptions, cancellationToken);
+        return settings ?? new LeaveWeekendSettingsDto(65);
     }
 
     public async Task<LeaveSettingsDto?> UpdateSettingsAsync(UpdateLeaveSettingsRequest request, CancellationToken cancellationToken = default)

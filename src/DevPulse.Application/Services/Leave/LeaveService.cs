@@ -454,6 +454,12 @@ public sealed class LeaveService : ILeaveService
     public Task<LeaveSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default) =>
         _telegramService.GetSettingsAsync(cancellationToken);
 
+    public async Task<LeaveWeekendSettingsDto> GetWeekendSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        var weekendDaysBitmask = await _telegramService.GetWeekendDaysBitmaskAsync(cancellationToken);
+        return new LeaveWeekendSettingsDto(weekendDaysBitmask);
+    }
+
     public Task<Result<LeaveSettingsDto>> UpdateSettingsAsync(UpdateLeaveSettingsRequest request, CancellationToken cancellationToken = default) =>
         _telegramService.UpdateSettingsAsync(request, cancellationToken);
 

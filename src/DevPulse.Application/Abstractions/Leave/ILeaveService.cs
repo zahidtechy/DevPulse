@@ -49,6 +49,8 @@ public interface ILeaveService
 
     Task<LeaveSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default);
 
+    Task<LeaveWeekendSettingsDto> GetWeekendSettingsAsync(CancellationToken cancellationToken = default);
+
     Task<Result<LeaveSettingsDto>> UpdateSettingsAsync(UpdateLeaveSettingsRequest request, CancellationToken cancellationToken = default);
 
     Task<Result> SendTestTelegramAsync(CancellationToken cancellationToken = default);

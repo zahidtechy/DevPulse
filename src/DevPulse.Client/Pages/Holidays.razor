@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @implements IAsyncDisposable
 @inject IHolidayApiClient HolidayApi
+@inject ILeaveApiClient LeaveApi
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject ToastService Toast
@@ -121,6 +122,7 @@
                                                Month="month"
                                                Holidays="_holidays"
                                                Today="_today"
+                                               WeekendDaysBitmask="_weekendDaysBitmask"
                                                SelectedHolidayId="_highlightedHolidayId"
                                                OnHolidaySelected="SelectHolidayFromCalendarAsync" />
                             }
@@ -402,6 +404,9 @@
     private readonly List<HolidayDto> _holidays = [];
     private readonly DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
 
+    // Saturday + Sunday. Replaced by the server's weekend rule once loaded.
+    private int _weekendDaysBitmask = 65;
+
     private int _selectedYear = DateTime.Today.Year;
     private bool _isLoading = true;
     private bool _isBusy;
@@ -436,7 +441,22 @@
         _toDate = DefaultToDate;
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _isAdmin = authState.User.IsInRole(AppRoles.Admin);
+        await LoadWeekendSettingsAsync();
         await LoadHolidaysAsync();
+    }
+
+    private async Task LoadWeekendSettingsAsync()
+    {
+        try
+        {
+            var settings = await LeaveApi.GetWeekendSettingsAsync();
+            _weekendDaysBitmask = settings.WeekendDaysBitmask;
+        }
+        catch (Exception)
+        {
+            // Weekend rules only affect the summary counts here, so fall back to
+            // the Saturday/Sunday default instead of blocking the page.
+        }
     }
 
     private async Task LoadHolidaysAsync()
@@ -907,8 +927,8 @@
                 .Select(offset => holiday.FromDate.AddDays(offset)))
             .Distinct();
 
-    private static bool IsWeekend(DateOnly date) =>
-        date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+    private bool IsWeekend(DateOnly date) =>
+        (_weekendDaysBitmask & (1 << (int)date.DayOfWeek)) != 0;
 
     private int GetTotalOffDays() =>
         GetWeekendDaysInYear() + GetTotalDaysOff();

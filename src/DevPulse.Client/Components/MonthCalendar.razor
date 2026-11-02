@@ -69,6 +69,10 @@
     [Parameter]
     public DateOnly Today { get; set; }
 
+    // Bitmask of weekend days (1 << DayOfWeek). Defaults to Saturday + Sunday.
+    [Parameter]
+    public int WeekendDaysBitmask { get; set; } = 65;
+
     [Parameter]
     public Guid? SelectedHolidayId { get; set; }
 
@@ -124,11 +128,14 @@
     private HolidayDto? FindHolidayForDate(DateOnly date) =>
         Holidays.FirstOrDefault(h => date >= h.FromDate && date <= h.ToDate);
 
+    private bool IsWeekend(DateOnly date) =>
+        (WeekendDaysBitmask & (1 << (int)date.DayOfWeek)) != 0;
+
     private string BuildDayClass(DateOnly day, HolidayDto? holiday, bool isRangeStart, bool isRangeEnd)
     {
         var classes = new List<string> { "holiday-day" };
 
-        if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        if (IsWeekend(day))
         {
             classes.Add("holiday-day-weekend");
         }

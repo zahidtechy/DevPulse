@@ -86,6 +86,10 @@ public record LeaveDayCountRequest(
 
 public record LeaveDayCountDto(decimal Days);
 
+// Read-only projection of the weekend configuration. Exposed to every authenticated
+// user so non-admin screens can mirror the exact working-day rules used server-side.
+public record LeaveWeekendSettingsDto(int WeekendDaysBitmask);
+
 public record LeaveSettingsDto(
     bool HasTelegramBotToken,
     string? TelegramChatId,
