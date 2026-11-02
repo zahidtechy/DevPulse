@@ -893,7 +893,17 @@
         holiday.ToDate.DayNumber - holiday.FromDate.DayNumber + 1;
 
     private int GetTotalDaysOff() =>
-        _holidays.Sum(GetDurationDays);
+        GetHolidayDates().Count(date => !IsWeekend(date));
+
+    private IEnumerable<DateOnly> GetHolidayDates() =>
+        _holidays
+            .SelectMany(holiday => Enumerable
+                .Range(0, holiday.ToDate.DayNumber - holiday.FromDate.DayNumber + 1)
+                .Select(offset => holiday.FromDate.AddDays(offset)))
+            .Distinct();
+
+    private static bool IsWeekend(DateOnly date) =>
+        date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
 
     private HolidayDto? GetNextHoliday()
     {
