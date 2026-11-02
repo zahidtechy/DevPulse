@@ -46,6 +46,8 @@
     }
     else
     {
+        var nextHoliday = GetNextHoliday();
+
         <div class="holiday-stats">
             <div class="holiday-stat-card holiday-stat-card-holidays">
                 <span class="holiday-stat-icon bi-calendar-event" aria-hidden="true"></span>
@@ -57,11 +59,15 @@
                 <span class="holiday-stat-label">Days off</span>
                 <span class="holiday-stat-value">@GetTotalDaysOff()</span>
             </div>
-            <div class="holiday-stat-card holiday-stat-card-wide holiday-stat-card-next">
+            <button type="button"
+                    class="holiday-stat-card holiday-stat-card-wide holiday-stat-card-next holiday-stat-card-action"
+                    disabled="@(nextHoliday is null)"
+                    title="@(nextHoliday is null ? null : "Show in calendar")"
+                    @onclick="() => SelectNextHolidayAsync(nextHoliday)">
                 <span class="holiday-stat-icon bi-arrow-right-circle" aria-hidden="true"></span>
                 <span class="holiday-stat-label">Next holiday</span>
-                <span class="holiday-stat-value holiday-stat-value-text">@GetNextHolidayLabel()</span>
-            </div>
+                <span class="holiday-stat-value holiday-stat-value-text">@GetNextHolidayLabel(nextHoliday)</span>
+            </button>
         </div>
 
         <div class="filter-card card mb-4 holiday-nav-card">
@@ -656,6 +662,16 @@
         await ScrollToHolidayMonthAsync(month);
     }
 
+    private async Task SelectNextHolidayAsync(HolidayDto? holiday)
+    {
+        if (holiday is null)
+        {
+            return;
+        }
+
+        await SelectHolidayInCalendarAsync(holiday, GetFirstVisibleMonth(holiday));
+    }
+
     private async Task ScrollToHolidayListItemAsync(Guid holidayId)
     {
         await ScrollToElementAsync(GetHolidayListItemId(holidayId), "nearest");
@@ -690,6 +706,19 @@
     private static string GetHolidayListItemId(Guid holidayId) => $"holiday-item-{holidayId}";
 
     private string GetHolidayMonthId(int month) => $"holiday-month-{SelectedYear}-{month:D2}";
+
+    private int GetFirstVisibleMonth(HolidayDto holiday)
+    {
+        var yearStart = new DateOnly(SelectedYear, 1, 1);
+        var yearEnd = new DateOnly(SelectedYear, 12, 31);
+        var firstVisibleDate = holiday.FromDate < yearStart
+            ? yearStart
+            : holiday.FromDate > yearEnd
+                ? yearEnd
+                : holiday.FromDate;
+
+        return firstVisibleDate.Month;
+    }
 
     private string? GetHolidayListItemClass(Guid holidayId)
     {
@@ -866,18 +895,22 @@
     private int GetTotalDaysOff() =>
         _holidays.Sum(GetDurationDays);
 
-    private string GetNextHolidayLabel()
+    private HolidayDto? GetNextHoliday()
+    {
+        var referenceDate = _selectedYear == _today.Year ? _today : new DateOnly(_selectedYear, 1, 1);
+        return _holidays
+            .Where(h => h.ToDate >= referenceDate)
+            .OrderBy(h => h.FromDate)
+            .ThenBy(h => h.Name)
+            .FirstOrDefault();
+    }
+
+    private string GetNextHolidayLabel(HolidayDto? upcoming)
     {
         if (_holidays.Count == 0)
         {
             return "None scheduled";
         }
-
-        var referenceDate = _selectedYear == _today.Year ? _today : new DateOnly(_selectedYear, 1, 1);
-        var upcoming = _holidays
-            .Where(h => h.ToDate >= referenceDate)
-            .OrderBy(h => h.FromDate)
-            .FirstOrDefault();
 
         if (upcoming is null)
         {
