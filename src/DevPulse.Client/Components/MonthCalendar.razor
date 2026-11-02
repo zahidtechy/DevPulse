@@ -137,6 +137,10 @@
         {
             classes.Add("holiday-day-today");
         }
+        else if (day < Today)
+        {
+            classes.Add("holiday-day-past");
+        }
 
         if (holiday is not null)
         {

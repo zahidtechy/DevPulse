@@ -2922,6 +2922,21 @@ button.holiday-day:hover {
     background: var(--dp-primary-hover) !important;
 }
 
+/* Past dates fade out, but opacity is used so weekend/today/holiday colours
+   keep applying underneath instead of being overridden. */
+.holiday-day-past {
+    opacity: 0.42;
+}
+
+.holiday-day-past.holiday-day-holiday {
+    opacity: 0.68;
+}
+
+.holiday-day-past.holiday-day-has-tooltip:hover,
+.holiday-day-past.holiday-day-has-tooltip:focus-visible {
+    opacity: 1;
+}
+
 .holiday-list-panel {
     position: sticky;
     top: calc(var(--dp-header-height) + 1rem);
