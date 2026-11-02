@@ -49,6 +49,11 @@
         var nextHoliday = GetNextHoliday();
 
         <div class="holiday-stats">
+            <div class="holiday-stat-card holiday-stat-card-total">
+                <span class="holiday-stat-icon bi-calendar2-check" aria-hidden="true"></span>
+                <span class="holiday-stat-label">Total off days</span>
+                <span class="holiday-stat-value">@GetTotalOffDays()</span>
+            </div>
             <div class="holiday-stat-card holiday-stat-card-holidays">
                 <span class="holiday-stat-icon bi-calendar-event" aria-hidden="true"></span>
                 <span class="holiday-stat-label">Holidays</span>
@@ -904,6 +909,28 @@
 
     private static bool IsWeekend(DateOnly date) =>
         date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+    private int GetTotalOffDays() =>
+        GetWeekendDaysInYear() + GetTotalDaysOff();
+
+    private int GetWeekendDaysInYear()
+    {
+        var total = 0;
+        var date = new DateOnly(_selectedYear, 1, 1);
+        var yearEnd = new DateOnly(_selectedYear, 12, 31);
+
+        while (date <= yearEnd)
+        {
+            if (IsWeekend(date))
+            {
+                total++;
+            }
+
+            date = date.AddDays(1);
+        }
+
+        return total;
+    }
 
     private HolidayDto? GetNextHoliday()
     {

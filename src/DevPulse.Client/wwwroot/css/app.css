@@ -2360,7 +2360,7 @@ code {
 
 .holiday-stats {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.875rem;
     margin-bottom: 1rem;
 }
@@ -2392,6 +2392,10 @@ code {
     background: linear-gradient(180deg, #fb7185, #e11d48);
 }
 
+.holiday-stat-card-total::before {
+    background: linear-gradient(180deg, #34d399, #059669);
+}
+
 .holiday-stat-card-days::before {
     background: linear-gradient(180deg, #fbbf24, #d97706);
 }
@@ -2417,6 +2421,11 @@ code {
 .holiday-stat-card-holidays .holiday-stat-icon {
     background: #fff1f2;
     color: #e11d48;
+}
+
+.holiday-stat-card-total .holiday-stat-icon {
+    background: #ecfdf5;
+    color: #059669;
 }
 
 .holiday-stat-card-days .holiday-stat-icon {
@@ -3309,10 +3318,6 @@ button.holiday-day:hover {
 
     .holiday-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .holiday-stat-card-wide {
-        grid-column: 1 / -1;
     }
 }
 
