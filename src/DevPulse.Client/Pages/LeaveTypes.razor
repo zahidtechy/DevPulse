@@ -15,66 +15,13 @@
                 Configure leave categories, yearly allowance, and how days are counted when team members apply for time off.
             </p>
         </div>
-        @if (!_showForm)
-        {
-            <div class="analytics-hero-actions">
-                <button class="btn btn-light btn-sm" @onclick="ShowAddForm">
-                    <span class="bi-plus-lg leave-types-btn-icon" aria-hidden="true"></span>
-                    Add Leave Type
-                </button>
-            </div>
-        }
-    </div>
-
-    @if (_showForm)
-    {
-        <div class="filter-card card mb-4 leave-types-form-card">
-            <div class="card-body">
-                <div class="attendance-section-header mb-3">
-                    <span class="attendance-section-icon bi-@(_editingId.HasValue ? "pencil-square" : "calendar-plus")" aria-hidden="true"></span>
-                    <div>
-                        <h5 class="card-title mb-1">@(_editingId.HasValue ? "Edit Leave Type" : "New Leave Type")</h5>
-                        <p class="attendance-section-desc mb-0">
-                            Define the name, annual allowance, and whether days exclude weekends and holidays.
-                        </p>
-                    </div>
-                </div>
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">Name</label>
-                        <input class="form-control" @bind="_name" placeholder="Annual Leave" />
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Days per year</label>
-                        <input type="number" class="form-control" min="1" @bind="_daysPerYear" />
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Counting mode</label>
-                        <select class="form-select" @bind="_countingMode">
-                            <option value="@LeaveCountingModeDto.WorkingDays">Working days</option>
-                            <option value="@LeaveCountingModeDto.CalendarDays">Calendar days</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3 d-flex align-items-end">
-                        <div class="form-check leave-types-active-toggle">
-                            <input class="form-check-input" type="checkbox" id="leaveTypeActive" @bind="_isActive" />
-                            <label class="form-check-label" for="leaveTypeActive">Available for new applications</label>
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label">Policy notes <span class="text-muted">(optional)</span></label>
-                        <textarea class="form-control" rows="2" @bind="_policyNotes" placeholder="Describe eligibility, carry-over rules, or approval requirements"></textarea>
-                    </div>
-                </div>
-                <div class="filter-actions mt-3">
-                    <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
-                    <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveAsync">
-                        @(_editingId.HasValue ? "Update Leave Type" : "Create Leave Type")
-                    </BusyButton>
-                </div>
-            </div>
+        <div class="analytics-hero-actions">
+            <button class="btn btn-light btn-sm" @onclick="ShowAddForm">
+                <span class="bi-plus-lg leave-types-btn-icon" aria-hidden="true"></span>
+                Add Leave Type
+            </button>
         </div>
-    }
+    </div>
 
     @if (!_hasLoaded)
     {
@@ -235,6 +182,73 @@
         }
     }
 </div>
+
+<ModalDialog IsVisible="_showForm"
+             Title="@(_editingId.HasValue ? "Edit Leave Type" : "Add Leave Type")"
+             IsBusy="_isBusy"
+             OnClose="HideForm">
+    <ChildContent>
+        <p class="text-muted small mb-3">
+            Define the name, annual allowance, and whether days exclude weekends and holidays.
+        </p>
+        <div class="row g-3">
+            <div class="col-md-8">
+                <label class="form-label" for="leaveTypeName">Name</label>
+                <input id="leaveTypeName"
+                       class="form-control"
+                       disabled="@_isBusy"
+                       @bind="_name"
+                       placeholder="Annual Leave" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="leaveTypeDaysPerYear">Days per year</label>
+                <input id="leaveTypeDaysPerYear"
+                       type="number"
+                       class="form-control"
+                       min="1"
+                       disabled="@_isBusy"
+                       @bind="_daysPerYear" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="leaveTypeCountingMode">Counting mode</label>
+                <select id="leaveTypeCountingMode"
+                        class="form-select"
+                        disabled="@_isBusy"
+                        @bind="_countingMode">
+                    <option value="@LeaveCountingModeDto.WorkingDays">Working days</option>
+                    <option value="@LeaveCountingModeDto.CalendarDays">Calendar days</option>
+                </select>
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+                <div class="form-check leave-types-active-toggle">
+                    <input id="leaveTypeActive"
+                           class="form-check-input"
+                           type="checkbox"
+                           disabled="@_isBusy"
+                           @bind="_isActive" />
+                    <label class="form-check-label" for="leaveTypeActive">Available for new applications</label>
+                </div>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="leaveTypePolicyNotes">
+                    Policy notes <span class="text-muted">(optional)</span>
+                </label>
+                <textarea id="leaveTypePolicyNotes"
+                          class="form-control"
+                          rows="3"
+                          disabled="@_isBusy"
+                          @bind="_policyNotes"
+                          placeholder="Describe eligibility, carry-over rules, or approval requirements"></textarea>
+            </div>
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
+        <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveAsync">
+            @(_editingId.HasValue ? "Update Leave Type" : "Create Leave Type")
+        </BusyButton>
+    </FooterContent>
+</ModalDialog>
 
 @if (_deleteTarget is not null)
 {

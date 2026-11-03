@@ -6914,10 +6914,6 @@ button.holiday-day:hover {
     opacity: 0.92;
 }
 
-.leave-types-form-card .card-body {
-    padding: 1.1rem 1.25rem;
-}
-
 .leave-types-active-toggle {
     margin-bottom: 0.35rem;
 }
