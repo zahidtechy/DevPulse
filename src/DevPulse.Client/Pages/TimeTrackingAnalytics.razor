@@ -5,6 +5,7 @@
 @inject IHubstaffAnalyticsApiClient HubstaffAnalyticsApi
 @inject IDeveloperApiClient DeveloperApi
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Time Tracking Analytics")</PageTitle>
 
@@ -203,6 +204,7 @@
         }
 
         _isLoading = true;
+        using var progress = _analytics is not null ? Progress.Begin() : null;
         try
         {
             var request = new HubstaffAnalyticsRequest(

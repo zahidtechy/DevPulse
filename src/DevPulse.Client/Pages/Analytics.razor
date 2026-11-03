@@ -6,6 +6,7 @@
 @inject IAnalyticsApiClient AnalyticsApi
 @inject IJSRuntime JS
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("MIS Analytics")</PageTitle>
 
@@ -716,6 +717,8 @@
         }
 
         _isLoading = true;
+
+        using var progress = _kpis is not null ? Progress.Begin() : null;
 
         try
         {

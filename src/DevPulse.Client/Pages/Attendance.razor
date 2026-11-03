@@ -1,6 +1,7 @@
 @page "/attendance"
 @attribute [Authorize]
 @inject ToastService Toast
+@inject ShellProgressService Progress
 @inject IAttendanceApiClient AttendanceApi
 @inject IDeveloperApiClient DeveloperApi
 @inject AuthenticationStateProvider AuthStateProvider
@@ -185,6 +186,7 @@
                                             ? "Review team attendance, resolve correction requests, and complete missing punches."
                                             : "Check your punches, hours worked, and correction request status.")
                                     </p>
+                                    <RefreshIndicator IsBusy="_isLoadingRecords && _hasLoadedRecords" Text="Updating records..." />
                                 </div>
                                 @if (_me.DeveloperId is not null)
                                 {
@@ -1033,6 +1035,7 @@
         bool notifyOnError,
         bool trackRefreshError = true)
     {
+        using var progress = _hasLoadedRecords && notifyOnError ? Progress.Begin() : null;
         _isLoadingRecords = true;
         try
         {
@@ -1305,6 +1308,7 @@
 
     private async Task LoadAnalyticsAsync(bool notifyOnError)
     {
+        using var progress = _analytics is not null && notifyOnError ? Progress.Begin() : null;
         _isLoadingAnalytics = true;
         try { _analytics = await AttendanceApi.GetAnalyticsAsync(_analyticsFrom, _analyticsTo); }
         catch (Exception ex) { NoteRefreshError(ex, notifyOnError); }

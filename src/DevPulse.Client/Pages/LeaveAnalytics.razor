@@ -4,6 +4,7 @@
 @inject ILeaveApiClient LeaveApi
 @inject IJSRuntime JS
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Leave Analytics")</PageTitle>
 
@@ -126,7 +127,7 @@
             </div>
         </div>
 
-        @if (_isLoading)
+        @if (_isLoading && _summary is null)
         {
             <div class="leave-analytics-skeleton" aria-hidden="true">
                 <div class="leave-analytics-skeleton-kpis"></div>
@@ -478,6 +479,7 @@
 
     private async Task LoadAnalyticsAsync()
     {
+        using var progress = _summary is not null ? Progress.Begin() : null;
         _isLoading = true;
 
         try
