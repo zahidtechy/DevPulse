@@ -5663,7 +5663,8 @@ button.holiday-day:hover {
     display: flex;
     align-items: center;
     align-self: start;
-    justify-self: start;
+    justify-self: stretch;
+    width: 100%;
     gap: 0.35rem;
     white-space: nowrap;
 }
