@@ -1,0 +1,15 @@
+@if (IsBusy)
+{
+    <span class="dp-refresh-indicator" role="status" aria-live="polite">
+        <span class="spinner spinner-btn" aria-hidden="true"></span>
+        <span>@Text</span>
+    </span>
+}
+
+@code {
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    [Parameter]
+    public string Text { get; set; } = "Refreshing...";
+}

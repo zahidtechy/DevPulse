@@ -1,5 +1,6 @@
 using DevPulse.Client;
 using DevPulse.Client.Services.Notifications;
+using DevPulse.Client.Services.Ui;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
@@ -36,6 +37,7 @@ builder.Services.AddScoped(sp =>
 });
 
 builder.Services.AddSingleton<ToastService>();
+builder.Services.AddScoped<ShellProgressService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IViewportService, ViewportService>();
 builder.Services.AddScoped<IClickUpAccountApiClient, ClickUpAccountApiClient>();

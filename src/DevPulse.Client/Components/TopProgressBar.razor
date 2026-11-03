@@ -1,0 +1,26 @@
+@implements IDisposable
+@inject ShellProgressService Progress
+
+<div class="dp-top-progress @(Progress.IsVisible ? "is-visible" : null)"
+     role="progressbar"
+     aria-label="Loading"
+     aria-hidden="@(Progress.IsVisible ? "false" : "true")">
+    <span class="dp-top-progress-bar" aria-hidden="true"></span>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Progress.Changed += HandleProgressChanged;
+    }
+
+    private void HandleProgressChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Progress.Changed -= HandleProgressChanged;
+    }
+}
