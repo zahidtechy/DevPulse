@@ -186,7 +186,6 @@
                                             ? "Review team attendance, resolve correction requests, and complete missing punches."
                                             : "Check your punches, hours worked, and correction request status.")
                                     </p>
-                                    <RefreshIndicator IsBusy="_isLoadingRecords && _hasLoadedRecords" Text="Updating records..." />
                                 </div>
                                 @if (_me.DeveloperId is not null)
                                 {
@@ -243,6 +242,9 @@
                                 <button type="button" class="period-chip" disabled="@_isLoadingRecords" @onclick="() => SetRecordsRangePresetAsync(0, 0)">Today</button>
                                 <button type="button" class="period-chip" disabled="@_isLoadingRecords" @onclick="() => SetRecordsRangePresetAsync(-1, -1)">Yesterday</button>
                                 <button type="button" class="period-chip" disabled="@_isLoadingRecords" @onclick="() => SetRecordsRangePresetAsync(-30, 0)">Last 30 days</button>
+                                <div class="ms-auto">
+                                    <RefreshIndicator IsBusy="_isLoadingRecords && _hasLoadedRecords" Text="Updating records..." />
+                                </div>
                             </div>
                         </div>
 
