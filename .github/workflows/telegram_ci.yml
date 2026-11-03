@@ -1,0 +1,229 @@
+name: Telegram Deployment Notification
+
+# Sends a Telegram message after the "DevPulse CI" workflow finishes a
+# deployment run (push to production). The notification workflow never checks
+# out the repository, so no untrusted code is executed with the bot token.
+on:
+  workflow_run:
+    workflows: ["DevPulse CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      status:
+        description: "Status to report in the test notification"
+        type: choice
+        options:
+          - success
+          - failure
+          - cancelled
+        default: success
+      note:
+        description: "Optional extra line for the test notification"
+        type: string
+        required: false
+
+# No GITHUB_TOKEN permissions are needed: this workflow never checks out code,
+# downloads artifacts, or calls the GitHub API. Repository secrets are still
+# available to the workflow regardless of the token's permissions.
+permissions: {}
+
+jobs:
+  notify:
+    name: Send Telegram notification
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only announce real deployments: DevPulse CI deploys on pushes to production.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'production')
+    concurrency:
+      group: telegram-deploy-notify-${{ github.event.workflow_run.id || github.run_id }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Compose notification
+        id: compose
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WORKFLOW_NUMBER: ${{ github.event.workflow_run.run_number }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.workflow_run.head_commit.author.name }}
+          ACTOR: ${{ github.event.workflow_run.actor.login }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          STARTED_AT: ${{ github.event.workflow_run.run_started_at }}
+          UPDATED_AT: ${{ github.event.workflow_run.updated_at }}
+          MANUAL_STATUS: ${{ inputs.status }}
+          MANUAL_NOTE: ${{ inputs.note }}
+          DISPATCH_BRANCH: ${{ github.ref_name }}
+          DISPATCH_SHA: ${{ github.sha }}
+          DISPATCH_ACTOR: ${{ github.actor }}
+          DISPATCH_RUN_NUMBER: ${{ github.run_number }}
+          DISPATCH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          # Escape the small subset of characters Telegram's HTML parser treats as markup.
+          # sed is used instead of bash substitution because bash 5.2+ expands "&" in
+          # replacement strings (patsub_replacement), which would corrupt the entities.
+          html_escape() {
+            printf '%s' "$1" | sed \
+              -e 's/&/\&amp;/g' \
+              -e 's/</\&lt;/g' \
+              -e 's/>/\&gt;/g' \
+              -e 's/"/\&quot;/g'
+          }
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            STATUS="${MANUAL_STATUS:-success}"
+
+            # Telegram rejects text over 4096 characters, so bound operator input
+            # before it is appended to the notification.
+            MANUAL_NOTE="${MANUAL_NOTE:0:500}"
+
+            BRANCH="$DISPATCH_BRANCH"
+            SHA="$DISPATCH_SHA"
+            ACTOR="$DISPATCH_ACTOR"
+            RUN_URL="$DISPATCH_RUN_URL"
+            WORKFLOW_NUMBER="$DISPATCH_RUN_NUMBER"
+            COMMIT_MESSAGE="Manual test notification"
+            COMMIT_AUTHOR="$DISPATCH_ACTOR"
+            START_DISPLAY="$(date -u +"%Y-%m-%d %H:%M UTC")"
+            DURATION="n/a"
+          else
+            STATUS="${CONCLUSION:-unknown}"
+
+            START_DISPLAY="$STARTED_AT"
+            if [[ -n "$STARTED_AT" ]]; then
+              START_DISPLAY="$(date -u -d "$STARTED_AT" +"%Y-%m-%d %H:%M UTC" 2>/dev/null || printf '%s' "$STARTED_AT")"
+            fi
+
+            DURATION="n/a"
+            if [[ -n "$STARTED_AT" && -n "$UPDATED_AT" ]]; then
+              start_epoch="$(date -u -d "$STARTED_AT" +%s 2>/dev/null || true)"
+              end_epoch="$(date -u -d "$UPDATED_AT" +%s 2>/dev/null || true)"
+              if [[ -n "$start_epoch" && -n "$end_epoch" ]]; then
+                total_seconds=$((end_epoch - start_epoch))
+                if (( total_seconds < 0 )); then
+                  total_seconds=0
+                fi
+                DURATION="$((total_seconds / 60))m $((total_seconds % 60))s"
+              fi
+            fi
+          fi
+
+          case "$STATUS" in
+            success)   ICON="✅"; TITLE="Deployment succeeded" ;;
+            failure)   ICON="❌"; TITLE="Production pipeline failed" ;;
+            cancelled) ICON="⚪"; TITLE="Production pipeline cancelled" ;;
+            timed_out) ICON="⏱️"; TITLE="Production pipeline timed out" ;;
+            *)         ICON="ℹ️"; TITLE="Production pipeline finished: ${STATUS}" ;;
+          esac
+
+          # Trim to a single readable line and cap the length for the Telegram message.
+          COMMIT_SUBJECT="$(printf '%s' "${COMMIT_MESSAGE:-}" \
+            | head -n 1 \
+            | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+            | cut -c1-120)"
+          if [[ -z "$COMMIT_SUBJECT" ]]; then
+            COMMIT_SUBJECT="(no commit message)"
+          fi
+
+          SHA_SHORT="${SHA:0:7}"
+          if [[ -z "$SHA_SHORT" ]]; then
+            SHA_SHORT="unknown"
+          fi
+
+          REPO_HTML="$(html_escape "$REPO")"
+          BRANCH_HTML="$(html_escape "${BRANCH:-unknown}")"
+          COMMIT_HTML="$(html_escape "$COMMIT_SUBJECT")"
+          AUTHOR_HTML="$(html_escape "${COMMIT_AUTHOR:-unknown}")"
+          ACTOR_HTML="$(html_escape "${ACTOR:-unknown}")"
+          URL_HTML="$(html_escape "${RUN_URL:-}")"
+
+          MESSAGE="$(printf '%s\n' \
+            "${ICON} <b>${TITLE}</b>" \
+            "" \
+            "<b>Repository:</b> ${REPO_HTML}" \
+            "<b>Branch:</b> ${BRANCH_HTML}" \
+            "<b>Commit:</b> <code>${SHA_SHORT}</code> ${COMMIT_HTML}" \
+            "<b>Author:</b> ${AUTHOR_HTML}" \
+            "<b>Triggered by:</b> ${ACTOR_HTML}" \
+            "<b>Started:</b> ${START_DISPLAY:-unknown}" \
+            "<b>Workflow duration:</b> <i>${DURATION}</i>" \
+            "" \
+            "<a href=\"${URL_HTML}\">View run #${WORKFLOW_NUMBER:-?}</a>")"
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "${MANUAL_NOTE:-}" ]]; then
+            MESSAGE="${MESSAGE}"$'\n'"📝 $(html_escape "$MANUAL_NOTE")"
+          fi
+
+          DELIMITER="__TELEGRAM_MESSAGE_${GITHUB_RUN_ID:-0}_${RANDOM}_${RANDOM}__"
+          {
+            echo "message<<${DELIMITER}"
+            printf '%s\n' "$MESSAGE"
+            echo "${DELIMITER}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send Telegram message
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MESSAGE: ${{ steps.compose.outputs.message }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+            echo "::error::Repository secrets TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be configured."
+            exit 1
+          fi
+
+          payload="$(jq -cn \
+            --arg chat_id "$TELEGRAM_CHAT_ID" \
+            --arg text "$MESSAGE" \
+            '{chat_id: $chat_id, text: $text, parse_mode: "HTML", disable_web_page_preview: true}')"
+
+          response_file="$(mktemp)"
+          if ! http_code="$(curl -sS \
+              --retry 3 --retry-delay 5 --retry-connrefused \
+              --max-time 30 \
+              -o "$response_file" -w '%{http_code}' \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -H "Content-Type: application/json" \
+              --data-binary "$payload")"; then
+            http_code="000"
+          fi
+
+          if [[ "$http_code" != "200" ]]; then
+            echo "::error::Telegram API returned HTTP ${http_code}."
+            if ! jq -r '.description // empty' "$response_file" 2>/dev/null; then
+              cat "$response_file" 2>/dev/null || true
+            fi
+            exit 1
+          fi
+
+          if ! jq -e '.ok == true' "$response_file" >/dev/null 2>&1; then
+            echo "::error::Telegram API did not confirm successful delivery."
+            jq -r '.description // "Unknown Telegram API error"' "$response_file" 2>/dev/null || cat "$response_file" 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "Telegram notification sent."
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        env:
+          MESSAGE: ${{ steps.compose.outputs.message }}
+        run: |
+          {
+            echo "### Telegram deployment notification"
+            echo ""
+            printf '%s\n' "${MESSAGE:-Notification was not composed.}"
+          } >> "$GITHUB_STEP_SUMMARY"
