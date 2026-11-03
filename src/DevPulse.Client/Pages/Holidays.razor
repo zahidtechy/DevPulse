@@ -5,6 +5,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Holiday Calendar")</PageTitle>
 
@@ -24,13 +25,15 @@
                     <div class="analytics-hero-actions">
                         <BusyButton CssClass="btn btn-outline-light btn-sm"
                                     IsBusy="_isFetchingGoogleHolidays"
-                                    Disabled="_isImportingGoogleHolidays"
+                                    Disabled="@(_isImportingGoogleHolidays || _isLoadingHolidays)"
                                     BusyText="Fetching..."
                                     OnClick="FetchGoogleHolidaysAsync">
                             <span class="bi-cloud-download holiday-btn-icon" aria-hidden="true"></span>
                             Fetch from Google
                         </BusyButton>
-                        <button class="btn btn-outline-light btn-sm" @onclick="ShowAddForm">
+                        <button class="btn btn-outline-light btn-sm"
+                                disabled="@_isLoadingHolidays"
+                                @onclick="ShowAddForm">
                             <span class="bi-calendar-plus holiday-btn-icon" aria-hidden="true"></span>
                             Add Holiday
                         </button>
@@ -40,7 +43,7 @@
         </AuthorizeView>
     </div>
 
-    @if (_isLoading)
+    @if (!_hasLoaded)
     {
         <LoadingIndicator Text="Loading holidays..." />
     }
@@ -74,16 +77,25 @@
             <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <div class="holiday-toolbar">
                     <div class="holiday-year-nav">
-                        <button type="button" class="holiday-year-btn" @onclick="PreviousYearAsync" aria-label="Previous year">
+                        <button type="button"
+                                class="holiday-year-btn"
+                                disabled="@_isLoadingHolidays"
+                                @onclick="PreviousYearAsync"
+                                aria-label="Previous year">
                             <span class="bi-chevron-left" aria-hidden="true"></span>
                         </button>
                         <span class="holiday-year-label">@SelectedYear</span>
-                        <button type="button" class="holiday-year-btn" @onclick="NextYearAsync" aria-label="Next year">
+                        <button type="button"
+                                class="holiday-year-btn"
+                                disabled="@_isLoadingHolidays"
+                                @onclick="NextYearAsync"
+                                aria-label="Next year">
                             <span class="bi-chevron-right" aria-hidden="true"></span>
                         </button>
                     </div>
                     <button type="button"
                             class="period-chip @(_selectedYear == DateTime.Today.Year ? "active" : null)"
+                            disabled="@_isLoadingHolidays"
                             @onclick="GoToCurrentYearAsync">
                         This year
                     </button>
@@ -145,7 +157,10 @@
                             <p class="text-muted small mb-0 mt-1">There are no company holidays for @SelectedYear.</p>
                             <AuthorizeView Roles="@AppRoles.Admin">
                                 <Authorized>
-                                    <button type="button" class="btn btn-primary btn-sm mt-3" @onclick="ShowAddForm">Add first holiday</button>
+                                    <button type="button"
+                                            class="btn btn-primary btn-sm mt-3"
+                                            disabled="@_isLoadingHolidays"
+                                            @onclick="ShowAddForm">Add first holiday</button>
                                 </Authorized>
                             </AuthorizeView>
                         </div>
@@ -185,7 +200,7 @@
                                                              @onkeydown:stopPropagation="true">
                                                             <button type="button"
                                                                     class="btn btn-outline-primary btn-sm holiday-list-action-btn"
-                                                                    disabled="@_isBusy"
+                                                                    disabled="@(_isBusy || _isLoadingHolidays)"
                                                                     title="@($"Edit {holiday.Name}")"
                                                                     aria-label="@($"Edit {holiday.Name}")"
                                                                     @onclick="() => EditHolidayAsync(holiday)">
@@ -193,7 +208,7 @@
                                                             </button>
                                                             <button type="button"
                                                                     class="btn btn-outline-danger btn-sm holiday-list-action-btn"
-                                                                    disabled="@_isBusy"
+                                                                    disabled="@(_isBusy || _isLoadingHolidays)"
                                                                     title="@($"Delete {holiday.Name}")"
                                                                     aria-label="@($"Delete {holiday.Name}")"
                                                                     @onclick="() => DeleteHolidayAsync(holiday)">
@@ -398,7 +413,9 @@
     private readonly DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
 
     private int _selectedYear = DateTime.Today.Year;
-    private bool _isLoading = true;
+    private bool _hasLoaded;
+    private bool _isLoadingHolidays;
+    private int _holidayLoadVersion;
     private bool _isBusy;
     private bool _isAdmin;
     private bool _showForm;
@@ -434,48 +451,62 @@
         await LoadHolidaysAsync();
     }
 
-    private async Task LoadHolidaysAsync()
+    private async Task LoadHolidaysAsync(int? year = null)
     {
-        _isLoading = true;
+        var requestedYear = year ?? _selectedYear;
+        var loadVersion = ++_holidayLoadVersion;
+        _isLoadingHolidays = true;
+
+        using var progress = _hasLoaded ? Progress.Begin() : null;
 
         try
         {
-            var holidays = await HolidayApi.GetByYearAsync(_selectedYear);
+            var holidays = await HolidayApi.GetByYearAsync(requestedYear);
+            if (loadVersion != _holidayLoadVersion)
+            {
+                return;
+            }
+
+            _selectedYear = requestedYear;
             _holidays.Clear();
             _holidays.AddRange(holidays);
             _highlightedHolidayId = null;
         }
         catch (Exception ex)
         {
-            Toast.Error($"Failed to load holidays: {ex.Message}", key: ToastKeys.Holidays);
+            if (loadVersion == _holidayLoadVersion)
+            {
+                Toast.Error($"Failed to load holidays: {ex.Message}", key: ToastKeys.Holidays);
+            }
         }
         finally
         {
-            _isLoading = false;
+            if (loadVersion == _holidayLoadVersion)
+            {
+                _isLoadingHolidays = false;
+                _hasLoaded = true;
+            }
         }
     }
 
-    private async Task PreviousYearAsync()
-    {
-        _selectedYear--;
-        await LoadHolidaysAsync();
-    }
+    private Task PreviousYearAsync() =>
+        _isLoadingHolidays
+            ? Task.CompletedTask
+            : LoadHolidaysAsync(_selectedYear - 1);
 
-    private async Task NextYearAsync()
-    {
-        _selectedYear++;
-        await LoadHolidaysAsync();
-    }
+    private Task NextYearAsync() =>
+        _isLoadingHolidays
+            ? Task.CompletedTask
+            : LoadHolidaysAsync(_selectedYear + 1);
 
-    private async Task GoToCurrentYearAsync()
-    {
-        _selectedYear = DateTime.Today.Year;
-        await LoadHolidaysAsync();
-    }
+    private Task GoToCurrentYearAsync() =>
+        _isLoadingHolidays
+            ? Task.CompletedTask
+            : LoadHolidaysAsync(DateTime.Today.Year);
 
     private async Task FetchGoogleHolidaysAsync()
     {
-        if (!_isAdmin || IsGoogleHolidayBusy)
+        if (!_isAdmin || IsGoogleHolidayBusy || _isLoadingHolidays)
         {
             return;
         }
@@ -642,6 +673,11 @@
 
     private void ShowAddForm()
     {
+        if (_isLoadingHolidays)
+        {
+            return;
+        }
+
         _editingHolidayId = null;
         _fromDate = DefaultFromDate;
         _toDate = DefaultToDate;
@@ -729,6 +765,11 @@
 
     private void EditHolidayAsync(HolidayDto holiday)
     {
+        if (_isLoadingHolidays)
+        {
+            return;
+        }
+
         _highlightedHolidayId = holiday.Id;
         _editingHolidayId = holiday.Id;
         _fromDate = holiday.FromDate.ToDateTime(TimeOnly.MinValue);
@@ -794,6 +835,11 @@
 
     private async Task DeleteHolidayAsync(HolidayDto holiday)
     {
+        if (_isLoadingHolidays)
+        {
+            return;
+        }
+
         _isBusy = true;
 
         try

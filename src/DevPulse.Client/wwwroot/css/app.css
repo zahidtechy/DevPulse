@@ -89,6 +89,11 @@ html, body {
     -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+    /* Keep the page width stable when modal dialogs lock body scrolling. */
+    scrollbar-gutter: stable;
+}
+
 h1:focus {
     outline: none;
 }
@@ -435,10 +440,42 @@ a:hover, .btn-link:hover {
 }
 
 .btn-busy-content {
+    display: inline-grid;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-busy-label,
+.btn-busy-state {
+    grid-area: 1 / 1;
+}
+
+.btn-busy-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-busy-state {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    visibility: hidden;
+}
+
+.dp-busy-button .btn-busy-label[aria-hidden="true"] {
+    visibility: hidden;
+}
+
+.dp-busy-button .btn-busy-state:not([aria-hidden="true"]) {
+    visibility: visible;
+}
+
+/* Disable duplicate clicks immediately, but do not flash Bootstrap's faded
+   disabled treatment while a fast operation is still below the visual delay. */
+.dp-busy-button.is-busy-pending:disabled {
+    opacity: 1;
 }
 
 @keyframes spin {
@@ -6877,10 +6914,6 @@ button.holiday-day:hover {
     opacity: 0.92;
 }
 
-.leave-types-form-card .card-body {
-    padding: 1.1rem 1.25rem;
-}
-
 .leave-types-active-toggle {
     margin-bottom: 0.35rem;
 }
@@ -8834,6 +8867,80 @@ body.dp-modal-open {
     .dp-toast-progress {
         animation: none;
         display: none;
+    }
+}
+
+/* Shared shell progress bar */
+.dp-top-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 3000;
+    height: 3px;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+}
+
+.dp-top-progress.is-visible {
+    opacity: 1;
+    /* Show immediately so the beginning of the width sweep is not hidden by
+       an overlapping fade-in. The base transition still fades the bar out. */
+    transition: none;
+}
+
+.dp-top-progress-bar {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #0ea5e9, #10b981);
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.4);
+    transform: scaleX(0);
+    transform-origin: left center;
+    opacity: 0;
+}
+
+/* Fill from the left edge across the full width instead of sliding a fixed
+   width chunk. The fill is deliberately shorter than the service's minimum
+   visible time so even a fast response completes the sweep before hiding. */
+.dp-top-progress.is-visible .dp-top-progress-bar {
+    opacity: 1;
+    animation:
+        dp-top-progress-fill 320ms cubic-bezier(0.1, 0.7, 0.2, 1) forwards,
+        dp-top-progress-pulse 1.6s ease-in-out 320ms infinite;
+}
+
+@keyframes dp-top-progress-fill {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+
+@keyframes dp-top-progress-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
+.dp-refresh-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--dp-text-secondary);
+    font-size: 0.8125rem;
+    white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dp-top-progress {
+        transition: none;
+    }
+
+    .dp-top-progress.is-visible .dp-top-progress-bar {
+        transform: none;
+        opacity: 0.7;
+        animation: none;
     }
 }
 

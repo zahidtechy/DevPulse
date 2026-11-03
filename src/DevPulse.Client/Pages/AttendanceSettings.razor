@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "AdminOnly")]
 @inject IAttendanceApiClient AttendanceApi
 @inject ToastService Toast
+@inject ShellProgressService Progress
 @implements IDisposable
 
 <PageTitle>@AppBranding.PageTitle("Attendance Settings")</PageTitle>
@@ -17,7 +18,7 @@
         </div>
     </div>
 
-    @if (_isLoading)
+    @if (!_hasLoaded)
     {
         <div class="attendance-settings-skeleton" aria-hidden="true">
             <div class="attendance-settings-skeleton-toolbar"></div>
@@ -268,7 +269,7 @@
 </div>
 
 @code {
-    private bool _isLoading = true;
+    private bool _hasLoaded;
     private bool _isBusy;
     private TimeOnly _workStart = new(9, 0);
     private TimeOnly _workEnd = new(18, 0);
@@ -308,7 +309,7 @@
 
     private async Task LoadAsync()
     {
-        _isLoading = true;
+        using var progress = _hasLoaded ? Progress.Begin() : null;
         try
         {
             var settings = await AttendanceApi.GetSettingsAsync();
@@ -329,7 +330,7 @@
         }
         finally
         {
-            _isLoading = false;
+            _hasLoaded = true;
         }
     }
 

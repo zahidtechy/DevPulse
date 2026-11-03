@@ -4,6 +4,7 @@
 @inject IClickUpAccountApiClient AccountApi
 @inject IJSRuntime JS
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("ClickUp Accounts")</PageTitle>
 
@@ -63,7 +64,7 @@
         </div>
     }
 
-    @if (_isLoading)
+    @if (_isLoading && !_hasLoaded)
     {
         <LoadingIndicator Text="Loading accounts..." />
     }
@@ -432,6 +433,7 @@
     private string? _previewError;
     private bool _showAddForm;
     private bool _isLoading = true;
+    private bool _hasLoaded;
     private bool _isBusy;
     private bool _previewFocusPending;
 
@@ -515,6 +517,7 @@
 
     private async Task LoadAccountsAsync()
     {
+        using var progress = _hasLoaded ? Progress.Begin() : null;
         _isLoading = true;
 
         try
@@ -530,6 +533,7 @@
         finally
         {
             _isLoading = false;
+            _hasLoaded = true;
         }
     }
 

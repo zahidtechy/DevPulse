@@ -1,6 +1,7 @@
 @page "/attendance"
 @attribute [Authorize]
 @inject ToastService Toast
+@inject ShellProgressService Progress
 @inject IAttendanceApiClient AttendanceApi
 @inject IDeveloperApiClient DeveloperApi
 @inject AuthenticationStateProvider AuthStateProvider
@@ -185,6 +186,7 @@
                                             ? "Review team attendance, resolve correction requests, and complete missing punches."
                                             : "Check your punches, hours worked, and correction request status.")
                                     </p>
+                                    <RefreshIndicator IsBusy="_isLoadingRecords && _hasLoadedRecords" Text="Updating records..." />
                                 </div>
                                 @if (_me.DeveloperId is not null)
                                 {
@@ -228,7 +230,13 @@
                                                       CssClass="searchable-select-stretch" />
                                 </div>
                                 <div class="attendance-filter-action">
-                                    <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingRecords" BusyText="Loading..." OnClick="LoadAttendanceDaysAsync">Load</BusyButton>
+                                    <button type="button"
+                                            class="btn btn-primary"
+                                            aria-disabled="@_isLoadingRecords"
+                                            aria-busy="@_isLoadingRecords"
+                                            @onclick="LoadAttendanceDaysAsync">
+                                        Load
+                                    </button>
                                 </div>
                             </div>
                             <div class="attendance-records-presets" role="group" aria-label="Quick date range">
@@ -337,7 +345,7 @@
                     <AuthorizeView Roles="@AppRoles.Admin">
                         <Authorized>
                             @AnalyticsFilterBar()
-                            @if (_isLoadingAnalytics)
+                            @if (_isLoadingAnalytics && _analytics is null)
                             {
                                 <LoadingIndicator Text="Loading analytics..." Compact="true" />
                             }
@@ -854,13 +862,22 @@
                     <DateInput @bind-Value="_analyticsTo" DefaultValue="@DefaultToDate" />
                 </div>
                 <div class="attendance-filter-action">
-                    <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingAnalytics" BusyText="Loading..." OnClick="LoadAnalyticsAsync">Load</BusyButton>
+                    <button type="button"
+                            class="btn btn-primary"
+                            aria-disabled="@_isLoadingAnalytics"
+                            aria-busy="@_isLoadingAnalytics"
+                            @onclick="LoadAnalyticsAsync">
+                        Load
+                    </button>
                 </div>
             </div>
             <div class="d-flex gap-2 flex-wrap mt-2">
                 <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(0, 0)">Today</button>
                 <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(-1, -1)">Yesterday</button>
                 <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(-30, 0)">Last 30 days</button>
+                <div class="ms-auto">
+                    <RefreshIndicator IsBusy="_isLoadingAnalytics && _analytics is not null" Text="Updating analytics..." />
+                </div>
             </div>
         </div>
     </div>;
@@ -997,6 +1014,13 @@
 
     private Task LoadAttendanceDaysAsync()
     {
+        // The inline refresh indicator and top bar report progress, so the button
+        // keeps its label and width stable. The guard prevents duplicate loads.
+        if (_isLoadingRecords)
+        {
+            return Task.CompletedTask;
+        }
+
         Guid? developerId = _isAdmin && Guid.TryParse(_recordsDeveloperId, out var id) ? id : null;
         _ = LoadPendingCorrectionCountsAsync();
         return LoadAttendanceDaysAsync(
@@ -1033,6 +1057,7 @@
         bool notifyOnError,
         bool trackRefreshError = true)
     {
+        using var progress = _hasLoadedRecords && notifyOnError ? Progress.Begin() : null;
         _isLoadingRecords = true;
         try
         {
@@ -1301,10 +1326,22 @@
         finally { _isSubmittingCorrection = false; }
     }
 
-    private Task LoadAnalyticsAsync() => LoadAnalyticsAsync(notifyOnError: true);
+    private Task LoadAnalyticsAsync()
+    {
+        // Keep the button visually stable for fast responses: the top bar and the
+        // inline refresh indicator already report progress, so swapping the label
+        // here would only flash. The guard still prevents duplicate requests.
+        if (_isLoadingAnalytics)
+        {
+            return Task.CompletedTask;
+        }
+
+        return LoadAnalyticsAsync(notifyOnError: true);
+    }
 
     private async Task LoadAnalyticsAsync(bool notifyOnError)
     {
+        using var progress = _analytics is not null && notifyOnError ? Progress.Begin() : null;
         _isLoadingAnalytics = true;
         try { _analytics = await AttendanceApi.GetAnalyticsAsync(_analyticsFrom, _analyticsTo); }
         catch (Exception ex) { NoteRefreshError(ex, notifyOnError); }

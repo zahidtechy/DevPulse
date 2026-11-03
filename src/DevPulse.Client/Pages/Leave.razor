@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject ILeaveApiClient LeaveApi
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Leave")</PageTitle>
 
@@ -16,7 +17,7 @@
         </div>
     </div>
 
-    @if (_isLoading)
+    @if (!_hasLoaded)
     {
         <LoadingIndicator Text="Loading leave data..." />
     }
@@ -84,14 +85,16 @@
 
                             <div class="leave-review-actions">
                                 <BusyButton CssClass="btn btn-success"
-                                            IsBusy="_isBusy"
+                                            IsBusy="_isApproving"
+                                            Disabled="_isBusy"
                                             BusyText="Approving..."
                                             OnClick="ApproveAsync">
                                     Approve
                                 </BusyButton>
 
                                 <BusyButton CssClass="btn btn-outline-danger"
-                                            IsBusy="_isBusy"
+                                            IsBusy="_isRejecting"
+                                            Disabled="_isBusy"
                                             BusyText="Rejecting..."
                                             OnClick="RejectAsync">
                                     Reject
@@ -267,8 +270,10 @@
     private LeaveApplicationDto? _reviewingApplication;
     private LeaveTypeDto? _selectedLeaveType;
 
-    private bool _isLoading = true;
+    private bool _hasLoaded;
     private bool _isBusy;
+    private bool _isApproving;
+    private bool _isRejecting;
 
     private Guid _selectedLeaveTypeId;
 
@@ -308,7 +313,7 @@
 
     private async Task LoadAsync()
     {
-        _isLoading = true;
+        using var progress = _hasLoaded ? Progress.Begin() : null;
 
         try
         {
@@ -327,7 +332,7 @@
         }
         finally
         {
-            _isLoading = false;
+            _hasLoaded = true;
         }
     }
 
@@ -424,6 +429,7 @@
             return;
         }
 
+        _isApproving = true;
         _isBusy = true;
 
         try
@@ -444,6 +450,7 @@
         }
         finally
         {
+            _isApproving = false;
             _isBusy = false;
         }
     }
@@ -455,6 +462,7 @@
             return;
         }
 
+        _isRejecting = true;
         _isBusy = true;
 
         try
@@ -475,6 +483,7 @@
         }
         finally
         {
+            _isRejecting = false;
             _isBusy = false;
         }
     }

@@ -7,6 +7,7 @@
 @inject IAnalyticsApiClient AnalyticsApi
 @inject IJSRuntime JS
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Developer Reports")</PageTitle>
 
@@ -934,7 +935,7 @@
         }
 
         _isBusy = true;
-        _report = null;
+        using var progress = _report is not null ? Progress.Begin() : null;
         _taskSearch = string.Empty;
 
         try
