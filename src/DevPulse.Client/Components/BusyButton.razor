@@ -1,21 +1,33 @@
+@implements IDisposable
+
 <button type="@Type"
-        class="@CssClass"
-        disabled="@(IsBusy || Disabled)"
+        class="@ButtonCssClass"
+        disabled="@(IsBusy || Disabled || _showBusy)"
         @onclick="HandleClickAsync">
     <span class="btn-busy-content">
-        @if (IsBusy)
-        {
+        <span class="btn-busy-label" aria-hidden="@(_showBusy ? "true" : null)">
+            @ChildContent
+        </span>
+        <span class="btn-busy-state" role="status" aria-live="polite" aria-hidden="@(_showBusy ? null : "true")">
             <span class="spinner spinner-btn" aria-hidden="true"></span>
             <span>@BusyText</span>
-        }
-        else
-        {
-            @ChildContent
-        }
+        </span>
     </span>
 </button>
 
 @code {
+    // Wait before swapping the label so a fast response never flashes the busy
+    // state, then keep it visible long enough that mid-speed responses do not
+    // flicker either.
+    private const int ShowDelayMs = 200;
+    private const int MinimumVisibleMs = 300;
+
+    private bool _showBusy;
+    private bool _lastIsBusy;
+    private bool _disposed;
+    private long _shownAt;
+    private CancellationTokenSource? _visualTransition;
+
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 
@@ -37,13 +49,99 @@
     [Parameter]
     public EventCallback<MouseEventArgs> OnClick { get; set; }
 
+    private string ButtonCssClass =>
+        $"{CssClass} dp-busy-button{(IsBusy && !_showBusy ? " is-busy-pending" : null)}{(_showBusy ? " is-busy-visible" : null)}";
+
+    protected override void OnParametersSet()
+    {
+        if (IsBusy == _lastIsBusy)
+        {
+            return;
+        }
+
+        _lastIsBusy = IsBusy;
+        CancelVisualTransition();
+
+        if (IsBusy)
+        {
+            if (!_showBusy)
+            {
+                StartVisualTransition(show: true);
+            }
+        }
+        else if (_showBusy)
+        {
+            StartVisualTransition(show: false);
+        }
+    }
+
+    private void StartVisualTransition(bool show)
+    {
+        var cancellation = new CancellationTokenSource();
+        _visualTransition = cancellation;
+        _ = UpdateVisualStateAsync(show, cancellation);
+    }
+
+    private async Task UpdateVisualStateAsync(bool show, CancellationTokenSource cancellation)
+    {
+        try
+        {
+            var delayMs = show
+                ? ShowDelayMs
+                : Math.Max(0, MinimumVisibleMs - (int)(Environment.TickCount64 - _shownAt));
+
+            if (delayMs > 0)
+            {
+                await Task.Delay(delayMs, cancellation.Token);
+            }
+
+            if (_disposed || IsBusy != show)
+            {
+                return;
+            }
+
+            _showBusy = show;
+            if (show)
+            {
+                _shownAt = Environment.TickCount64;
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_visualTransition, cancellation))
+            {
+                _visualTransition = null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
+    private void CancelVisualTransition()
+    {
+        var cancellation = _visualTransition;
+        _visualTransition = null;
+        cancellation?.Cancel();
+    }
+
     private async Task HandleClickAsync(MouseEventArgs args)
     {
-        if (IsBusy || Disabled)
+        if (IsBusy || Disabled || _showBusy)
         {
             return;
         }
 
         await OnClick.InvokeAsync(args);
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        CancelVisualTransition();
     }
 }

@@ -127,7 +127,7 @@
             </div>
         </div>
 
-        @if (_summary is null)
+        @if (!_hasLoaded)
         {
             <div class="leave-analytics-skeleton" aria-hidden="true">
                 <div class="leave-analytics-skeleton-kpis"></div>
@@ -457,6 +457,7 @@
     private IReadOnlyList<(Guid Id, string Name)> _leaveTypes = [];
     private int _selectedYear = DateTime.Today.Year;
     private Guid? _selectedLeaveTypeId;
+    private bool _hasLoaded;
     private bool _chartsPending;
     private IJSObjectReference? _chartsModule;
 
@@ -478,7 +479,7 @@
 
     private async Task LoadAnalyticsAsync()
     {
-        using var progress = _summary is not null ? Progress.Begin() : null;
+        using var progress = _hasLoaded ? Progress.Begin() : null;
 
         try
         {
@@ -489,7 +490,10 @@
         catch (Exception ex)
         {
             Toast.Error(ex.Message, key: ToastKeys.LeaveAnalytics);
-            _summary = null;
+        }
+        finally
+        {
+            _hasLoaded = true;
         }
     }
 

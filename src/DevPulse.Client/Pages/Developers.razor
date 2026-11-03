@@ -26,11 +26,19 @@
                                          CssClass="sync-account-select developers-account-select"
                                          Disabled="@_isBusy" />
             }
-            <BusyButton CssClass="btn btn-outline-light btn-sm" IsBusy="_isBusy" BusyText="Syncing..." OnClick="SyncFromClickUpAsync" Disabled="@(_clickUpAccounts.Count == 0)">
+            <BusyButton CssClass="btn btn-outline-light btn-sm"
+                        IsBusy="_isSyncingClickUp"
+                        BusyText="Syncing..."
+                        OnClick="SyncFromClickUpAsync"
+                        Disabled="@(_isBusy || _clickUpAccounts.Count == 0)">
                 <span class="bi-arrow-repeat developers-btn-icon" aria-hidden="true"></span>
                 Sync from ClickUp
             </BusyButton>
-            <BusyButton CssClass="btn btn-outline-light btn-sm" IsBusy="_isBusy" BusyText="Syncing..." OnClick="SyncFromHubstaffAsync" Disabled="@(_hubstaffOrganizations.Count == 0)">
+            <BusyButton CssClass="btn btn-outline-light btn-sm"
+                        IsBusy="_isSyncingHubstaff"
+                        BusyText="Syncing..."
+                        OnClick="SyncFromHubstaffAsync"
+                        Disabled="@(_isBusy || _hubstaffOrganizations.Count == 0)">
                 <span class="bi-clock-history developers-btn-icon" aria-hidden="true"></span>
                 Sync from Hubstaff
             </BusyButton>
@@ -166,7 +174,11 @@
             <h3>No developers registered</h3>
             <p>Sync members from your connected ClickUp workspaces to build the registry automatically, or add one manually.</p>
             <div class="developers-empty-actions">
-                <BusyButton CssClass="btn btn-outline-primary" IsBusy="_isBusy" BusyText="Syncing..." OnClick="SyncFromClickUpAsync" Disabled="@(_clickUpAccounts.Count == 0)">
+                <BusyButton CssClass="btn btn-outline-primary"
+                            IsBusy="_isSyncingClickUp"
+                            BusyText="Syncing..."
+                            OnClick="SyncFromClickUpAsync"
+                            Disabled="@(_isBusy || _clickUpAccounts.Count == 0)">
                     Sync from ClickUp
                 </BusyButton>
                 <button class="btn btn-primary" @onclick="ShowAddForm">Add Developer</button>
@@ -408,6 +420,8 @@
     private bool _isLoading = true;
     private bool _hasLoaded;
     private bool _isBusy;
+    private bool _isSyncingClickUp;
+    private bool _isSyncingHubstaff;
 
     protected override async Task OnInitializedAsync()
     {
@@ -641,6 +655,7 @@
 
     private async Task SyncFromClickUpAsync()
     {
+        _isSyncingClickUp = true;
         _isBusy = true;
 
         try
@@ -664,12 +679,14 @@
         }
         finally
         {
+            _isSyncingClickUp = false;
             _isBusy = false;
         }
     }
 
     private async Task SyncFromHubstaffAsync()
     {
+        _isSyncingHubstaff = true;
         _isBusy = true;
 
         try
@@ -686,6 +703,7 @@
         }
         finally
         {
+            _isSyncingHubstaff = false;
             _isBusy = false;
         }
     }

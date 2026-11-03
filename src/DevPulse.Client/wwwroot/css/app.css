@@ -440,10 +440,42 @@ a:hover, .btn-link:hover {
 }
 
 .btn-busy-content {
+    display: inline-grid;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-busy-label,
+.btn-busy-state {
+    grid-area: 1 / 1;
+}
+
+.btn-busy-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-busy-state {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    visibility: hidden;
+}
+
+.dp-busy-button .btn-busy-label[aria-hidden="true"] {
+    visibility: hidden;
+}
+
+.dp-busy-button .btn-busy-state:not([aria-hidden="true"]) {
+    visibility: visible;
+}
+
+/* Disable duplicate clicks immediately, but do not flash Bootstrap's faded
+   disabled treatment while a fast operation is still below the visual delay. */
+.dp-busy-button.is-busy-pending:disabled {
+    opacity: 1;
 }
 
 @keyframes spin {
@@ -5581,12 +5613,6 @@ button.holiday-day:hover {
     white-space: nowrap;
 }
 
-.attendance-analytics-load {
-    /* BusyButton swaps "Load" for a spinner plus "Loading..."; keep the button
-       from resizing between the two states. */
-    min-width: 7rem;
-}
-
 .attendance-records-card {
     display: flex;
     flex-direction: column;
@@ -8859,11 +8885,14 @@ body.dp-modal-open {
     overflow: hidden;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 160ms ease;
+    transition: opacity 120ms ease-out;
 }
 
 .dp-top-progress.is-visible {
     opacity: 1;
+    /* Show immediately so the beginning of the width sweep is not hidden by
+       an overlapping fade-in. The base transition still fades the bar out. */
+    transition: none;
 }
 
 .dp-top-progress-bar {
@@ -8879,12 +8908,13 @@ body.dp-modal-open {
 }
 
 /* Fill from the left edge across the full width instead of sliding a fixed
-   width chunk. The bar holds at 100% if the operation outlives the animation. */
+   width chunk. The fill is deliberately shorter than the service's minimum
+   visible time so even a fast response completes the sweep before hiding. */
 .dp-top-progress.is-visible .dp-top-progress-bar {
     opacity: 1;
     animation:
-        dp-top-progress-fill 1.2s cubic-bezier(0.05, 0.7, 0.1, 1) forwards,
-        dp-top-progress-pulse 1.6s ease-in-out 1.2s infinite;
+        dp-top-progress-fill 320ms cubic-bezier(0.1, 0.7, 0.2, 1) forwards,
+        dp-top-progress-pulse 1.6s ease-in-out 320ms infinite;
 }
 
 @keyframes dp-top-progress-fill {

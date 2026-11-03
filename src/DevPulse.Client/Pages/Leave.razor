@@ -85,14 +85,16 @@
 
                             <div class="leave-review-actions">
                                 <BusyButton CssClass="btn btn-success"
-                                            IsBusy="_isBusy"
+                                            IsBusy="_isApproving"
+                                            Disabled="_isBusy"
                                             BusyText="Approving..."
                                             OnClick="ApproveAsync">
                                     Approve
                                 </BusyButton>
 
                                 <BusyButton CssClass="btn btn-outline-danger"
-                                            IsBusy="_isBusy"
+                                            IsBusy="_isRejecting"
+                                            Disabled="_isBusy"
                                             BusyText="Rejecting..."
                                             OnClick="RejectAsync">
                                     Reject
@@ -270,6 +272,8 @@
 
     private bool _hasLoaded;
     private bool _isBusy;
+    private bool _isApproving;
+    private bool _isRejecting;
 
     private Guid _selectedLeaveTypeId;
 
@@ -425,6 +429,7 @@
             return;
         }
 
+        _isApproving = true;
         _isBusy = true;
 
         try
@@ -445,6 +450,7 @@
         }
         finally
         {
+            _isApproving = false;
             _isBusy = false;
         }
     }
@@ -456,6 +462,7 @@
             return;
         }
 
+        _isRejecting = true;
         _isBusy = true;
 
         try
@@ -476,6 +483,7 @@
         }
         finally
         {
+            _isRejecting = false;
             _isBusy = false;
         }
     }

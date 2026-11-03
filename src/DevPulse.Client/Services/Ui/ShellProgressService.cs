@@ -8,7 +8,7 @@ namespace DevPulse.Client.Services.Ui;
 /// </summary>
 public sealed class ShellProgressService : IDisposable
 {
-    private const int MinimumVisibleMs = 300;
+    private const int MinimumVisibleMs = 450;
 
     private readonly HashSet<Guid> _operations = new();
     private CancellationTokenSource? _hideDelay;

@@ -230,7 +230,13 @@
                                                       CssClass="searchable-select-stretch" />
                                 </div>
                                 <div class="attendance-filter-action">
-                                    <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingRecords" BusyText="Loading..." OnClick="LoadAttendanceDaysAsync">Load</BusyButton>
+                                    <button type="button"
+                                            class="btn btn-primary"
+                                            aria-disabled="@_isLoadingRecords"
+                                            aria-busy="@_isLoadingRecords"
+                                            @onclick="LoadAttendanceDaysAsync">
+                                        Load
+                                    </button>
                                 </div>
                             </div>
                             <div class="attendance-records-presets" role="group" aria-label="Quick date range">
@@ -856,7 +862,13 @@
                     <DateInput @bind-Value="_analyticsTo" DefaultValue="@DefaultToDate" />
                 </div>
                 <div class="attendance-filter-action">
-                    <BusyButton CssClass="btn btn-primary attendance-analytics-load" IsBusy="_isLoadingAnalytics" BusyText="Loading..." OnClick="LoadAnalyticsAsync">Load</BusyButton>
+                    <button type="button"
+                            class="btn btn-primary"
+                            aria-disabled="@_isLoadingAnalytics"
+                            aria-busy="@_isLoadingAnalytics"
+                            @onclick="LoadAnalyticsAsync">
+                        Load
+                    </button>
                 </div>
             </div>
             <div class="d-flex gap-2 flex-wrap mt-2">
@@ -1002,6 +1014,13 @@
 
     private Task LoadAttendanceDaysAsync()
     {
+        // The inline refresh indicator and top bar report progress, so the button
+        // keeps its label and width stable. The guard prevents duplicate loads.
+        if (_isLoadingRecords)
+        {
+            return Task.CompletedTask;
+        }
+
         Guid? developerId = _isAdmin && Guid.TryParse(_recordsDeveloperId, out var id) ? id : null;
         _ = LoadPendingCorrectionCountsAsync();
         return LoadAttendanceDaysAsync(
@@ -1307,7 +1326,18 @@
         finally { _isSubmittingCorrection = false; }
     }
 
-    private Task LoadAnalyticsAsync() => LoadAnalyticsAsync(notifyOnError: true);
+    private Task LoadAnalyticsAsync()
+    {
+        // Keep the button visually stable for fast responses: the top bar and the
+        // inline refresh indicator already report progress, so swapping the label
+        // here would only flash. The guard still prevents duplicate requests.
+        if (_isLoadingAnalytics)
+        {
+            return Task.CompletedTask;
+        }
+
+        return LoadAnalyticsAsync(notifyOnError: true);
+    }
 
     private async Task LoadAnalyticsAsync(bool notifyOnError)
     {
