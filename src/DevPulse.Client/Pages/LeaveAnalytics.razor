@@ -27,11 +27,20 @@
                         <div class="leave-analytics-filter-group">
                             <span class="leave-analytics-filter-label">Year</span>
                             <div class="holiday-toolbar leave-analytics-year-toolbar">
-                                <button type="button" class="holiday-year-btn" @onclick="PreviousYearAsync" aria-label="Previous year">‹</button>
+                                <button type="button"
+                                        class="holiday-year-btn"
+                                        disabled="@_isLoadingAnalytics"
+                                        @onclick="PreviousYearAsync"
+                                        aria-label="Previous year">‹</button>
                                 <span class="holiday-year-label">@_selectedYear</span>
-                                <button type="button" class="holiday-year-btn" @onclick="NextYearAsync" aria-label="Next year">›</button>
+                                <button type="button"
+                                        class="holiday-year-btn"
+                                        disabled="@_isLoadingAnalytics"
+                                        @onclick="NextYearAsync"
+                                        aria-label="Next year">›</button>
                                 <button type="button"
                                         class="period-chip @(_selectedYear == DateTime.Today.Year ? "active" : null)"
+                                        disabled="@_isLoadingAnalytics"
                                         @onclick="GoToCurrentYearAsync">
                                     This year
                                 </button>
@@ -121,7 +130,7 @@
                             <span class="leave-analytics-legend-swatch leave-analytics-legend-remaining"></span>
                             Remaining
                         </span>
-                        <span class="leave-analytics-legend-context">@GetFilterLabel() · @_selectedYear</span>
+                        <span class="leave-analytics-legend-context">@GetFilterLabel() · @_summary.Year</span>
                     </div>
                 }
             </div>
@@ -194,7 +203,7 @@
                               Value="@LeaveChartData.FormatDays(filteredAllocated)"
                               Hint="Total leave entitlement for the filter"
                               Tone="neutral"
-                              Meta="@_selectedYear.ToString()" />
+                              Meta="@_summary.Year.ToString()" />
                 <KpiScorecard Label="At Risk"
                               Value="@LeaveChartData.CountHighUtilization(developers).ToString()"
                               Hint="Developers at or above 90% utilization"
@@ -360,7 +369,7 @@
                     <div class="card-title-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
                             <h5 class="card-title mb-0">Developer Leave Balances</h5>
-                            <p class="leave-table-subtitle mb-0">Detailed entitlement, usage, and utilization for @_selectedYear</p>
+                            <p class="leave-table-subtitle mb-0">Detailed entitlement, usage, and utilization for @_summary.Year</p>
                         </div>
                         @if (_selectedLeaveTypeId.HasValue)
                         {
@@ -458,6 +467,8 @@
     private int _selectedYear = DateTime.Today.Year;
     private Guid? _selectedLeaveTypeId;
     private bool _hasLoaded;
+    private bool _isLoadingAnalytics;
+    private int _analyticsLoadVersion;
     private bool _chartsPending;
     private IJSObjectReference? _chartsModule;
 
@@ -477,43 +488,60 @@
         await RenderChartsAsync();
     }
 
-    private async Task LoadAnalyticsAsync()
+    private async Task LoadAnalyticsAsync(int? year = null)
     {
+        var requestedYear = year ?? _selectedYear;
+        var loadVersion = ++_analyticsLoadVersion;
+        _isLoadingAnalytics = true;
+
         using var progress = _hasLoaded ? Progress.Begin() : null;
 
         try
         {
-            _summary = await LeaveApi.GetTeamAnalyticsAsync(_selectedYear);
-            _leaveTypes = LeaveChartData.GetLeaveTypes(_summary);
+            var summary = await LeaveApi.GetTeamAnalyticsAsync(requestedYear);
+            if (loadVersion != _analyticsLoadVersion)
+            {
+                return;
+            }
+
+            var leaveTypes = LeaveChartData.GetLeaveTypes(summary);
+
+            _selectedYear = requestedYear;
+            _summary = summary;
+            _leaveTypes = leaveTypes;
+            if (_selectedLeaveTypeId.HasValue
+                && !_leaveTypes.Any(type => type.Id == _selectedLeaveTypeId.Value))
+            {
+                _selectedLeaveTypeId = null;
+            }
+
             _chartsPending = true;
         }
         catch (Exception ex)
         {
-            Toast.Error(ex.Message, key: ToastKeys.LeaveAnalytics);
+            if (loadVersion == _analyticsLoadVersion)
+            {
+                Toast.Error(ex.Message, key: ToastKeys.LeaveAnalytics);
+            }
         }
         finally
         {
-            _hasLoaded = true;
+            if (loadVersion == _analyticsLoadVersion)
+            {
+                _isLoadingAnalytics = false;
+                _hasLoaded = true;
+            }
         }
     }
 
-    private async Task PreviousYearAsync()
-    {
-        _selectedYear--;
-        await LoadAnalyticsAsync();
-    }
+    private Task PreviousYearAsync() =>
+        LoadAnalyticsAsync(_selectedYear - 1);
 
-    private async Task NextYearAsync()
-    {
-        _selectedYear++;
-        await LoadAnalyticsAsync();
-    }
+    private Task NextYearAsync() =>
+        LoadAnalyticsAsync(_selectedYear + 1);
 
-    private async Task GoToCurrentYearAsync()
-    {
-        _selectedYear = DateTime.Today.Year;
-        await LoadAnalyticsAsync();
-    }
+    private Task GoToCurrentYearAsync() =>
+        LoadAnalyticsAsync(DateTime.Today.Year);
 
     private async Task SelectLeaveTypeAsync(Guid? leaveTypeId)
     {
