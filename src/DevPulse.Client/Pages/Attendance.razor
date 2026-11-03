@@ -339,7 +339,7 @@
                     <AuthorizeView Roles="@AppRoles.Admin">
                         <Authorized>
                             @AnalyticsFilterBar()
-                            @if (_isLoadingAnalytics)
+                            @if (_isLoadingAnalytics && _analytics is null)
                             {
                                 <LoadingIndicator Text="Loading analytics..." Compact="true" />
                             }
@@ -856,13 +856,16 @@
                     <DateInput @bind-Value="_analyticsTo" DefaultValue="@DefaultToDate" />
                 </div>
                 <div class="attendance-filter-action">
-                    <BusyButton CssClass="btn btn-primary" IsBusy="_isLoadingAnalytics" BusyText="Loading..." OnClick="LoadAnalyticsAsync">Load</BusyButton>
+                    <BusyButton CssClass="btn btn-primary attendance-analytics-load" IsBusy="_isLoadingAnalytics" BusyText="Loading..." OnClick="LoadAnalyticsAsync">Load</BusyButton>
                 </div>
             </div>
             <div class="d-flex gap-2 flex-wrap mt-2">
                 <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(0, 0)">Today</button>
                 <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(-1, -1)">Yesterday</button>
                 <button type="button" class="period-chip" disabled="@_isLoadingAnalytics" @onclick="() => SetAnalyticsRangePresetAsync(-30, 0)">Last 30 days</button>
+                <div class="ms-auto">
+                    <RefreshIndicator IsBusy="_isLoadingAnalytics && _analytics is not null" Text="Updating analytics..." />
+                </div>
             </div>
         </div>
     </div>;

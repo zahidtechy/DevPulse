@@ -5581,6 +5581,12 @@ button.holiday-day:hover {
     white-space: nowrap;
 }
 
+.attendance-analytics-load {
+    /* BusyButton swaps "Load" for a spinner plus "Loading..."; keep the button
+       from resizing between the two states. */
+    min-width: 7rem;
+}
+
 .attendance-records-card {
     display: flex;
     flex-direction: column;
@@ -8862,17 +8868,33 @@ body.dp-modal-open {
 
 .dp-top-progress-bar {
     display: block;
-    width: 35%;
+    width: 100%;
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--dp-primary), var(--dp-accent));
-    box-shadow: 0 0 10px rgba(var(--dp-primary-rgb), 0.45);
-    animation: dp-top-progress-slide 1.1s ease-in-out infinite;
+    background: linear-gradient(90deg, #0ea5e9, #10b981);
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.4);
+    transform: scaleX(0);
+    transform-origin: left center;
+    opacity: 0;
 }
 
-@keyframes dp-top-progress-slide {
-    from { transform: translateX(-120%); }
-    to { transform: translateX(320%); }
+/* Fill from the left edge across the full width instead of sliding a fixed
+   width chunk. The bar holds at 100% if the operation outlives the animation. */
+.dp-top-progress.is-visible .dp-top-progress-bar {
+    opacity: 1;
+    animation:
+        dp-top-progress-fill 1.2s cubic-bezier(0.05, 0.7, 0.1, 1) forwards,
+        dp-top-progress-pulse 1.6s ease-in-out 1.2s infinite;
+}
+
+@keyframes dp-top-progress-fill {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+
+@keyframes dp-top-progress-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
 }
 
 .dp-refresh-indicator {
@@ -8889,8 +8911,8 @@ body.dp-modal-open {
         transition: none;
     }
 
-    .dp-top-progress-bar {
-        width: 100%;
+    .dp-top-progress.is-visible .dp-top-progress-bar {
+        transform: none;
         opacity: 0.7;
         animation: none;
     }
