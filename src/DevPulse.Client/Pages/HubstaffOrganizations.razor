@@ -61,7 +61,7 @@
         </div>
     }
 
-    @if (_isLoading && !_hasLoaded)
+    @if (!_hasLoaded)
     {
         <LoadingIndicator Text="Loading organizations..." />
     }
@@ -120,7 +120,6 @@
     private readonly List<HubstaffOrganizationDiscoveryDto> _discoveredOrganizations = [];
     private CreateHubstaffOrganizationFormModel _form = new();
     private bool _showAddForm;
-    private bool _isLoading = true;
     private bool _hasLoaded;
     private bool _isBusy;
 
@@ -129,7 +128,6 @@
     private async Task LoadOrganizationsAsync()
     {
         using var progress = _hasLoaded ? Progress.Begin() : null;
-        _isLoading = true;
         try
         {
             var items = await HubstaffApi.GetOrganizationsAsync();
@@ -142,7 +140,6 @@
         }
         finally
         {
-            _isLoading = false;
             _hasLoaded = true;
         }
     }

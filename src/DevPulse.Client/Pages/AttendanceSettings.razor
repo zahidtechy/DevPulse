@@ -18,7 +18,7 @@
         </div>
     </div>
 
-    @if (_isLoading && !_hasLoaded)
+    @if (!_hasLoaded)
     {
         <div class="attendance-settings-skeleton" aria-hidden="true">
             <div class="attendance-settings-skeleton-toolbar"></div>
@@ -269,7 +269,6 @@
 </div>
 
 @code {
-    private bool _isLoading = true;
     private bool _hasLoaded;
     private bool _isBusy;
     private TimeOnly _workStart = new(9, 0);
@@ -311,7 +310,6 @@
     private async Task LoadAsync()
     {
         using var progress = _hasLoaded ? Progress.Begin() : null;
-        _isLoading = true;
         try
         {
             var settings = await AttendanceApi.GetSettingsAsync();
@@ -332,7 +330,6 @@
         }
         finally
         {
-            _isLoading = false;
             _hasLoaded = true;
         }
     }

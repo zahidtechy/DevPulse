@@ -41,7 +41,7 @@
         </AuthorizeView>
     </div>
 
-    @if (_isLoading && !_hasLoaded)
+    @if (!_hasLoaded)
     {
         <LoadingIndicator Text="Loading holidays..." />
     }
@@ -399,7 +399,6 @@
     private readonly DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
 
     private int _selectedYear = DateTime.Today.Year;
-    private bool _isLoading = true;
     private bool _hasLoaded;
     private bool _isBusy;
     private bool _isAdmin;
@@ -439,7 +438,6 @@
     private async Task LoadHolidaysAsync()
     {
         using var progress = _hasLoaded ? Progress.Begin() : null;
-        _isLoading = true;
 
         try
         {
@@ -454,7 +452,6 @@
         }
         finally
         {
-            _isLoading = false;
             _hasLoaded = true;
         }
     }

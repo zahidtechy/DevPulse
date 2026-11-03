@@ -76,7 +76,7 @@
         </div>
     }
 
-    @if (_isLoading && !_hasLoaded)
+    @if (!_hasLoaded)
     {
         <LoadingIndicator Text="Loading leave types..." />
     }
@@ -248,7 +248,6 @@
 
 @code {
     private List<LeaveTypeDto> _leaveTypes = [];
-    private bool _isLoading = true;
     private bool _hasLoaded;
     private bool _isBusy;
     private bool _showForm;
@@ -285,7 +284,6 @@
     private async Task LoadAsync()
     {
         using var progress = _hasLoaded ? Progress.Begin() : null;
-        _isLoading = true;
         try
         {
             _leaveTypes = (await LeaveApi.GetLeaveTypesAsync()).ToList();
@@ -296,7 +294,6 @@
         }
         finally
         {
-            _isLoading = false;
             _hasLoaded = true;
         }
     }

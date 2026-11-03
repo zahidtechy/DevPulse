@@ -17,7 +17,7 @@
         </div>
     </div>
 
-    @if (_isLoading && !_hasLoaded)
+    @if (!_hasLoaded)
     {
         <LoadingIndicator Text="Loading leave data..." />
     }
@@ -268,7 +268,6 @@
     private LeaveApplicationDto? _reviewingApplication;
     private LeaveTypeDto? _selectedLeaveType;
 
-    private bool _isLoading = true;
     private bool _hasLoaded;
     private bool _isBusy;
 
@@ -311,7 +310,6 @@
     private async Task LoadAsync()
     {
         using var progress = _hasLoaded ? Progress.Begin() : null;
-        _isLoading = true;
 
         try
         {
@@ -330,7 +328,6 @@
         }
         finally
         {
-            _isLoading = false;
             _hasLoaded = true;
         }
     }
