@@ -1,5 +1,6 @@
 @page "/holidays"
 @attribute [Authorize]
+@implements IAsyncDisposable
 @inject IHolidayApiClient HolidayApi
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
@@ -39,51 +40,14 @@
         </AuthorizeView>
     </div>
 
-    @if (_showForm)
-    {
-        <AuthorizeView Roles="@AppRoles.Admin">
-            <Authorized>
-                <div class="filter-card card mb-4 holiday-form-card">
-                    <div class="card-body">
-                        <div class="filter-section-header mb-3">
-                            <span class="filter-section-label">@(_editingHolidayId.HasValue ? "Edit Holiday" : "New Holiday")</span>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label class="form-label">From date</label>
-                                <DateInput @bind-Value="_fromDate" DefaultValue="@DefaultFromDate" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">To date</label>
-                                <DateInput @bind-Value="_toDate" DefaultValue="@DefaultToDate" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Name</label>
-                                <input class="form-control" @bind="_name" placeholder="Independence Day" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Reason <span class="text-muted">(optional)</span></label>
-                                <input class="form-control" @bind="_reason" placeholder="National holiday" />
-                            </div>
-                        </div>
-                        <div class="filter-actions mt-3">
-                            <button class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
-                            <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveHolidayAsync">
-                                @(_editingHolidayId.HasValue ? "Update Holiday" : "Create Holiday")
-                            </BusyButton>
-                        </div>
-                    </div>
-                </div>
-            </Authorized>
-        </AuthorizeView>
-    }
-
     @if (_isLoading)
     {
         <LoadingIndicator Text="Loading holidays..." />
     }
     else
     {
+        var nextHoliday = GetNextHoliday();
+
         <div class="holiday-stats">
             <div class="holiday-stat-card holiday-stat-card-holidays">
                 <span class="holiday-stat-icon bi-calendar-event" aria-hidden="true"></span>
@@ -95,11 +59,15 @@
                 <span class="holiday-stat-label">Days off</span>
                 <span class="holiday-stat-value">@GetTotalDaysOff()</span>
             </div>
-            <div class="holiday-stat-card holiday-stat-card-wide holiday-stat-card-next">
+            <button type="button"
+                    class="holiday-stat-card holiday-stat-card-wide holiday-stat-card-next holiday-stat-card-action"
+                    disabled="@(nextHoliday is null)"
+                    title="@(nextHoliday is null ? null : "Show in calendar")"
+                    @onclick="() => SelectNextHolidayAsync(nextHoliday)">
                 <span class="holiday-stat-icon bi-arrow-right-circle" aria-hidden="true"></span>
                 <span class="holiday-stat-label">Next holiday</span>
-                <span class="holiday-stat-value holiday-stat-value-text">@GetNextHolidayLabel()</span>
-            </div>
+                <span class="holiday-stat-value holiday-stat-value-text">@GetNextHolidayLabel(nextHoliday)</span>
+            </button>
         </div>
 
         <div class="filter-card card mb-4 holiday-nav-card">
@@ -144,11 +112,12 @@
                             @foreach (var month in quarter.Months)
                             {
                                 <MonthCalendar Year="SelectedYear"
+                                               Id="@GetHolidayMonthId(month)"
                                                Month="month"
                                                Holidays="_holidays"
                                                Today="_today"
                                                SelectedHolidayId="_highlightedHolidayId"
-                                               OnHolidaySelected="SelectHolidayAsync" />
+                                               OnHolidaySelected="SelectHolidayFromCalendarAsync" />
                             }
                         </div>
                     </section>
@@ -193,8 +162,8 @@
                                          class="holiday-list-item @GetHolidayListItemClass(holiday.Id)"
                                          role="button"
                                          tabindex="0"
-                                         @onclick="() => SelectHolidayAsync(holiday)"
-                                         @onkeydown="e => HandleListItemKeyDown(e, holiday)">
+                                         @onclick="() => SelectHolidayInCalendarAsync(holiday, group.Month)"
+                                         @onkeydown="e => HandleListItemKeyDownAsync(e, holiday, group.Month)">
                                         <div class="holiday-list-date-badge">
                                             @if (holiday.FromDate == holiday.ToDate || holiday.FromDate.Month == holiday.ToDate.Month)
                                             {
@@ -209,22 +178,40 @@
                                         <div class="holiday-list-item-main">
                                             <div class="holiday-list-name-row">
                                                 <div class="holiday-list-name">@holiday.Name</div>
+                                                <AuthorizeView Roles="@AppRoles.Admin">
+                                                    <Authorized>
+                                                        <div class="holiday-list-actions"
+                                                             @onclick:stopPropagation="true"
+                                                             @onkeydown:stopPropagation="true">
+                                                            <button type="button"
+                                                                    class="btn btn-outline-primary btn-sm holiday-list-action-btn"
+                                                                    disabled="@_isBusy"
+                                                                    title="@($"Edit {holiday.Name}")"
+                                                                    aria-label="@($"Edit {holiday.Name}")"
+                                                                    @onclick="() => EditHolidayAsync(holiday)">
+                                                                <span class="bi-pencil-square" aria-hidden="true"></span>
+                                                            </button>
+                                                            <button type="button"
+                                                                    class="btn btn-outline-danger btn-sm holiday-list-action-btn"
+                                                                    disabled="@_isBusy"
+                                                                    title="@($"Delete {holiday.Name}")"
+                                                                    aria-label="@($"Delete {holiday.Name}")"
+                                                                    @onclick="() => DeleteHolidayAsync(holiday)">
+                                                                <span class="bi-trash" aria-hidden="true"></span>
+                                                            </button>
+                                                        </div>
+                                                    </Authorized>
+                                                </AuthorizeView>
+                                            </div>
+                                            <div class="holiday-list-meta">
+                                                <div class="holiday-list-range">@FormatDateRange(holiday)</div>
                                                 <span class="holiday-duration-chip">@GetDurationDays(holiday) day@(GetDurationDays(holiday) == 1 ? "" : "s")</span>
                                             </div>
-                                            <div class="holiday-list-range">@FormatDateRange(holiday)</div>
                                             @if (!string.IsNullOrWhiteSpace(holiday.Reason))
                                             {
                                                 <div class="holiday-list-reason">@holiday.Reason</div>
                                             }
                                         </div>
-                                        <AuthorizeView Roles="@AppRoles.Admin">
-                                            <Authorized>
-                                                <div class="holiday-list-actions btn-group-actions" @onclick:stopPropagation="true">
-                                                    <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => EditHolidayAsync(holiday)">Edit</button>
-                                                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => DeleteHolidayAsync(holiday)">Delete</button>
-                                                </div>
-                                            </Authorized>
-                                        </AuthorizeView>
                                     </div>
                                 }
                             </div>
@@ -238,6 +225,52 @@
 
 <AuthorizeView Roles="@AppRoles.Admin">
     <Authorized>
+        <ModalDialog IsVisible="_showForm"
+                     Title="@(_editingHolidayId.HasValue ? "Edit Holiday" : "Add Holiday")"
+                     IsBusy="_isBusy"
+                     OnClose="HideForm">
+            <ChildContent>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="holidayFromDate">From date</label>
+                        <DateInput Id="holidayFromDate"
+                                   @bind-Value="_fromDate"
+                                   DefaultValue="@DefaultFromDate"
+                                   Disabled="@_isBusy" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="holidayToDate">To date</label>
+                        <DateInput Id="holidayToDate"
+                                   @bind-Value="_toDate"
+                                   DefaultValue="@DefaultToDate"
+                                   Disabled="@_isBusy" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="holidayName">Name</label>
+                        <input id="holidayName"
+                               class="form-control"
+                               disabled="@_isBusy"
+                               @bind="_name"
+                               placeholder="Independence Day" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="holidayReason">Reason <span class="text-muted">(optional)</span></label>
+                        <input id="holidayReason"
+                               class="form-control"
+                               disabled="@_isBusy"
+                               @bind="_reason"
+                               placeholder="National holiday" />
+                    </div>
+                </div>
+            </ChildContent>
+            <FooterContent>
+                <button type="button" class="btn btn-outline-secondary" disabled="@_isBusy" @onclick="HideForm">Cancel</button>
+                <BusyButton CssClass="btn btn-primary" IsBusy="_isBusy" BusyText="Saving..." OnClick="SaveHolidayAsync">
+                    @(_editingHolidayId.HasValue ? "Update Holiday" : "Create Holiday")
+                </BusyButton>
+            </FooterContent>
+        </ModalDialog>
+
         <ModalDialog IsVisible="@(_googleHolidayPreview is not null)"
                      Title="Bangladesh holidays from Google"
                      IsBusy="@IsGoogleHolidayBusy"
@@ -375,6 +408,7 @@
     private Guid? _highlightedHolidayId;
     private GoogleHolidayPreviewDto? _googleHolidayPreview;
     private readonly HashSet<string> _selectedGoogleHolidayKeys = new(StringComparer.Ordinal);
+    private IJSObjectReference? _holidayCalendarModule;
 
     private DateTime _fromDate;
     private DateTime _toDate;
@@ -616,50 +650,81 @@
         _showForm = true;
     }
 
-    private async Task SelectHolidayAsync(HolidayDto holiday)
+    private async Task SelectHolidayFromCalendarAsync(HolidayDto holiday)
     {
         _highlightedHolidayId = holiday.Id;
         await ScrollToHolidayListItemAsync(holiday.Id);
     }
 
+    private async Task SelectHolidayInCalendarAsync(HolidayDto holiday, int month)
+    {
+        _highlightedHolidayId = holiday.Id;
+        await ScrollToHolidayMonthAsync(month);
+    }
+
+    private async Task SelectNextHolidayAsync(HolidayDto? holiday)
+    {
+        if (holiday is null)
+        {
+            return;
+        }
+
+        await SelectHolidayInCalendarAsync(holiday, GetFirstVisibleMonth(holiday));
+    }
+
     private async Task ScrollToHolidayListItemAsync(Guid holidayId)
+    {
+        await ScrollToElementAsync(GetHolidayListItemId(holidayId), "nearest");
+    }
+
+    private async Task ScrollToHolidayMonthAsync(int month)
+    {
+        await ScrollToElementAsync(GetHolidayMonthId(month), "center");
+    }
+
+    private async Task ScrollToElementAsync(string elementId, string block)
     {
         try
         {
-            await JS.InvokeVoidAsync(
-                "eval",
-                $"document.getElementById('{GetHolidayListItemId(holidayId)}')?.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }})");
+            _holidayCalendarModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/holidayCalendar.js");
+            await _holidayCalendarModule.InvokeVoidAsync("scrollToElement", elementId, block);
         }
         catch
         {
-            // Scroll is optional if JS is unavailable.
+            // Selection still works when scrolling is unavailable.
         }
     }
 
-    private void HandleListItemKeyDown(KeyboardEventArgs args, HolidayDto holiday)
+    private async Task HandleListItemKeyDownAsync(KeyboardEventArgs args, HolidayDto holiday, int month)
     {
         if (args.Key is "Enter" or " ")
         {
-            _ = SelectHolidayAsync(holiday);
+            await SelectHolidayInCalendarAsync(holiday, month);
         }
     }
 
     private static string GetHolidayListItemId(Guid holidayId) => $"holiday-item-{holidayId}";
 
+    private string GetHolidayMonthId(int month) => $"holiday-month-{SelectedYear}-{month:D2}";
+
+    private int GetFirstVisibleMonth(HolidayDto holiday)
+    {
+        var yearStart = new DateOnly(SelectedYear, 1, 1);
+        var yearEnd = new DateOnly(SelectedYear, 12, 31);
+        var firstVisibleDate = holiday.FromDate < yearStart
+            ? yearStart
+            : holiday.FromDate > yearEnd
+                ? yearEnd
+                : holiday.FromDate;
+
+        return firstVisibleDate.Month;
+    }
+
     private string? GetHolidayListItemClass(Guid holidayId)
     {
-        var classes = new List<string>();
-        if (_isAdmin)
-        {
-            classes.Add("holiday-list-item-admin");
-        }
-
-        if (_highlightedHolidayId == holidayId)
-        {
-            classes.Add("holiday-list-item-selected");
-        }
-
-        return classes.Count == 0 ? null : string.Join(' ', classes);
+        return _highlightedHolidayId == holidayId
+            ? "holiday-list-item-selected"
+            : null;
     }
 
     private void EditHolidayAsync(HolidayDto holiday)
@@ -770,7 +835,7 @@
                 continue;
             }
 
-            yield return new HolidayGroup(monthStart.ToString("MMMM"), monthHolidays);
+            yield return new HolidayGroup(month, monthStart.ToString("MMMM"), monthHolidays);
         }
     }
 
@@ -813,7 +878,7 @@
     {
         if (holiday.FromDate == holiday.ToDate)
         {
-            return holiday.FromDate.ToString("d");
+            return holiday.FromDate.Day.ToString();
         }
 
         if (holiday.FromDate.Month == holiday.ToDate.Month)
@@ -830,18 +895,22 @@
     private int GetTotalDaysOff() =>
         _holidays.Sum(GetDurationDays);
 
-    private string GetNextHolidayLabel()
+    private HolidayDto? GetNextHoliday()
+    {
+        var referenceDate = _selectedYear == _today.Year ? _today : new DateOnly(_selectedYear, 1, 1);
+        return _holidays
+            .Where(h => h.ToDate >= referenceDate)
+            .OrderBy(h => h.FromDate)
+            .ThenBy(h => h.Name)
+            .FirstOrDefault();
+    }
+
+    private string GetNextHolidayLabel(HolidayDto? upcoming)
     {
         if (_holidays.Count == 0)
         {
             return "None scheduled";
         }
-
-        var referenceDate = _selectedYear == _today.Year ? _today : new DateOnly(_selectedYear, 1, 1);
-        var upcoming = _holidays
-            .Where(h => h.ToDate >= referenceDate)
-            .OrderBy(h => h.FromDate)
-            .FirstOrDefault();
 
         if (upcoming is null)
         {
@@ -880,7 +949,24 @@
         return raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? raw : $"An error occurred: {raw}";
     }
 
-    private sealed record HolidayGroup(string MonthName, IReadOnlyList<HolidayDto> Holidays);
+    public async ValueTask DisposeAsync()
+    {
+        if (_holidayCalendarModule is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _holidayCalendarModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // Page is unloading.
+        }
+    }
+
+    private sealed record HolidayGroup(int Month, string MonthName, IReadOnlyList<HolidayDto> Holidays);
 
     private sealed record HolidayQuarter(string Label, string MonthRange, IReadOnlyList<int> Months);
 }
