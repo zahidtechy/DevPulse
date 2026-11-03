@@ -2,16 +2,15 @@ namespace DevPulse.Client.Services.Ui;
 
 /// <summary>
 /// Tracks user-visible UI work and exposes the indeterminate shell progress bar.
-/// Short operations never show the bar, and once shown it remains visible long enough
-/// to avoid a distracting flash on quick responses.
+/// Visibility is reference-counted through <see cref="Begin"/> scopes, so overlapping
+/// operations cannot hide the bar early. Once shown, the bar stays visible for a short
+/// minimum duration to avoid a distracting flash on very fast responses.
 /// </summary>
 public sealed class ShellProgressService : IDisposable
 {
-    private const int ShowDelayMs = 150;
     private const int MinimumVisibleMs = 300;
 
     private readonly HashSet<Guid> _operations = new();
-    private CancellationTokenSource? _showDelay;
     private CancellationTokenSource? _hideDelay;
     private long _visibleSinceTick;
 
@@ -29,9 +28,11 @@ public sealed class ShellProgressService : IDisposable
 
         CancelHide();
 
-        if (!IsVisible && _operations.Count == 1)
+        if (!IsVisible)
         {
-            ScheduleShow();
+            IsVisible = true;
+            _visibleSinceTick = Environment.TickCount64;
+            NotifyChanged();
         }
 
         return new Scope(this, id);
@@ -44,51 +45,10 @@ public sealed class ShellProgressService : IDisposable
             return;
         }
 
-        CancelShow();
-
         if (IsVisible)
         {
             ScheduleHide();
         }
-    }
-
-    private void ScheduleShow()
-    {
-        CancelShow();
-
-        var cancellation = new CancellationTokenSource();
-        _showDelay = cancellation;
-        _ = ShowAfterDelayAsync(cancellation);
-    }
-
-    private async Task ShowAfterDelayAsync(CancellationTokenSource cancellation)
-    {
-        try
-        {
-            await Task.Delay(ShowDelayMs, cancellation.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-        finally
-        {
-            if (ReferenceEquals(_showDelay, cancellation))
-            {
-                _showDelay = null;
-            }
-
-            cancellation.Dispose();
-        }
-
-        if (_operations.Count == 0)
-        {
-            return;
-        }
-
-        IsVisible = true;
-        _visibleSinceTick = Environment.TickCount64;
-        NotifyChanged();
     }
 
     private void ScheduleHide()
@@ -136,13 +96,6 @@ public sealed class ShellProgressService : IDisposable
         NotifyChanged();
     }
 
-    private void CancelShow()
-    {
-        var cancellation = _showDelay;
-        _showDelay = null;
-        cancellation?.Cancel();
-    }
-
     private void CancelHide()
     {
         var cancellation = _hideDelay;
@@ -154,7 +107,6 @@ public sealed class ShellProgressService : IDisposable
 
     public void Dispose()
     {
-        CancelShow();
         CancelHide();
         _operations.Clear();
         Changed = null;
