@@ -75,7 +75,9 @@ public sealed class DeveloperRepository : IDeveloperRepository
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public async Task<Developer?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        await _dbContext.Developers.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+    await _dbContext.Developers
+        .Include(d => d.ReportingManager)
+        .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public async Task<Developer?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
         await _dbContext.Developers

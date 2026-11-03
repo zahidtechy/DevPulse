@@ -150,8 +150,6 @@
                                     class="form-select"
                                     @bind="_selectedLeaveTypeId"
                                     @bind:after="OnLeaveTypeOrDatesChanged">
-                                <option value="@Guid.Empty">Select type...</option>
-
                                 @foreach (var type in _activeLeaveTypes)
                                 {
                                     <option value="@type.Id">
@@ -172,13 +170,25 @@
                         <div class="col-md-6">
                             <label class="form-label" for="fromDate">From</label>
 
-                            <DateInput Id="fromDate" @bind-Value="_fromDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" DefaultValue="@DefaultFromDate" />
+                            <input id="fromDate"
+                                   type="date"
+                                   class="form-control"
+                                   min="@MinDate"
+                                   max="@FromMaxDate"
+                                   value="@_fromDate.ToString("yyyy-MM-dd")"
+                                   @onchange="OnFromDateChanged" />
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label" for="toDate">To</label>
 
-                            <DateInput Id="toDate" @bind-Value="_toDate" @bind-Value:after="OnLeaveTypeOrDatesChanged" DefaultValue="@DefaultToDate" />
+                            <input id="toDate"
+                                   type="date"
+                                   class="form-control"
+                                   min="@ToMinDate"
+                                   max="@MaxDate"
+                                   value="@_toDate.ToString("yyyy-MM-dd")"
+                                   @onchange="OnToDateChanged" />
                         </div>
 
                         <div class="col-md-6">
@@ -211,22 +221,28 @@
                                 <span class="leave-approver-name">
                                     @_me.ReportingManagerName
                                 </span>
-
-                                <span class="leave-approver-note">
-                                    Requests go to your assigned manager.
-                                </span>
                             </div>
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label" for="leaveReason">Reason</label>
+                            <label class="form-label" for="leaveReason">
+                                Reason <span class="text-danger">*</span>
+                            </label>
 
                             <textarea id="leaveReason"
-                                      class="form-control leave-reason-input"
+                                      class="form-control leave-reason-input @(_reasonValidationError is not null ? "is-invalid" : null)"
                                       rows="3"
-                                      @bind="_reason"
+                                      value="@_reason"
+                                      @oninput="OnReasonInput"
                                       placeholder="Brief reason for your leave request">
-                    </textarea>
+                            </textarea>
+
+                            @if (_reasonValidationError is not null)
+                            {
+                                <div class="invalid-feedback d-block">
+                                    @_reasonValidationError
+                                </div>
+                            }
                         </div>
 
                     </div>
@@ -253,7 +269,7 @@
             </FooterContent>
 
         </ModalDialog>
-        
+
     }
 </div>
 
@@ -275,19 +291,58 @@
     private DateOnly _fromDate;
     private DateOnly _toDate;
 
-    // Single definition of the range default: used on first open and when a date
-    // field is cleared, so the two can never drift apart.
+    // Global calendar boundaries: today through one year from today.
+    private string MinDate => DateTime.Today.ToString("yyyy-MM-dd");
+    private string MaxDate => DateTime.Today.AddYears(1).ToString("yyyy-MM-dd");
+
+    // If To is selected first, From cannot be later than To.
+    // If From is selected first, To cannot be earlier than From.
+    private bool _fromDateSelected;
+    private bool _toDateSelected;
+
+    private string FromMaxDate =>
+        _toDateSelected ? _toDate.ToString("yyyy-MM-dd") : MaxDate;
+
+    private string ToMinDate =>
+        _fromDateSelected ? _fromDate.ToString("yyyy-MM-dd") : MinDate;
+
+    // Default date values for a new application.
     private DateOnly DefaultFromDate => DateOnly.FromDateTime(DateTime.Today);
     private DateOnly DefaultToDate => DateOnly.FromDateTime(DateTime.Today);
+
+    // Validate global boundaries and the From/To relationship.
+    private bool IsValidDateRange =>
+        _fromDate >= DefaultFromDate &&
+        _fromDate <= DateOnly.FromDateTime(DateTime.Today.AddYears(1)) &&
+        _toDate >= DefaultFromDate &&
+        _toDate <= DateOnly.FromDateTime(DateTime.Today.AddYears(1)) &&
+        _toDate >= _fromDate;
 
     private decimal? _calculatedDays;
 
     private string _reason = string.Empty;
+    private string? _reasonValidationError;
     private string? _reviewComment;
     private bool _showApplyModal;
 
-    private void OpenApplyModal()
+    private async Task OpenApplyModal()
     {
+        // Reset dates, reason, and validation error whenever the modal is opened.
+        _fromDate = DefaultFromDate;
+        _toDate = DefaultToDate;
+        _fromDateSelected = false;
+        _toDateSelected = false;
+        _calculatedDays = null;
+        _reason = string.Empty;
+        _reasonValidationError = null;
+
+        // Ensure default selection points to the first leave type if available
+        if (_activeLeaveTypes.Any())
+        {
+            _selectedLeaveTypeId = _activeLeaveTypes.First().Id;
+            await OnLeaveTypeOrDatesChanged();
+        }
+
         _showApplyModal = true;
     }
 
@@ -296,6 +351,16 @@
         if (!_isBusy)
         {
             _showApplyModal = false;
+        }
+    }
+
+    private void OnReasonInput(ChangeEventArgs e)
+    {
+        _reason = e.Value?.ToString() ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(_reason))
+        {
+            _reasonValidationError = null;
         }
     }
 
@@ -316,6 +381,13 @@
 
             _activeLeaveTypes = (await LeaveApi.GetLeaveTypesAsync(activeOnly: true)).ToList();
 
+            // Set the first leave type as default if any exist
+            if (_activeLeaveTypes.Any())
+            {
+                _selectedLeaveTypeId = _activeLeaveTypes.First().Id;
+                await OnLeaveTypeOrDatesChanged();
+            }
+
             _myApplications = (await LeaveApi.GetMyApplicationsAsync()).ToList();
 
             _pendingApplications = (await LeaveApi.GetPendingForApprovalAsync()).ToList();
@@ -331,6 +403,46 @@
         }
     }
 
+    private async Task OnFromDateChanged(ChangeEventArgs e)
+    {
+        if (!DateOnly.TryParse(e.Value?.ToString(), out var selectedDate))
+            return;
+
+        // Enforce the selected To date even if a browser submits an invalid value.
+        if (_toDateSelected && selectedDate > _toDate)
+        {
+            ShowMessage("From date cannot be later than To date.", true);
+            selectedDate = _toDate;
+        }
+
+        _fromDate = selectedDate;
+        _fromDateSelected = true;
+
+        // Refresh the rendered min/max attributes immediately.
+        await InvokeAsync(StateHasChanged);
+        await OnLeaveTypeOrDatesChanged();
+    }
+
+    private async Task OnToDateChanged(ChangeEventArgs e)
+    {
+        if (!DateOnly.TryParse(e.Value?.ToString(), out var selectedDate))
+            return;
+
+        // Enforce the selected From date even if a browser submits an invalid value.
+        if (_fromDateSelected && selectedDate < _fromDate)
+        {
+            ShowMessage("To date cannot be earlier than From date.", true);
+            selectedDate = _fromDate;
+        }
+
+        _toDate = selectedDate;
+        _toDateSelected = true;
+
+        // Refresh the rendered min/max attributes immediately.
+        await InvokeAsync(StateHasChanged);
+        await OnLeaveTypeOrDatesChanged();
+    }
+
     private async Task OnLeaveTypeOrDatesChanged()
     {
         _selectedLeaveType = _activeLeaveTypes.FirstOrDefault(
@@ -338,7 +450,7 @@
 
         _calculatedDays = null;
 
-        if (_selectedLeaveTypeId == Guid.Empty || _toDate < _fromDate)
+        if (!IsValidDateRange || _selectedLeaveTypeId == Guid.Empty)
         {
             return;
         }
@@ -361,6 +473,22 @@
 
     private async Task SubmitAsync()
     {
+        if (string.IsNullOrWhiteSpace(_reason))
+        {
+            _reasonValidationError = "Reason is required.";
+            return;
+        }
+
+        _reasonValidationError = null;
+
+        if (!IsValidDateRange)
+        {
+            ShowMessage(
+                $"Please select dates between {MinDate} and {MaxDate}.",
+                true);
+            return;
+        }
+
         if (_selectedLeaveTypeId == Guid.Empty ||
             _me.ReportingManagerDeveloperId is null)
         {
@@ -388,8 +516,19 @@
                 false);
 
             _reason = string.Empty;
+            _reasonValidationError = null;
             _calculatedDays = null;
-            _selectedLeaveTypeId = Guid.Empty;
+
+            // Re-assign default first item upon resetting or closing
+            if (_activeLeaveTypes.Any())
+            {
+                _selectedLeaveTypeId = _activeLeaveTypes.First().Id;
+            }
+            else
+            {
+                _selectedLeaveTypeId = Guid.Empty;
+            }
+
             _selectedLeaveType = null;
             _showApplyModal = false;
 
