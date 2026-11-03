@@ -14,7 +14,10 @@
                  @onmouseleave="() => ResumeToast(toast.Id)">
                 <span class="dp-toast-icon @IconClass(toast.Level)" aria-hidden="true"></span>
                 <div class="dp-toast-body">
-                    <p class="dp-toast-title">@toast.Title</p>
+                    @if (Toast.ShowHeading)
+                    {
+                        <p class="dp-toast-title">@toast.Title</p>
+                    }
                     <p class="dp-toast-message">@toast.Message</p>
                 </div>
                 <button type="button"

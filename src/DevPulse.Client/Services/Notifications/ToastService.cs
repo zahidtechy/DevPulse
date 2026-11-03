@@ -40,6 +40,12 @@ public sealed class ToastService
     /// </summary>
     public bool SuppressErrors { get; set; }
 
+    /// <summary>
+    /// When true, each toast renders its title (default or caller-supplied) above the message.
+    /// Defaults to false so notifications show only the message text.
+    /// </summary>
+    public bool ShowHeading { get; set; } = false;
+
     public void Success(string message, string? title = null, int? durationMs = null, string? key = null)
         => Show(message, ToastLevel.Success, title, durationMs, key);
 
