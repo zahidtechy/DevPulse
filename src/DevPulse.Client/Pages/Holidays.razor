@@ -5,6 +5,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Holiday Calendar")</PageTitle>
 
@@ -40,7 +41,7 @@
         </AuthorizeView>
     </div>
 
-    @if (_isLoading)
+    @if (_isLoading && !_hasLoaded)
     {
         <LoadingIndicator Text="Loading holidays..." />
     }
@@ -399,6 +400,7 @@
 
     private int _selectedYear = DateTime.Today.Year;
     private bool _isLoading = true;
+    private bool _hasLoaded;
     private bool _isBusy;
     private bool _isAdmin;
     private bool _showForm;
@@ -436,6 +438,7 @@
 
     private async Task LoadHolidaysAsync()
     {
+        using var progress = _hasLoaded ? Progress.Begin() : null;
         _isLoading = true;
 
         try
@@ -452,6 +455,7 @@
         finally
         {
             _isLoading = false;
+            _hasLoaded = true;
         }
     }
 

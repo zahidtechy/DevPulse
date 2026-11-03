@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "AdminOnly")]
 @inject ILeaveApiClient LeaveApi
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Leave Types")</PageTitle>
 
@@ -75,7 +76,7 @@
         </div>
     }
 
-    @if (_isLoading)
+    @if (_isLoading && !_hasLoaded)
     {
         <LoadingIndicator Text="Loading leave types..." />
     }
@@ -248,6 +249,7 @@
 @code {
     private List<LeaveTypeDto> _leaveTypes = [];
     private bool _isLoading = true;
+    private bool _hasLoaded;
     private bool _isBusy;
     private bool _showForm;
     private Guid? _editingId;
@@ -282,6 +284,7 @@
 
     private async Task LoadAsync()
     {
+        using var progress = _hasLoaded ? Progress.Begin() : null;
         _isLoading = true;
         try
         {
@@ -294,6 +297,7 @@
         finally
         {
             _isLoading = false;
+            _hasLoaded = true;
         }
     }
 

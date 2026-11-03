@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = AppRoles.Admin)]
 @inject IHubstaffOrganizationApiClient HubstaffApi
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Hubstaff Organizations")</PageTitle>
 
@@ -60,7 +61,7 @@
         </div>
     }
 
-    @if (_isLoading)
+    @if (_isLoading && !_hasLoaded)
     {
         <LoadingIndicator Text="Loading organizations..." />
     }
@@ -120,12 +121,14 @@
     private CreateHubstaffOrganizationFormModel _form = new();
     private bool _showAddForm;
     private bool _isLoading = true;
+    private bool _hasLoaded;
     private bool _isBusy;
 
     protected override async Task OnInitializedAsync() => await LoadOrganizationsAsync();
 
     private async Task LoadOrganizationsAsync()
     {
+        using var progress = _hasLoaded ? Progress.Begin() : null;
         _isLoading = true;
         try
         {
@@ -140,6 +143,7 @@
         finally
         {
             _isLoading = false;
+            _hasLoaded = true;
         }
     }
 

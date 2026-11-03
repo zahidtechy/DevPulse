@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = "AdminOnly")]
 @inject ILeaveApiClient LeaveApi
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("Leave Settings")</PageTitle>
 
@@ -16,7 +17,7 @@
         </div>
     </div>
 
-    @if (_isLoading)
+    @if (_isLoading && !_hasLoaded)
     {
         <div class="leave-settings-skeleton" aria-hidden="true">
             <div class="leave-settings-skeleton-toolbar"></div>
@@ -145,6 +146,7 @@
     ];
 
     private bool _isLoading = true;
+    private bool _hasLoaded;
     private bool _isBusy;
     private bool _isTesting;
     private bool _hasToken;
@@ -162,6 +164,7 @@
 
     private async Task LoadAsync()
     {
+        using var progress = _hasLoaded ? Progress.Begin() : null;
         _isLoading = true;
         try
         {
@@ -180,6 +183,7 @@
         finally
         {
             _isLoading = false;
+            _hasLoaded = true;
         }
     }
 

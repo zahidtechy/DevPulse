@@ -3,6 +3,7 @@
 @inject IUserApiClient UserApi
 @inject IDeveloperApiClient DeveloperApi
 @inject ToastService Toast
+@inject ShellProgressService Progress
 
 <PageTitle>@AppBranding.PageTitle("User Management")</PageTitle>
 
@@ -210,7 +211,7 @@
                             OnConfirm="ConfirmDeleteAsync" />
     }
 
-    @if (_isLoading)
+    @if (_isLoading && !_hasLoaded)
     {
         <LoadingIndicator Text="Loading users..." />
     }
@@ -398,6 +399,7 @@
     private string _roleFilter = "all";
     private bool _showAddForm;
     private bool _isLoading = true;
+    private bool _hasLoaded;
     private bool _isBusy;
     private bool _editIsActive = true;
     private bool _createDeveloper;
@@ -470,6 +472,7 @@
 
     private async Task LoadUsersAsync()
     {
+        using var progress = _hasLoaded ? Progress.Begin() : null;
         _isLoading = true;
 
         try
@@ -485,6 +488,7 @@
         finally
         {
             _isLoading = false;
+            _hasLoaded = true;
         }
     }
 
