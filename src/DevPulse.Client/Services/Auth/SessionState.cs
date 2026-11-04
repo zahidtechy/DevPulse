@@ -1,14 +1,14 @@
 namespace DevPulse.Client.Services.Auth;
 
 /// <summary>
-/// Tracks whether the browser currently holds an authenticated session and raises a single
-/// event when the API reports that the session is no longer valid.
+/// Tracks whether the browser currently holds an authenticated JWT session and raises a
+/// single event when access can no longer be renewed.
 /// </summary>
 public sealed class SessionState
 {
     private int _expired;
 
-    /// <summary>True once <c>api/auth/me</c> (or a login refresh) has confirmed a signed-in user.</summary>
+    /// <summary>True while the browser holds a valid access-token envelope.</summary>
     public bool IsAuthenticated { get; private set; }
 
     /// <summary>True after a 401 survived the retry, until the next successful sign-in.</summary>

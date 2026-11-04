@@ -23,12 +23,16 @@
                     <label class="form-label" for="email">Email</label>
                     <InputText id="email" class="form-control" @bind-Value="_model.Email" autocomplete="username" />
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="form-label" for="password">Password</label>
                     <PasswordInput id="password"
                                    name="password"
                                    @bind-Value="_model.Password"
                                    autocomplete="current-password" />
+                </div>
+                <div class="form-check mb-4">
+                    <InputCheckbox id="rememberMe" class="form-check-input" @bind-Value="_model.RememberMe" />
+                    <label class="form-check-label" for="rememberMe">Remember me</label>
                 </div>
                 <BusyButton CssClass="btn btn-primary w-100"
                             Type="submit"
@@ -102,7 +106,10 @@
 
         try
         {
-            var user = await AuthService.LoginAsync(new LoginRequest(_model.Email.Trim(), _model.Password));
+            var user = await AuthService.LoginAsync(new LoginRequest(
+                _model.Email.Trim(),
+                _model.Password,
+                _model.RememberMe));
             if (user is null)
             {
                 Toast.Error("Login failed.", key: ToastKeys.Login);
@@ -143,5 +150,7 @@
         public string Email { get; set; } = string.Empty;
 
         public string Password { get; set; } = string.Empty;
+
+        public bool RememberMe { get; set; }
     }
 }

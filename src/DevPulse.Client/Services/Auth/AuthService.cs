@@ -12,22 +12,25 @@ public interface IAuthService
 public sealed class AuthService : IAuthService
 {
     private readonly HttpClient _httpClient;
-    private readonly CookieAuthenticationStateProvider _authStateProvider;
+    private readonly AuthApiClient _authApiClient;
+    private readonly AccessTokenStore _tokenStore;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public AuthService(
         HttpClient httpClient,
-        AuthenticationStateProvider authStateProvider,
+        AuthApiClient authApiClient,
+        AccessTokenStore tokenStore,
         JsonSerializerOptions jsonOptions)
     {
         _httpClient = httpClient;
-        _authStateProvider = (CookieAuthenticationStateProvider)authStateProvider;
+        _authApiClient = authApiClient;
+        _tokenStore = tokenStore;
         _jsonOptions = jsonOptions;
     }
 
     public async Task<UserDto?> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("api/auth/login", request, _jsonOptions, cancellationToken);
+        using var response = await _authApiClient.LoginAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -35,15 +38,20 @@ public sealed class AuthService : IAuthService
         }
 
         var loginResponse = await response.Content.ReadFromJsonAsync<LoginResponse>(_jsonOptions, cancellationToken);
-        await _authStateProvider.RefreshAuthenticationStateAsync();
-        return loginResponse?.User;
+        if (loginResponse is null || !AccessTokenStore.IsValid(loginResponse))
+        {
+            throw new InvalidOperationException("The server returned an invalid login response.");
+        }
+
+        await _tokenStore.SetAsync(loginResponse);
+        return loginResponse.User;
     }
 
     public async Task LogoutAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            using var response = await _httpClient.PostAsync("api/auth/logout", null, cancellationToken);
+            using var response = await _authApiClient.LogoutAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -55,13 +63,17 @@ public sealed class AuthService : IAuthService
         }
         finally
         {
-            _authStateProvider.NotifySignedOut();
+            await _tokenStore.ClearAsync();
         }
     }
 
     public async Task ChangePasswordAsync(SelfChangePasswordRequest request, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PutAsJsonAsync("api/auth/change-password", request, _jsonOptions, cancellationToken);
+        using var response = await _httpClient.PutAsJsonAsync(
+            "api/auth/change-password",
+            request,
+            _jsonOptions,
+            cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var error = await response.Content.ReadAsStringAsync(cancellationToken);

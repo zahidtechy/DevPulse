@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
+var applicationBaseUri = new Uri(builder.HostEnvironment.BaseAddress);
 
 builder.Services.AddSingleton(AppJsonOptions.Default);
 builder.Services.AddAuthorizationCore(options =>
@@ -18,21 +19,29 @@ builder.Services.AddAuthorizationCore(options =>
             DevPulse.Shared.Constants.AppRoles.User));
 });
 
-builder.Services.AddScoped<CookieAuthenticationStateProvider>();
-builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<CookieAuthenticationStateProvider>());
 builder.Services.AddSingleton<SessionState>();
+builder.Services.AddScoped<AccessTokenStore>();
+builder.Services.AddScoped(sp => new AuthApiClient(
+    applicationBaseUri,
+    sp.GetRequiredService<JsonSerializerOptions>()));
+builder.Services.AddScoped<TokenRefreshCoordinator>();
+builder.Services.AddScoped<JwtAuthenticationStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
+    sp.GetRequiredService<JwtAuthenticationStateProvider>());
 builder.Services.AddScoped(sp =>
 {
-    // A DelegatingHandler requires an inner transport. In Blazor WebAssembly,
-    // HttpClientHandler uses the browser's Fetch API.
-    var handler = new SessionAuthHandler(sp.GetRequiredService<SessionState>())
+    var handler = new JwtAuthorizationHandler(
+        sp.GetRequiredService<AccessTokenStore>(),
+        sp.GetRequiredService<TokenRefreshCoordinator>(),
+        sp.GetRequiredService<SessionState>(),
+        applicationBaseUri)
     {
         InnerHandler = new HttpClientHandler()
     };
 
     return new HttpClient(handler)
     {
-        BaseAddress = new Uri(builder.HostEnvironment.BaseAddress)
+        BaseAddress = applicationBaseUri
     };
 });
 
