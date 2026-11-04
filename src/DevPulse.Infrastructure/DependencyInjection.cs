@@ -78,6 +78,7 @@ public static class DependencyInjection
         services.AddScoped<IHubstaffSyncRunRepository, HubstaffSyncRunRepository>();
         services.AddScoped<IUserEmailLookup, UserEmailLookup>();
         services.AddScoped<IUserDeveloperResolver, UserDeveloperResolver>();
+        services.AddScoped<IUserDisplayNameLookup, UserDisplayNameLookup>();
         services.AddScoped<ILeaveTelegramService, LeaveTelegramService>();
         services.AddSingleton<LeaveTelegramNotificationQueue>();
         services.AddSingleton<ILeaveTelegramNotificationQueue>(sp =>

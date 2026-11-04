@@ -158,7 +158,8 @@ public record AttendanceCorrectionRequestDto(
     AttendanceCorrectionStatusDto Status,
     string? ReviewerComment,
     DateTime? ReviewedAtUtc,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    string? ReviewedByName = null);
 
 public record ReviewAttendanceCorrectionRequest(
     DateTime? ApprovedPunchInUtc,

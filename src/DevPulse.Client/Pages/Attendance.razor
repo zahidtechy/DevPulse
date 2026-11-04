@@ -585,6 +585,13 @@
                                             <span class="attendance-details-label">Reason</span>
                                             <p class="attendance-details-copy mb-0">@request.Reason</p>
                                         </div>
+                                        @if (!string.IsNullOrWhiteSpace(request.ReviewedByName))
+                                        {
+                                            <div>
+                                                <span class="attendance-details-label">Reviewed by</span>
+                                                <span class="attendance-details-value">@request.ReviewedByName</span>
+                                            </div>
+                                        }
                                         @if (request.ReviewedAtUtc is not null)
                                         {
                                             <div>

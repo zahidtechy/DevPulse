@@ -12,6 +12,7 @@ public sealed class AttendanceService : IAttendanceService
     private readonly IHolidayRepository _holidayRepository;
     private readonly AttendanceStatusCalculator _statusCalculator;
     private readonly IUserDeveloperResolver _userDeveloperResolver;
+    private readonly IUserDisplayNameLookup _userDisplayNameLookup;
 
     public AttendanceService(
         IAttendanceRepository attendanceRepository,
@@ -19,7 +20,8 @@ public sealed class AttendanceService : IAttendanceService
         ILeaveRepository leaveRepository,
         IHolidayRepository holidayRepository,
         AttendanceStatusCalculator statusCalculator,
-        IUserDeveloperResolver userDeveloperResolver)
+        IUserDeveloperResolver userDeveloperResolver,
+        IUserDisplayNameLookup userDisplayNameLookup)
     {
         _attendanceRepository = attendanceRepository;
         _developerRepository = developerRepository;
@@ -27,6 +29,7 @@ public sealed class AttendanceService : IAttendanceService
         _holidayRepository = holidayRepository;
         _statusCalculator = statusCalculator;
         _userDeveloperResolver = userDeveloperResolver;
+        _userDisplayNameLookup = userDisplayNameLookup;
     }
 
     public async Task<AttendanceMeDto> GetMeAsync(string userEmail, CancellationToken cancellationToken = default)
@@ -243,10 +246,16 @@ public sealed class AttendanceService : IAttendanceService
             settings,
             timeZone);
 
+        var reviewerNames = await GetReviewerNamesAsync(corrections, cancellationToken);
+
         return new AttendanceDayDetailsDto(
             row,
             record is null ? null : MapRecord(record, settings, timeZone),
-            corrections.Select(MapCorrectionRequest).ToList());
+            corrections.Select(correction => MapCorrectionRequest(
+                correction,
+                correction.ReviewedByUserId is Guid reviewerId
+                    ? reviewerNames.GetValueOrDefault(reviewerId)
+                    : null)).ToList());
     }
 
     public async Task<AttendancePendingCorrectionCountsDto> GetPendingCorrectionCountsAsync(
@@ -510,7 +519,8 @@ public sealed class AttendanceService : IAttendanceService
         entity.ReviewedAtUtc = reviewedAtUtc;
 
         await _attendanceRepository.UpdateCorrectionRequestAsync(entity, cancellationToken);
-        return Result<AttendanceCorrectionRequestDto>.Success(MapCorrectionRequest(entity));
+        var reviewerName = await GetReviewerNameAsync(adminUserId, cancellationToken);
+        return Result<AttendanceCorrectionRequestDto>.Success(MapCorrectionRequest(entity, reviewerName));
     }
 
     public async Task<Result<AttendanceCorrectionRequestDto>> RejectCorrectionRequestAsync(
@@ -536,7 +546,8 @@ public sealed class AttendanceService : IAttendanceService
         entity.ReviewedAtUtc = DateTime.UtcNow;
 
         await _attendanceRepository.UpdateCorrectionRequestAsync(entity, cancellationToken);
-        return Result<AttendanceCorrectionRequestDto>.Success(MapCorrectionRequest(entity));
+        var reviewerName = await GetReviewerNameAsync(adminUserId, cancellationToken);
+        return Result<AttendanceCorrectionRequestDto>.Success(MapCorrectionRequest(entity, reviewerName));
     }
 
     public async Task<Result<AttendanceRecordDto>> AdminUpsertRecordAsync(
@@ -786,7 +797,28 @@ public sealed class AttendanceService : IAttendanceService
             settings.StrictPunchIn,
             settings.StrictPunchOut);
 
-    private static AttendanceCorrectionRequestDto MapCorrectionRequest(AttendanceCorrectionRequest request) =>
+    private async Task<IReadOnlyDictionary<Guid, string>> GetReviewerNamesAsync(
+        IReadOnlyList<AttendanceCorrectionRequest> corrections,
+        CancellationToken cancellationToken)
+    {
+        var reviewerIds = corrections
+            .Where(x => x.ReviewedByUserId.HasValue)
+            .Select(x => x.ReviewedByUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        return await _userDisplayNameLookup.GetDisplayNamesAsync(reviewerIds, cancellationToken);
+    }
+
+    private async Task<string?> GetReviewerNameAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var reviewerNames = await _userDisplayNameLookup.GetDisplayNamesAsync([userId], cancellationToken);
+        return reviewerNames.GetValueOrDefault(userId);
+    }
+
+    private static AttendanceCorrectionRequestDto MapCorrectionRequest(
+        AttendanceCorrectionRequest request,
+        string? reviewedByName = null) =>
         new(
             request.Id,
             request.DeveloperId,
@@ -798,7 +830,8 @@ public sealed class AttendanceService : IAttendanceService
             MapCorrectionStatus(request.Status),
             request.ReviewerComment,
             request.ReviewedAtUtc,
-            request.CreatedAtUtc);
+            request.CreatedAtUtc,
+            reviewedByName);
 
     private static AttendanceCorrectionStatusDto MapCorrectionStatus(AttendanceCorrectionStatus status) => status switch
     {
