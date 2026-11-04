@@ -9,7 +9,6 @@ namespace DevPulse.Server.Controllers;
 public sealed class AuthController : ControllerBase
 {
     private const string RefreshCookieName = "DevPulse.Refresh";
-    private const string LegacyAuthCookieName = "DevPulse.Auth";
     private const string BrowserClientType = "devpulse-blazor";
     private readonly IAuthService _authService;
     private readonly IWebHostEnvironment _environment;
@@ -40,7 +39,6 @@ public sealed class AuthController : ControllerBase
         }
 
         SetRefreshCookie(result.Value);
-        DeleteCookie(LegacyAuthCookieName, "/");
         return Ok(result.Value.Response);
     }
 
@@ -83,7 +81,6 @@ public sealed class AuthController : ControllerBase
         }
 
         DeleteRefreshCookie();
-        DeleteCookie(LegacyAuthCookieName, "/");
         return NoContent();
     }
 
@@ -153,18 +150,16 @@ public sealed class AuthController : ControllerBase
             });
     }
 
-    private void DeleteRefreshCookie() => DeleteCookie(RefreshCookieName, "/api/auth");
-
-    private void DeleteCookie(string name, string path)
+    private void DeleteRefreshCookie()
     {
         Response.Cookies.Delete(
-            name,
+            RefreshCookieName,
             new CookieOptions
             {
                 HttpOnly = true,
                 Secure = !_environment.IsDevelopment() || Request.IsHttps,
                 SameSite = SameSiteMode.Strict,
-                Path = path
+                Path = "/api/auth"
             });
     }
 }

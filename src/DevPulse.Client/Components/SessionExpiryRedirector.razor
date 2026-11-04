@@ -41,7 +41,7 @@
             }
             catch
             {
-                // The local session is already signed out; deleting the cookie is best effort.
+                // The local session is already signed out; deleting the refresh cookie is best effort.
             }
 
             Toast.Info("Your session expired. Please sign in again.", key: ToastKeys.Session);
