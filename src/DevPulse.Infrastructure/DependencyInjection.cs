@@ -6,9 +6,9 @@ using DevPulse.Infrastructure.Persistence;
 using DevPulse.Infrastructure.Persistence.Repositories;
 using DevPulse.Infrastructure.Security;
 using DevPulse.Infrastructure.Services;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace DevPulse.Infrastructure;
 
@@ -21,6 +21,7 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString));
 
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+        services.Configure<RefreshTokenSettings>(configuration.GetSection(RefreshTokenSettings.SectionName));
         services.Configure<SeedAdminSettings>(configuration.GetSection(SeedAdminSettings.SectionName));
         services.Configure<KpiSyncOptions>(configuration.GetSection(KpiSyncOptions.SectionName));
         services.Configure<ClickUpApiOptions>(configuration.GetSection(ClickUpApiOptions.SectionName));
@@ -28,7 +29,7 @@ public static class DependencyInjection
         services.Configure<HubstaffSyncOptions>(configuration.GetSection(HubstaffSyncOptions.SectionName));
         services.Configure<HubstaffApiOptions>(configuration.GetSection(HubstaffApiOptions.SectionName));
 
-        services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+        services.AddIdentityCore<ApplicationUser>(options =>
             {
                 options.Password.RequireDigit = true;
                 options.Password.RequireLowercase = true;
@@ -36,32 +37,18 @@ public static class DependencyInjection
                 options.Password.RequireNonAlphanumeric = true;
                 options.Password.RequiredLength = 8;
                 options.User.RequireUniqueEmail = true;
+                options.Lockout.AllowedForNewUsers = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             })
+            .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<DevPulseDbContext>()
-            .AddClaimsPrincipalFactory<ApplicationUserClaimsPrincipalFactory>()
             .AddDefaultTokenProviders();
 
-        services.ConfigureApplicationCookie(options =>
-        {
-            options.Cookie.Name = "DevPulse.Auth";
-            options.Cookie.HttpOnly = true;
-            options.Cookie.SameSite = SameSiteMode.Lax;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-            options.SlidingExpiration = true;
-            options.ExpireTimeSpan = TimeSpan.FromHours(8);
-
-            options.Events.OnRedirectToLogin = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return Task.CompletedTask;
-            };
-
-            options.Events.OnRedirectToAccessDenied = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return Task.CompletedTask;
-            };
-        });
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer();
+        services.AddSingleton<JwtSigningKeyProvider>();
+        services.AddSingleton<IConfigureOptions<JwtBearerOptions>, JwtBearerOptionsSetup>();
 
         services.AddDataProtection();
         services.AddScoped<ITokenProtector, DataProtectionTokenProtector>();
