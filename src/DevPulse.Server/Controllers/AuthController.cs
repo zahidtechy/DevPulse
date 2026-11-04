@@ -1,7 +1,11 @@
+using DevPulse.Server.Security;
+using Microsoft.AspNetCore.RateLimiting;
+
 namespace DevPulse.Server.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class AuthController : ControllerBase
 {
     private const string RefreshCookieName = "DevPulse.Refresh";
@@ -18,8 +22,10 @@ public sealed class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("login")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Login)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         var result = await _authService.LoginAsync(
@@ -35,14 +41,15 @@ public sealed class AuthController : ControllerBase
 
         SetRefreshCookie(result.Value);
         DeleteCookie(LegacyAuthCookieName, "/");
-        SetNoStoreHeaders();
         return Ok(result.Value.Response);
     }
 
     [AllowAnonymous]
     [HttpPost("refresh")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Refresh)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Refresh(CancellationToken cancellationToken)
     {
         if (!Request.Cookies.TryGetValue(RefreshCookieName, out var refreshToken))
@@ -62,7 +69,6 @@ public sealed class AuthController : ControllerBase
         }
 
         SetRefreshCookie(result.Value);
-        SetNoStoreHeaders();
         return Ok(result.Value.Response);
     }
 
@@ -160,11 +166,5 @@ public sealed class AuthController : ControllerBase
                 SameSite = SameSiteMode.Strict,
                 Path = path
             });
-    }
-
-    private void SetNoStoreHeaders()
-    {
-        Response.Headers.CacheControl = "no-store";
-        Response.Headers.Pragma = "no-cache";
     }
 }

@@ -1,6 +1,9 @@
 using DevPulse.Application;
 using DevPulse.Infrastructure;
+using DevPulse.Server.Security;
 using DevPulse.Shared.Serialization;
+using System.Globalization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +12,47 @@ builder.Services.AddControllers()
 builder.Services.AddOpenApi();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var response = context.HttpContext.Response;
+        response.Headers.CacheControl = "no-store";
+
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds)
+                .ToString(CultureInfo.InvariantCulture);
+        }
+
+        await response.WriteAsJsonAsync(
+            new { error = "Too many authentication attempts. Please try again later." },
+            cancellationToken);
+    };
+
+    options.AddPolicy(AuthRateLimitPolicies.Login, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy(AuthRateLimitPolicies.Refresh, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+});
 
 builder.Services.AddAuthorization(options =>
 {
@@ -17,17 +61,6 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole(
             DevPulse.Shared.Constants.AppRoles.Admin,
             DevPulse.Shared.Constants.AppRoles.User));
-});
-
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("DevPulseCors", policy =>
-    {
-        policy.AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials()
-            .WithOrigins(builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? ["https://localhost:7062", "http://localhost:5080"]);
-    });
 });
 
 var app = builder.Build();
@@ -48,7 +81,7 @@ else
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 app.UseRouting();
-app.UseCors("DevPulseCors");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

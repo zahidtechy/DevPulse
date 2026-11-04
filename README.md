@@ -109,12 +109,15 @@ POST /api/clickup/accounts
 
 - API tokens are **never** sent to the Blazor client after storage
 - Tokens are encrypted using ASP.NET Core **Data Protection**
-- For production, use Azure Key Vault and enable authentication (Azure AD / JWT)
+- Protected API calls use short-lived JWT bearer access tokens
+- Browser refresh tokens are rotated, stored as SHA-256 hashes, and transported only in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie
+- The hosted Blazor client and API are same-origin; browser CORS is intentionally disabled
+- Development uses an ephemeral RSA signing key. Production requires `Jwt__SigningCertificateThumbprint` for an RSA certificate with an accessible private key in the configured Windows Certificate Store (by default `LocalMachine/My`)
 
 ## Next Phases
 
 1. KPI dashboard charts and scheduled report delivery
-2. Authentication (Azure AD / JWT) hardening for production
+2. Production observability and operational hardening
 
 ## License
 

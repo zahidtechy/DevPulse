@@ -20,8 +20,19 @@ public static class DependencyInjection
         services.AddDbContext<DevPulseDbContext>(options =>
             options.UseSqlServer(connectionString));
 
-        services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
-        services.Configure<RefreshTokenSettings>(configuration.GetSection(RefreshTokenSettings.SectionName));
+        services.AddOptions<JwtSettings>()
+            .Bind(configuration.GetSection(JwtSettings.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<JwtSettings>, JwtSettingsValidator>();
+        services.AddOptions<RefreshTokenSettings>()
+            .Bind(configuration.GetSection(RefreshTokenSettings.SectionName))
+            .Validate(
+                settings => settings.StandardSessionHours is >= 1 and <= 24,
+                "RefreshTokens:StandardSessionHours must be between 1 and 24.")
+            .Validate(
+                settings => settings.RememberMeDays is >= 1 and <= 30,
+                "RefreshTokens:RememberMeDays must be between 1 and 30.")
+            .ValidateOnStart();
         services.Configure<SeedAdminSettings>(configuration.GetSection(SeedAdminSettings.SectionName));
         services.Configure<KpiSyncOptions>(configuration.GetSection(KpiSyncOptions.SectionName));
         services.Configure<ClickUpApiOptions>(configuration.GetSection(ClickUpApiOptions.SectionName));
