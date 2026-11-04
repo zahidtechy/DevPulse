@@ -18,6 +18,13 @@ jobs:
     name: Build and publish DevPulse
     runs-on: windows-latest
 
+    # Supersede in-flight builds for the same ref. Because `deploy` needs this
+    # job, a cancelled build means its deployment never starts at all.
+    # PR builds use refs/pull/<n>/merge, so separate PRs never cancel each other.
+    concurrency:
+      group: devpulse-build-${{ github.ref }}
+      cancel-in-progress: true
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -64,13 +71,40 @@ jobs:
     runs-on: [self-hosted, Windows, X64, devpulse-deploy]
     timeout-minutes: 20
 
-    # Serialize deployments, without making PR builds compete for this lock.
+    # Serialize deployments without making PR builds compete for this lock.
+    # cancel-in-progress stays false so a deployment is never interrupted after
+    # the site has been taken offline. GitHub still drops superseded *pending*
+    # deployments by default (queue is single), so only the newest one waits.
     concurrency:
       group: deploy-devpulse
       cancel-in-progress: false
 
     steps:
+      # Skip the whole deployment when a newer commit has already landed on
+      # production. Runs that were cancelled as builds never reach this point;
+      # this guards the remaining race windows.
+      - name: Check this commit is still the latest on production
+        id: freshness
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'production',
+            });
+
+            const isLatest = data.sha === context.sha;
+            core.setOutput('current', isLatest);
+
+            if (isLatest) {
+              core.info(`This run (${context.sha}) is the latest commit on production.`);
+            } else {
+              core.notice(`A newer commit (${data.sha}) is already on production. Skipping this deployment.`);
+            }
+
       - name: Clean deployment workspace
+        if: steps.freshness.outputs.current == 'true'
         shell: powershell
         run: |
           $publishPath = Join-Path $env:GITHUB_WORKSPACE "deploy-publish"
@@ -80,12 +114,14 @@ jobs:
           }
 
       - name: Download CI artifact
+        if: steps.freshness.outputs.current == 'true'
         uses: actions/download-artifact@v4
         with:
           name: devpulse-publish
           path: deploy-publish
 
       - name: Back up SQL Server database
+        if: steps.freshness.outputs.current == 'true'
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -158,7 +194,10 @@ jobs:
           }
 
       - name: Deploy, health check, and rollback
+        if: steps.freshness.outputs.current == 'true'
         shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -199,6 +238,47 @@ jobs:
           }
 
           Write-Host "Application backup created: $backupPath"
+
+          # Re-check freshness immediately before taking the site offline. This
+          # covers the case where this deployment had already started when a
+          # newer commit landed: the site stays online instead of bouncing to a
+          # build that is already obsolete.
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept        = "application/vnd.github+json"
+          }
+
+          $latestSha = $null
+
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              $response = Invoke-RestMethod `
+                -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/production" `
+                -Headers $headers `
+                -TimeoutSec 30
+
+              $latestSha = $response.sha
+              break
+            }
+            catch {
+              Write-Host "Freshness re-check attempt $attempt failed: $($_.Exception.Message)"
+
+              if ($attempt -lt 3) {
+                Start-Sleep -Seconds 5
+              }
+            }
+          }
+
+          if (-not $latestSha) {
+            throw "Unable to determine the latest commit on production during the freshness re-check."
+          }
+
+          if ($latestSha -ne $env:GITHUB_SHA) {
+            Write-Host "A newer commit ($latestSha) is already on production. Skipping this deployment before taking the site offline."
+            return
+          }
 
           try {
             # Take the application offline before deleting or replacing files.
@@ -286,7 +366,7 @@ jobs:
           }
 
       - name: Clean up old application backups
-        if: success()
+        if: success() && steps.freshness.outputs.current == 'true'
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
