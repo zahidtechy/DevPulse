@@ -83,6 +83,8 @@ public sealed class DevPulseDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.HasIndex(x => x.FamilyId);
             entity.HasIndex(x => new { x.UserId, x.ExpiresAtUtc });
+            entity.HasIndex(x => x.ExpiresAtUtc);
+            entity.HasIndex(x => x.RevokedAtUtc);
 
             entity.HasOne(x => x.User)
                 .WithMany()

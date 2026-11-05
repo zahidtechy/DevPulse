@@ -32,6 +32,12 @@ public static class DependencyInjection
             .Validate(
                 settings => settings.RememberMeDays is >= 1 and <= 30,
                 "RefreshTokens:RememberMeDays must be between 1 and 30.")
+            .Validate(
+                settings => settings.CleanupIntervalDays is >= 1 and <= 30,
+                "RefreshTokens:CleanupIntervalDays must be between 1 and 30.")
+            .Validate(
+                settings => settings.CleanupRetentionDays is >= 1 and <= 90,
+                "RefreshTokens:CleanupRetentionDays must be between 1 and 90.")
             .ValidateOnStart();
         services.Configure<SeedAdminSettings>(configuration.GetSection(SeedAdminSettings.SectionName));
         services.Configure<KpiSyncOptions>(configuration.GetSection(KpiSyncOptions.SectionName));
@@ -91,6 +97,7 @@ public static class DependencyInjection
         services.AddHostedService<KpiSyncBackgroundService>();
         services.AddHostedService<HubstaffSyncBackgroundService>();
         services.AddHostedService<LeaveTelegramNotificationBackgroundService>();
+        services.AddHostedService<RefreshTokenCleanupBackgroundService>();
 
         services.AddHttpClient<IGoogleHolidaySource, GoogleHolidayClient>(client =>
         {

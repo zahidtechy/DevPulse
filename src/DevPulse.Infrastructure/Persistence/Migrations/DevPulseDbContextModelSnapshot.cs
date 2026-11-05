@@ -1013,7 +1013,11 @@ namespace DevPulse.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ExpiresAtUtc");
+
                     b.HasIndex("FamilyId");
+
+                    b.HasIndex("RevokedAtUtc");
 
                     b.HasIndex("TokenHash")
                         .IsUnique();
