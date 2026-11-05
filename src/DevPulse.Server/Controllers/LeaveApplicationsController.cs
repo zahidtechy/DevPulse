@@ -159,5 +159,5 @@ public sealed class LeaveApplicationsController : ControllerBase
     }
 
     private string GetUserEmail() =>
-        User.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
+        User.FindFirstValue(DevPulseClaimTypes.Email) ?? string.Empty;
 }

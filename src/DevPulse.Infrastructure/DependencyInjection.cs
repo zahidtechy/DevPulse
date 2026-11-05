@@ -6,9 +6,9 @@ using DevPulse.Infrastructure.Persistence;
 using DevPulse.Infrastructure.Persistence.Repositories;
 using DevPulse.Infrastructure.Security;
 using DevPulse.Infrastructure.Services;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace DevPulse.Infrastructure;
 
@@ -20,7 +20,25 @@ public static class DependencyInjection
         services.AddDbContext<DevPulseDbContext>(options =>
             options.UseSqlServer(connectionString));
 
-        services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+        services.AddOptions<JwtSettings>()
+            .Bind(configuration.GetSection(JwtSettings.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<JwtSettings>, JwtSettingsValidator>();
+        services.AddOptions<RefreshTokenSettings>()
+            .Bind(configuration.GetSection(RefreshTokenSettings.SectionName))
+            .Validate(
+                settings => settings.StandardSessionHours is >= 1 and <= 24,
+                "RefreshTokens:StandardSessionHours must be between 1 and 24.")
+            .Validate(
+                settings => settings.RememberMeDays is >= 1 and <= 30,
+                "RefreshTokens:RememberMeDays must be between 1 and 30.")
+            .Validate(
+                settings => settings.CleanupIntervalDays is >= 1 and <= 30,
+                "RefreshTokens:CleanupIntervalDays must be between 1 and 30.")
+            .Validate(
+                settings => settings.CleanupRetentionDays is >= 1 and <= 90,
+                "RefreshTokens:CleanupRetentionDays must be between 1 and 90.")
+            .ValidateOnStart();
         services.Configure<SeedAdminSettings>(configuration.GetSection(SeedAdminSettings.SectionName));
         services.Configure<KpiSyncOptions>(configuration.GetSection(KpiSyncOptions.SectionName));
         services.Configure<ClickUpApiOptions>(configuration.GetSection(ClickUpApiOptions.SectionName));
@@ -28,7 +46,7 @@ public static class DependencyInjection
         services.Configure<HubstaffSyncOptions>(configuration.GetSection(HubstaffSyncOptions.SectionName));
         services.Configure<HubstaffApiOptions>(configuration.GetSection(HubstaffApiOptions.SectionName));
 
-        services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
+        services.AddIdentityCore<ApplicationUser>(options =>
             {
                 options.Password.RequireDigit = true;
                 options.Password.RequireLowercase = true;
@@ -36,32 +54,26 @@ public static class DependencyInjection
                 options.Password.RequireNonAlphanumeric = true;
                 options.Password.RequiredLength = 8;
                 options.User.RequireUniqueEmail = true;
+                options.Lockout.AllowedForNewUsers = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             })
+            .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<DevPulseDbContext>()
-            .AddClaimsPrincipalFactory<ApplicationUserClaimsPrincipalFactory>()
             .AddDefaultTokenProviders();
 
-        services.ConfigureApplicationCookie(options =>
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer();
+        services.AddSingleton<IJwtSigningKeyProvider>(serviceProvider =>
         {
-            options.Cookie.Name = "DevPulse.Auth";
-            options.Cookie.HttpOnly = true;
-            options.Cookie.SameSite = SameSiteMode.Lax;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-            options.SlidingExpiration = true;
-            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            var settings = serviceProvider.GetRequiredService<IOptions<JwtSettings>>().Value;
+            var environment = serviceProvider.GetRequiredService<IHostEnvironment>();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
 
-            options.Events.OnRedirectToLogin = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return Task.CompletedTask;
-            };
-
-            options.Events.OnRedirectToAccessDenied = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return Task.CompletedTask;
-            };
+            return JwtSigningKeyProviderFactory.Create(settings, environment, loggerFactory);
         });
+        services.AddHostedService<JwtSigningKeyProviderStartupValidator>();
+        services.AddSingleton<IConfigureOptions<JwtBearerOptions>, JwtBearerOptionsSetup>();
 
         services.AddDataProtection();
         services.AddScoped<ITokenProtector, DataProtectionTokenProtector>();
@@ -93,6 +105,7 @@ public static class DependencyInjection
         services.AddHostedService<KpiSyncBackgroundService>();
         services.AddHostedService<HubstaffSyncBackgroundService>();
         services.AddHostedService<LeaveTelegramNotificationBackgroundService>();
+        services.AddHostedService<RefreshTokenCleanupBackgroundService>();
 
         services.AddHttpClient<IGoogleHolidaySource, GoogleHolidayClient>(client =>
         {

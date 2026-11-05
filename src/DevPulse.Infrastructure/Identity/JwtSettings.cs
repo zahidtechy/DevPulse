@@ -4,11 +4,23 @@ public sealed class JwtSettings
 {
     public const string SectionName = "Jwt";
 
-    public string Key { get; set; } = string.Empty;
-
     public string Issuer { get; set; } = "DevPulse";
 
-    public string Audience { get; set; } = "DevPulse.Client";
+    public string Audience { get; set; } = "DevPulse.Api";
 
-    public int ExpiryMinutes { get; set; } = 480;
+    public int AccessTokenMinutes { get; set; } = 10;
+
+    public int ClockSkewSeconds { get; set; } = 30;
+
+    public JwtSigningMode SigningMode { get; set; } = JwtSigningMode.Auto;
+
+    public string? SigningKey { get; set; }
+
+    public string SigningKeyId { get; set; } = "devpulse-v1";
+
+    public string? SigningCertificateThumbprint { get; set; }
+
+    public string SigningCertificateStoreName { get; set; } = "My";
+
+    public string SigningCertificateStoreLocation { get; set; } = "LocalMachine";
 }

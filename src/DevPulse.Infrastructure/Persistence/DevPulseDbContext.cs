@@ -44,6 +44,8 @@ public sealed class DevPulseDbContext : IdentityDbContext<ApplicationUser, Ident
 
     public DbSet<HubstaffSyncRun> HubstaffSyncRuns => Set<HubstaffSyncRun>();
 
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -65,6 +67,29 @@ public sealed class DevPulseDbContext : IdentityDbContext<ApplicationUser, Ident
             entity.HasIndex(x => x.TelegramId)
                 .IsUnique()
                 .HasFilter("[TelegramId] IS NOT NULL");
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("RefreshTokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasColumnType("binary(32)").IsRequired();
+            entity.Property(x => x.SecurityStamp).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.ClientType).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.RevocationReason).HasMaxLength(200);
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.Property(x => x.UserAgent).HasMaxLength(512);
+            entity.Property(x => x.RowVersion).IsRowVersion();
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.FamilyId);
+            entity.HasIndex(x => new { x.UserId, x.ExpiresAtUtc });
+            entity.HasIndex(x => x.ExpiresAtUtc);
+            entity.HasIndex(x => x.RevokedAtUtc);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ClickUpAccount>(entity =>

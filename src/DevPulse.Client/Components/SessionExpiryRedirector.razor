@@ -1,7 +1,6 @@
 @implements IDisposable
 @inject SessionState Session
 @inject IAuthService AuthService
-@inject CookieAuthenticationStateProvider AuthStateProvider
 @inject ToastService Toast
 
 @code {
@@ -33,8 +32,8 @@
             Toast.SuppressErrors = true;
             Toast.Clear();
 
-            // Ask the server to delete a still-valid auth cookie. If the cookie is already
-            // invalid or the server is unavailable, AuthService still signs out locally.
+            // Ask the server to revoke and delete any remaining refresh session. If it is
+            // already invalid or unavailable, AuthService still clears the access token.
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
@@ -42,10 +41,9 @@
             }
             catch
             {
-                // The local session is already signed out; deleting the cookie is best effort.
+                // The local session is already signed out; deleting the refresh cookie is best effort.
             }
 
-            AuthStateProvider.NotifySignedOut();
             Toast.Info("Your session expired. Please sign in again.", key: ToastKeys.Session);
         }
         finally

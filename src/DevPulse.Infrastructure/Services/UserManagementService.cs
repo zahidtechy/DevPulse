@@ -4,13 +4,16 @@ public sealed class UserManagementService : IUserManagementService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IDeveloperRepository _developerRepository;
+    private readonly IAuthService _authService;
 
     public UserManagementService(
         UserManager<ApplicationUser> userManager,
-        IDeveloperRepository developerRepository)
+        IDeveloperRepository developerRepository,
+        IAuthService authService)
     {
         _userManager = userManager;
         _developerRepository = developerRepository;
+        _authService = authService;
     }
 
     public async Task<IReadOnlyList<UserDto>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -191,6 +194,11 @@ public sealed class UserManagementService : IUserManagementService
             {
                 return Result<UserDto>.Failure(stampResult.Errors.Select(e => e.Description));
             }
+
+            await _authService.RevokeAllSessionsAsync(
+                user.Id,
+                activeStatusChanged ? "User active status changed." : "User role changed.",
+                cancellationToken);
         }
 
         var developerName = await GetDeveloperNameAsync(user.DeveloperId, cancellationToken);
@@ -212,9 +220,13 @@ public sealed class UserManagementService : IUserManagementService
 
         var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
         var result = await _userManager.ResetPasswordAsync(user, resetToken, request.NewPassword);
-        return result.Succeeded
-            ? Result.Success()
-            : Result.Failure(result.Errors.Select(e => e.Description));
+        if (!result.Succeeded)
+        {
+            return Result.Failure(result.Errors.Select(e => e.Description));
+        }
+
+        await _authService.RevokeAllSessionsAsync(user.Id, "Password reset by an administrator.", cancellationToken);
+        return Result.Success();
     }
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken = default)

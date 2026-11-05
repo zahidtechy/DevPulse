@@ -190,13 +190,13 @@ public sealed class AttendanceController : ControllerBase
     }
 
     private string GetUserEmail() =>
-        User.FindFirstValue(ClaimTypes.Email)
-        ?? User.FindFirstValue(ClaimTypes.Name)
+        User.FindFirstValue(DevPulseClaimTypes.Email)
+        ?? User.FindFirstValue(DevPulseClaimTypes.Name)
         ?? string.Empty;
 
     private Guid GetUserId()
     {
-        var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var id = User.FindFirstValue(DevPulseClaimTypes.Subject);
         return Guid.TryParse(id, out var userId) ? userId : Guid.Empty;
     }
 }

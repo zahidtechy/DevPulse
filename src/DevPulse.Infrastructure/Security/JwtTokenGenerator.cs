@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text;
 using Microsoft.IdentityModel.Tokens;
 
 namespace DevPulse.Infrastructure.Security;
@@ -8,35 +7,48 @@ namespace DevPulse.Infrastructure.Security;
 public sealed class JwtTokenGenerator
 {
     private readonly JwtSettings _settings;
+    private readonly IJwtSigningKeyProvider _signingKeyProvider;
 
-    public JwtTokenGenerator(IOptions<JwtSettings> settings)
+    public JwtTokenGenerator(
+        IOptions<JwtSettings> settings,
+        IJwtSigningKeyProvider signingKeyProvider)
     {
         _settings = settings.Value;
+        _signingKeyProvider = signingKeyProvider;
     }
 
-    public (string Token, DateTime ExpiresAtUtc) GenerateToken(ApplicationUser user, IReadOnlyList<string> roles)
+    public (string Token, DateTime ExpiresAtUtc) GenerateToken(
+        ApplicationUser user,
+        IReadOnlyList<string> roles,
+        Guid sessionId,
+        string clientType)
     {
-        var expiresAtUtc = DateTime.UtcNow.AddMinutes(_settings.ExpiryMinutes);
+        var issuedAtUtc = DateTime.UtcNow;
+        var expiresAtUtc = issuedAtUtc.AddMinutes(_settings.AccessTokenMinutes);
         var claims = new List<Claim>
         {
-            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
-            new(JwtRegisteredClaimNames.Name, user.DisplayName),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(DevPulseClaimTypes.Subject, user.Id.ToString()),
+            new(DevPulseClaimTypes.Email, user.Email ?? string.Empty),
+            new(DevPulseClaimTypes.Name, user.DisplayName),
+            new(DevPulseClaimTypes.DisplayName, user.DisplayName),
+            new(DevPulseClaimTypes.SessionId, sessionId.ToString()),
+            new(DevPulseClaimTypes.ClientId, clientType),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.Iat, EpochTime.GetIntDate(issuedAtUtc).ToString(), ClaimValueTypes.Integer64)
         };
 
         foreach (var role in roles)
         {
-            claims.Add(new Claim("role", role));
+            claims.Add(new Claim(DevPulseClaimTypes.Role, role));
         }
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Key));
-        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
         var token = new JwtSecurityToken(
             issuer: _settings.Issuer,
             audience: _settings.Audience,
             claims: claims,
+            notBefore: issuedAtUtc,
             expires: expiresAtUtc,
-            signingCredentials: credentials);
+            signingCredentials: _signingKeyProvider.SigningCredentials);
 
         return (new JwtSecurityTokenHandler().WriteToken(token), expiresAtUtc);
     }
