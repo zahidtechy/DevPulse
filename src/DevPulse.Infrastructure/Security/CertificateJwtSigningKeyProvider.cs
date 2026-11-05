@@ -1,48 +1,37 @@
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.IdentityModel.Tokens;
 
 namespace DevPulse.Infrastructure.Security;
 
-public sealed class JwtSigningKeyProvider : IDisposable
+internal sealed class CertificateJwtSigningKeyProvider : IJwtSigningKeyProvider
 {
-    private readonly IDisposable? _ownedKey;
+    private readonly X509Certificate2 _certificate;
 
-    public JwtSigningKeyProvider(
-        IOptions<JwtSettings> settings,
-        IHostEnvironment environment,
-        ILogger<JwtSigningKeyProvider> logger)
+    public CertificateJwtSigningKeyProvider(JwtSettings settings, ILogger logger)
     {
-        var thumbprint = settings.Value.SigningCertificateThumbprint?.Replace(" ", string.Empty);
-        if (!string.IsNullOrWhiteSpace(thumbprint))
-        {
-            var certificate = LoadCertificate(settings.Value, thumbprint);
-            SigningKey = new X509SecurityKey(certificate) { KeyId = certificate.Thumbprint };
-            SigningCredentials = new SigningCredentials(SigningKey, SecurityAlgorithms.RsaSha256);
-            _ownedKey = certificate;
-            return;
-        }
+        var thumbprint = JwtSigningModeResolver.NormalizeThumbprint(settings.SigningCertificateThumbprint)
+            ?? throw new InvalidOperationException(
+                "Jwt:SigningCertificateThumbprint is required when Jwt:SigningMode is Certificate.");
 
-        if (!environment.IsDevelopment())
-        {
-            throw new InvalidOperationException(
-                "JWT signing certificate is not configured. Set Jwt:SigningCertificateThumbprint.");
-        }
+        _certificate = LoadCertificate(settings, thumbprint);
 
-        var rsa = RSA.Create(2048);
-        SigningKey = new RsaSecurityKey(rsa) { KeyId = "development-ephemeral" };
+        SigningKey = new X509SecurityKey(_certificate) { KeyId = _certificate.Thumbprint };
         SigningCredentials = new SigningCredentials(SigningKey, SecurityAlgorithms.RsaSha256);
-        _ownedKey = rsa;
+        Algorithm = SecurityAlgorithms.RsaSha256;
+        KeyId = _certificate.Thumbprint;
 
-        logger.LogWarning(
-            "Using an ephemeral JWT signing key in Development. Tokens become invalid when the server restarts.");
+        logger.LogInformation("JWT signing configured with certificate {KeyId} (RS256).", KeyId);
     }
+
+    public string Algorithm { get; }
+
+    public string KeyId { get; }
 
     public SecurityKey SigningKey { get; }
 
     public SigningCredentials SigningCredentials { get; }
 
-    public void Dispose() => _ownedKey?.Dispose();
+    public void Dispose() => _certificate.Dispose();
 
     private static X509Certificate2 LoadCertificate(JwtSettings settings, string thumbprint)
     {

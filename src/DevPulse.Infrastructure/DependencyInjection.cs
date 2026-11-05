@@ -64,7 +64,15 @@ public static class DependencyInjection
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer();
-        services.AddSingleton<JwtSigningKeyProvider>();
+        services.AddSingleton<IJwtSigningKeyProvider>(serviceProvider =>
+        {
+            var settings = serviceProvider.GetRequiredService<IOptions<JwtSettings>>().Value;
+            var environment = serviceProvider.GetRequiredService<IHostEnvironment>();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+
+            return JwtSigningKeyProviderFactory.Create(settings, environment, loggerFactory);
+        });
+        services.AddHostedService<JwtSigningKeyProviderStartupValidator>();
         services.AddSingleton<IConfigureOptions<JwtBearerOptions>, JwtBearerOptionsSetup>();
 
         services.AddDataProtection();

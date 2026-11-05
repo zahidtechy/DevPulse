@@ -7,11 +7,11 @@ namespace DevPulse.Infrastructure.Security;
 public sealed class JwtBearerOptionsSetup : IConfigureNamedOptions<JwtBearerOptions>
 {
     private readonly JwtSettings _settings;
-    private readonly JwtSigningKeyProvider _signingKeyProvider;
+    private readonly IJwtSigningKeyProvider _signingKeyProvider;
 
     public JwtBearerOptionsSetup(
         IOptions<JwtSettings> settings,
-        JwtSigningKeyProvider signingKeyProvider)
+        IJwtSigningKeyProvider signingKeyProvider)
     {
         _settings = settings.Value;
         _signingKeyProvider = signingKeyProvider;
@@ -36,6 +36,7 @@ public sealed class JwtBearerOptionsSetup : IConfigureNamedOptions<JwtBearerOpti
             ValidAudience = _settings.Audience,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = _signingKeyProvider.SigningKey,
+            ValidAlgorithms = new[] { _signingKeyProvider.Algorithm },
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(_settings.ClockSkewSeconds),
             NameClaimType = DevPulseClaimTypes.Name,

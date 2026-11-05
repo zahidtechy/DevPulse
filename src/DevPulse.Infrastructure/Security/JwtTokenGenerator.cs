@@ -7,11 +7,11 @@ namespace DevPulse.Infrastructure.Security;
 public sealed class JwtTokenGenerator
 {
     private readonly JwtSettings _settings;
-    private readonly JwtSigningKeyProvider _signingKeyProvider;
+    private readonly IJwtSigningKeyProvider _signingKeyProvider;
 
     public JwtTokenGenerator(
         IOptions<JwtSettings> settings,
-        JwtSigningKeyProvider signingKeyProvider)
+        IJwtSigningKeyProvider signingKeyProvider)
     {
         _settings = settings.Value;
         _signingKeyProvider = signingKeyProvider;

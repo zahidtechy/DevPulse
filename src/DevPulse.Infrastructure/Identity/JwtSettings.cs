@@ -12,6 +12,12 @@ public sealed class JwtSettings
 
     public int ClockSkewSeconds { get; set; } = 30;
 
+    public JwtSigningMode SigningMode { get; set; } = JwtSigningMode.Auto;
+
+    public string? SigningKey { get; set; }
+
+    public string SigningKeyId { get; set; } = "devpulse-v1";
+
     public string? SigningCertificateThumbprint { get; set; }
 
     public string SigningCertificateStoreName { get; set; } = "My";
