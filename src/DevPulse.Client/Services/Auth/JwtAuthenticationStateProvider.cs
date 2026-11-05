@@ -24,8 +24,10 @@ public sealed class JwtAuthenticationStateProvider : AuthenticationStateProvider
         var login = await _tokenStore.GetAsync();
         if (!AccessTokenStore.IsValid(login))
         {
-            var refreshed = await _refreshCoordinator.TryRefreshAsync();
-            login = refreshed ? await _tokenStore.GetAsync() : null;
+            // A failed refresh may be transient (network/5xx). Re-read the stored envelope
+            // instead of discarding it so a still-valid token is not treated as signed out.
+            await _refreshCoordinator.TryRefreshAsync();
+            login = await _tokenStore.GetAsync();
         }
 
         return CreateState(login);

@@ -123,6 +123,18 @@ public sealed class AuthService : IAuthService
             userAgent,
             storedToken.ExpiresAtUtc);
 
+        // Build the response before committing the rotation. If token generation or role
+        // lookup fails, the old token must remain unconsumed; otherwise the client would be
+        // left holding a consumed token and its next attempt would trip reuse detection.
+        var roles = await _userManager.GetRolesAsync(storedToken.User);
+        var (accessToken, accessTokenExpiresAtUtc) = _tokenGenerator.GenerateToken(
+            storedToken.User,
+            roles.ToList(),
+            storedToken.FamilyId,
+            storedToken.ClientType);
+        var userDto = MapToDto(storedToken.User, roles.FirstOrDefault() ?? AppRoles.User);
+        var response = new LoginResponse(accessToken, accessTokenExpiresAtUtc, userDto);
+
         storedToken.ConsumedAtUtc = now;
         storedToken.ReplacedByTokenId = replacement.Entity.Id;
         _dbContext.RefreshTokens.Add(replacement.Entity);
@@ -135,15 +147,6 @@ public sealed class AuthService : IAuthService
         {
             return Result<AuthenticatedLogin>.Failure("Refresh session is invalid or expired.");
         }
-
-        var roles = await _userManager.GetRolesAsync(storedToken.User);
-        var (accessToken, accessTokenExpiresAtUtc) = _tokenGenerator.GenerateToken(
-            storedToken.User,
-            roles.ToList(),
-            storedToken.FamilyId,
-            storedToken.ClientType);
-        var userDto = MapToDto(storedToken.User, roles.FirstOrDefault() ?? AppRoles.User);
-        var response = new LoginResponse(accessToken, accessTokenExpiresAtUtc, userDto);
 
         return Result<AuthenticatedLogin>.Success(new AuthenticatedLogin(
             response,

@@ -65,6 +65,8 @@ public sealed class TokenRefreshCoordinator : IAsyncDisposable
                 using var response = await _authApiClient.RefreshAsync();
                 if (!response.IsSuccessStatusCode)
                 {
+                    // Only a 401 proves the refresh session is gone. Server errors, throttling,
+                    // and gateway failures are transient and must not sign the user out.
                     if (response.StatusCode == HttpStatusCode.Unauthorized)
                     {
                         _session.NotifyExpired();
@@ -77,6 +79,8 @@ public sealed class TokenRefreshCoordinator : IAsyncDisposable
                 var refreshed = await response.Content.ReadFromJsonAsync<LoginResponse>(_jsonOptions);
                 if (refreshed is null || !AccessTokenStore.IsValid(refreshed))
                 {
+                    // A malformed success response is a server-side problem, not proof that
+                    // the session ended. Keep the current tokens and let the caller retry.
                     return false;
                 }
 
@@ -85,6 +89,8 @@ public sealed class TokenRefreshCoordinator : IAsyncDisposable
             }
             catch (Exception ex) when (ex is HttpRequestException or JsonException)
             {
+                // Network and serialization failures are transient. The existing token
+                // envelope is left in place so a later request can refresh again.
                 return false;
             }
         }

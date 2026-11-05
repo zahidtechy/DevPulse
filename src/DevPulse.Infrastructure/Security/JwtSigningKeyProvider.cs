@@ -75,6 +75,19 @@ public sealed class JwtSigningKeyProvider : IDisposable
             throw new InvalidOperationException("The configured JWT signing certificate has no accessible private key.");
         }
 
+        // Signing is hard-coded to RS256. Reject non-RSA certificates here so a
+        // configuration mistake fails at startup instead of at the first token request.
+        using (var rsa = certificate.GetRSAPrivateKey())
+        {
+            if (rsa is null)
+            {
+                certificate.Dispose();
+                throw new InvalidOperationException(
+                    $"The configured JWT signing certificate '{thumbprint}' does not expose an RSA private key. " +
+                    "Only RSA certificates (RS256) are supported.");
+            }
+        }
+
         return certificate;
     }
 }

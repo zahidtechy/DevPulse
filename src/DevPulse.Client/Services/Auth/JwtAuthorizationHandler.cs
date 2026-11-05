@@ -83,14 +83,17 @@ public sealed class JwtAuthorizationHandler : DelegatingHandler
 
             if (!refreshed)
             {
-                _session.NotifyExpired();
+                // A failed refresh is not necessarily an expired session. The coordinator
+                // raises SessionState.Expired only for a definitive 401; transient failures
+                // leave the existing token and refresh cookie in place for a later retry.
                 return response;
             }
 
             var refreshedLogin = await _tokenStore.GetAsync();
             if (!AccessTokenStore.IsValid(refreshedLogin))
             {
-                _session.NotifyExpired();
+                // The refresh endpoint reported success but returned an unusable token.
+                // Treat it as a transient server problem rather than forcing a sign-out.
                 return response;
             }
 

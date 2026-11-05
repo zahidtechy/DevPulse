@@ -12,11 +12,16 @@ public sealed class AuthController : ControllerBase
     private const string BrowserClientType = "devpulse-blazor";
     private readonly IAuthService _authService;
     private readonly IWebHostEnvironment _environment;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, IWebHostEnvironment environment)
+    public AuthController(
+        IAuthService authService,
+        IWebHostEnvironment environment,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
         _environment = environment;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -75,39 +80,30 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
-        if (Request.Cookies.TryGetValue(RefreshCookieName, out var refreshToken))
+        try
         {
-            await _authService.RevokeSessionAsync(refreshToken, "User signed out.", cancellationToken);
+            if (Request.Cookies.TryGetValue(RefreshCookieName, out var refreshToken))
+            {
+                await _authService.RevokeSessionAsync(refreshToken, "User signed out.", cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The request was cancelled or the client disconnected. The browser cookie is
+            // still cleared below so a stale session cannot silently sign the user back in.
+        }
+        catch (Exception ex)
+        {
+            // A failed server-side revocation must not leave the refresh cookie in place.
+            // Reuse detection will invalidate the family if the token is presented again.
+            _logger.LogWarning(ex, "Failed to revoke the refresh session during logout.");
+        }
+        finally
+        {
+            DeleteRefreshCookie();
         }
 
-        DeleteRefreshCookie();
         return NoContent();
-    }
-
-    [Authorize]
-    [HttpGet("me")]
-    [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public IActionResult GetCurrentUser()
-    {
-        if (User.Identity?.IsAuthenticated != true)
-        {
-            return Unauthorized();
-        }
-
-        var userId = User.FindFirstValue(DevPulseClaimTypes.Subject);
-        var email = User.FindFirstValue(DevPulseClaimTypes.Email) ?? string.Empty;
-        var displayName = User.FindFirstValue(DevPulseClaimTypes.DisplayName)
-            ?? User.FindFirstValue(DevPulseClaimTypes.Name)
-            ?? email;
-        var role = User.FindFirstValue(DevPulseClaimTypes.Role) ?? AppRoles.User;
-
-        if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var id))
-        {
-            return Unauthorized();
-        }
-
-        return Ok(new UserDto(id, email, displayName, role, true, DateTime.UtcNow));
     }
 
     [Authorize]
