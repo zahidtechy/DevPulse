@@ -112,12 +112,12 @@ POST /api/clickup/accounts
 - Protected API calls use short-lived JWT bearer access tokens
 - Browser refresh tokens are rotated, stored as SHA-256 hashes, and transported only in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie
 - The hosted Blazor client and API are same-origin; browser CORS is intentionally disabled
-- Access tokens are signed with **HS256** using a symmetric key supplied through user secrets (Development) or an IIS app-pool environment variable (Production). The key is never committed. See [JWT Signing Configuration](#jwt-signing-configuration)
+- Access tokens are signed with **HS256** using a symmetric key currently stored in `appsettings.json` so Development and Production work without extra setup. This is a temporary convenience; move the key to user secrets or an IIS app-pool environment variable and rotate it. See [JWT Signing Configuration](#jwt-signing-configuration)
 - Certificate-based **RS256** signing remains available as a selectable mode and is the preferred option for future production use
 
 ## JWT Signing Configuration
 
-Access tokens are currently signed with **HS256** using a symmetric Base64 key. No signing secret is committed to source control. `src/DevPulse.Server/appsettings.json` contains the signing mode and an empty key placeholder only.
+Access tokens are currently signed with **HS256** using a symmetric Base64 key. For now, a generated 32-byte key is stored in `src/DevPulse.Server/appsettings.json` so both Development and Production work without additional server configuration. This is a temporary convenience, not the long-term recommendation.
 
 ### Signing modes
 
@@ -128,9 +128,9 @@ Access tokens are currently signed with **HS256** using a symmetric Base64 key. 
 | `DevelopmentEphemeral` | Generated in memory at startup | `HS256` | Local Development only |
 | `Auto` | Certificate if a thumbprint is set, otherwise symmetric if a key is set, otherwise ephemeral in Development | `HS256` / `RS256` | Backward compatibility |
 
-`appsettings.json` sets `SigningMode` to `Symmetric` and leaves `SigningKey` empty.
+`appsettings.json` sets `SigningMode` to `Symmetric` and contains the current `SigningKey`. Because the key is committed, it is also present in Git history; rotate it when you move to a secret store.
 
-- In **Development**, an empty `SigningKey` falls back to a random in-memory key and logs a warning. Tokens issued before a restart become invalid.
+- If `SigningKey` is removed or left empty in **Development**, the API falls back to a random in-memory key and logs a warning. Tokens issued before a restart become invalid.
 - Outside Development, the API fails at startup when `SigningKey` is missing, is not valid Base64, or is shorter than 32 bytes.
 - Only the active key's algorithm is accepted during validation (`ValidAlgorithms`), which prevents algorithm-confusion attacks.
 
@@ -148,7 +148,7 @@ A 32-byte key produces a 256-bit HS256 secret.
 
 ### Local development
 
-Use .NET user secrets so the key stays out of source control:
+To override the committed key locally without relying on it, use .NET user secrets:
 
 ```powershell
 dotnet user-secrets init --project src/DevPulse.Server
@@ -156,13 +156,11 @@ dotnet user-secrets set "Jwt:SigningKeyId" "devpulse-local" --project src/DevPul
 dotnet user-secrets set "Jwt:SigningKey" "<BASE64_KEY>" --project src/DevPulse.Server
 ```
 
-`Jwt:SigningMode` is already `Symmetric` in `appsettings.json`. Restart the server after changing the key. If you skip this step, Development uses the ephemeral key.
+`Jwt:SigningMode` is already `Symmetric` in `appsettings.json`. Restart the server after changing the key. If you skip this step, Development uses the key from `appsettings.json` (or an ephemeral key if it is empty).
 
 ### Production
 
-> Configure the key **before** deploying this change. Production intentionally fails at startup when `SigningMode` is `Symmetric` and `SigningKey` is missing.
-
-Set the key on the **DevPulse IIS app pool**, not at machine level, so other applications on the shared server are unaffected:
+The committed key allows Production to start without extra server configuration. When you are ready to move the key out of source control, set it on the **DevPulse IIS app pool** (not at machine level, so other applications on the shared server are unaffected), then remove it from `appsettings.json`:
 
 ```powershell
 $key = '<BASE64_KEY>'
@@ -185,11 +183,11 @@ Import-Module WebAdministration
 Restart-WebAppPool -Name 'DevPulsePool'
 ```
 
-Do **not** place the key in `appsettings.json` or `appsettings.Production.json`. The deployment workflow replaces the site directory, and committed JSON is visible to anyone with repository access. Environment variables override JSON configuration: `Jwt__SigningKey` maps to `Jwt:SigningKey`.
+For the long term, do not keep the key in `appsettings.json` or `appsettings.Production.json`. The deployment workflow replaces the site directory, and committed JSON is visible to anyone with repository access. When you move the key to the app-pool variable, remove it from `appsettings.json` (or leave it empty) and rotate it, because the old value remains in Git history. Environment variables override JSON configuration: `Jwt__SigningKey` maps to `Jwt:SigningKey`.
 
 ### Key rotation
 
-Changing `Jwt:SigningKey` invalidates existing **access tokens only**. Access tokens are short-lived (10 minutes by default). Browser refresh tokens are opaque values hashed in the database and are unaffected, so clients recover automatically through `/api/auth/refresh`. Changing `Jwt:SigningKeyId` changes the `kid` header but does not, by itself, invalidate existing tokens.
+Changing `Jwt:SigningKey` invalidates existing **access tokens only**. Access tokens are short-lived (10 minutes by default). Browser refresh tokens are opaque values hashed in the database and are unaffected, so clients recover automatically through `/api/auth/refresh`. Changing `Jwt:SigningKeyId` changes the `kid` header but does not, by itself, invalidate existing tokens. Because the current key is committed, rotate it when moving to environment variables and update the key in one place only.
 
 ### Certificate signing for future production
 
@@ -204,7 +202,7 @@ Tokens will then be signed with **RS256**. Certificate signing is preferred for 
 
 Because `appsettings.json` sets `SigningMode` to `Symmetric`, an existing `Jwt__SigningCertificateThumbprint` environment variable is ignored until `Jwt__SigningMode` is explicitly set to `Certificate` (or `Auto`, which prefers the certificate when a thumbprint is present).
 
-> Anyone who knows the symmetric key can create valid access tokens. Treat it as a production secret, restrict who can read the app-pool configuration, and rotate it immediately if it is exposed.
+> Anyone who knows the symmetric key can create valid access tokens. The current key is committed to this repository, so anyone with repository access can mint tokens. Rotate the key when moving to user secrets or an app-pool environment variable, and restrict who can read the server configuration.
 
 ## Next Phases
 
